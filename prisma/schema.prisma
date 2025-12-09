@@ -1,0 +1,362 @@
+// Prisma schema for Cleaning Right Now Business Management Application
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  password       String
+  name           String?
+  businessName   String?
+  businessPhone  String?
+  businessEmail  String?
+  businessAddress String?
+  expensePercentage Float   @default(12.0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  sessions       Session[]
+  auditLogs      AuditLog[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Property owner information
+model PropertyOwner {
+  id         String     @id @default(cuid())
+  name       String
+  phone      String?
+  email      String?
+  properties Property[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+// Property groups for organization
+model PropertyGroup {
+  id         String     @id @default(cuid())
+  name       String
+  color      String?    @default("#3B82F6")
+  properties Property[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+// Properties (rentals)
+model Property {
+  id              String         @id @default(cuid())
+  name            String
+  address         String
+  squareFootage   Int?
+  baseRate        Float          @default(0)
+  notes           String?
+  ownerId         String?
+  owner           PropertyOwner? @relation(fields: [ownerId], references: [id])
+  groupId         String?
+  group           PropertyGroup? @relation(fields: [groupId], references: [id])
+  active          Boolean        @default(true)
+  jobs            Job[]
+  linens          Linen[]
+  propertySupplies PropertySupply[]
+  photos          PropertyPhoto[]
+  laundryRecords  LaundryRecord[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+// Property photos
+model PropertyPhoto {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url         String
+  description String?
+  category    String?  // e.g., "damage", "reference", "before", "after"
+  createdAt   DateTime @default(now())
+}
+
+// Team members
+model TeamMember {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String?
+  email        String?
+  active       Boolean       @default(true)
+  jobAssignments JobAssignment[]
+  payments     TeamPayment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+// Services offered
+model Service {
+  id          String       @id @default(cuid())
+  name        String
+  description String?
+  basePrice   Float        @default(0)
+  active      Boolean      @default(true)
+  jobServices JobService[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// Jobs
+model Job {
+  id               String          @id @default(cuid())
+  propertyId       String
+  property         Property        @relation(fields: [propertyId], references: [id])
+  scheduledDate    DateTime
+  scheduledTime    String?         // e.g., "09:00"
+  completedAt      DateTime?
+  status           JobStatus       @default(SCHEDULED)
+  totalAmount      Float           @default(0)
+  expensePercent   Float           @default(12.0)
+  expenseAmount    Float           @default(0)
+  teamPayoutTotal  Float           @default(0)
+  notes            String?
+  clientPaid       Boolean         @default(false)
+  clientPaidAt     DateTime?
+  teamPaid         Boolean         @default(false)
+  teamPaidAt       DateTime?
+  services         JobService[]
+  teamAssignments  JobAssignment[]
+  supplyUsage      SupplyUsage[]
+  invoice          Invoice?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+enum JobStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Job services (many-to-many with custom price)
+model JobService {
+  id        String  @id @default(cuid())
+  jobId     String
+  job       Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+  price     Float
+  createdAt DateTime @default(now())
+
+  @@unique([jobId, serviceId])
+}
+
+// Team member assignments to jobs
+model JobAssignment {
+  id           String     @id @default(cuid())
+  jobId        String
+  job          Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  teamMemberId String
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id])
+  payoutAmount Float      @default(0)
+  paid         Boolean    @default(false)
+  paidAt       DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@unique([jobId, teamMemberId])
+}
+
+// Team payments
+model TeamPayment {
+  id           String     @id @default(cuid())
+  teamMemberId String
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id])
+  amount       Float
+  paymentDate  DateTime   @default(now())
+  notes        String?
+  createdAt    DateTime   @default(now())
+}
+
+// Linens per property
+model Linen {
+  id          String      @id @default(cuid())
+  propertyId  String
+  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  type        String      // e.g., "Sheet Set", "Bath Towel", "Hand Towel"
+  quantity    Int         @default(0)
+  condition   LinenCondition @default(GOOD)
+  notes       String?
+  replacements LinenReplacement[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum LinenCondition {
+  GOOD
+  FAIR
+  DAMAGED
+  NEEDS_REPLACEMENT
+}
+
+// Linen replacement history
+model LinenReplacement {
+  id         String   @id @default(cuid())
+  linenId    String
+  linen      Linen    @relation(fields: [linenId], references: [id], onDelete: Cascade)
+  quantity   Int
+  reason     String?
+  cost       Float?
+  replacedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+}
+
+// General supplies inventory
+model Supply {
+  id            String          @id @default(cuid())
+  name          String
+  description   String?
+  unit          String          @default("unit") // e.g., "bottle", "pack", "roll"
+  quantity      Float           @default(0)
+  costPerUnit   Float           @default(0)
+  lowStockThreshold Float       @default(5)
+  category      String?         // e.g., "Cleaning", "Paper Goods"
+  restocks      SupplyRestock[]
+  usage         SupplyUsage[]
+  propertyStocks PropertySupply[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+// Supplies stored at specific properties
+model PropertySupply {
+  id         String   @id @default(cuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  supplyId   String
+  supply     Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+  quantity   Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([propertyId, supplyId])
+}
+
+// Supply restock history
+model SupplyRestock {
+  id          String   @id @default(cuid())
+  supplyId    String
+  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+  quantity    Float
+  totalCost   Float?
+  restockedAt DateTime @default(now())
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+// Supply usage per job
+model SupplyUsage {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  supplyId  String
+  supply    Supply   @relation(fields: [supplyId], references: [id])
+  quantity  Float
+  createdAt DateTime @default(now())
+}
+
+// Laundry service provider
+model LaundryProvider {
+  id            String          @id @default(cuid())
+  name          String
+  phone         String?
+  email         String?
+  address       String?
+  notes         String?
+  active        Boolean         @default(true)
+  laundryRecords LaundryRecord[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+// Laundry records
+model LaundryRecord {
+  id           String           @id @default(cuid())
+  propertyId   String
+  property     Property         @relation(fields: [propertyId], references: [id])
+  providerId   String?
+  provider     LaundryProvider? @relation(fields: [providerId], references: [id])
+  dropOffDate  DateTime
+  pickupDate   DateTime?
+  status       LaundryStatus    @default(DROPPED_OFF)
+  cost         Float?
+  items        String?          // Description of items
+  notes        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+}
+
+enum LaundryStatus {
+  DROPPED_OFF
+  READY_FOR_PICKUP
+  PICKED_UP
+  DELIVERED
+}
+
+// Invoices
+model Invoice {
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique
+  jobId         String        @unique
+  job           Job           @relation(fields: [jobId], references: [id])
+  issueDate     DateTime      @default(now())
+  dueDate       DateTime?
+  subtotal      Float
+  tax           Float         @default(0)
+  total         Float
+  status        InvoiceStatus @default(UNPAID)
+  paidAt        DateTime?
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  UNPAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+// Audit log for tracking all changes
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String   // e.g., "CREATE", "UPDATE", "DELETE"
+  entityType  String   // e.g., "Job", "Property", "TeamMember"
+  entityId    String
+  oldValues   Json?
+  newValues   Json?
+  description String?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+}
+
+// Settings for app configuration
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
