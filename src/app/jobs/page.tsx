@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -19,13 +19,10 @@ import {
   Search,
   Clock,
   Users,
-  Edit,
   Trash2,
   Eye,
   Loader2,
-  CheckCircle,
   DollarSign,
-  Filter,
 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
@@ -97,7 +94,6 @@ interface JobFormData {
 }
 
 export default function JobsPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [jobs, setJobs] = useState<Job[]>([])
   const [properties, setProperties] = useState<Property[]>([])

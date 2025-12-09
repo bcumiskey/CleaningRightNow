@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -18,7 +18,6 @@ import {
   Search,
   MapPin,
   Phone,
-  Mail,
   Edit,
   Trash2,
   Eye,
@@ -65,7 +64,6 @@ interface PropertyFormData {
 }
 
 export default function PropertiesPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [properties, setProperties] = useState<Property[]>([])
   const [isLoading, setIsLoading] = useState(true)

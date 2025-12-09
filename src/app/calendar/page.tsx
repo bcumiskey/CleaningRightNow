@@ -1,19 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
-import { formatCurrency, formatTime, getDaysInMonth, isSameDay, isToday } from '@/lib/utils'
+import { formatTime, getDaysInMonth, isSameDay, isToday } from '@/lib/utils'
 import {
   ChevronLeft,
   ChevronRight,
   Loader2,
   Plus,
-  Calendar as CalendarIcon,
 } from 'lucide-react'
 import Link from 'next/link'
 import { format, addMonths, subMonths, startOfMonth, endOfMonth } from 'date-fns'
@@ -34,17 +31,12 @@ interface Job {
 }
 
 export default function CalendarPage() {
-  const router = useRouter()
   const [currentDate, setCurrentDate] = useState(new Date())
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [view, setView] = useState<'month' | 'week'>('month')
 
-  useEffect(() => {
-    fetchJobs()
-  }, [currentDate])
-
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     setIsLoading(true)
     try {
       const start = startOfMonth(currentDate)
@@ -61,7 +53,11 @@ export default function CalendarPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentDate])
+
+  useEffect(() => {
+    fetchJobs()
+  }, [fetchJobs])
 
   const days = getDaysInMonth(currentDate.getFullYear(), currentDate.getMonth())
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

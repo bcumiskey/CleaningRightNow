@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
@@ -26,13 +26,11 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
 } from 'recharts'
-import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { format, startOfMonth, subMonths } from 'date-fns'
 
 interface ReportData {
   revenue: { name: string; value: number }[]
@@ -66,11 +64,7 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [period, setPeriod] = useState('thisMonth')
 
-  useEffect(() => {
-    fetchReportData()
-  }, [period])
-
-  const fetchReportData = async () => {
+  const fetchReportData = useCallback(async () => {
     setIsLoading(true)
     try {
       let startDate: Date
@@ -110,7 +104,11 @@ export default function ReportsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [period])
+
+  useEffect(() => {
+    fetchReportData()
+  }, [fetchReportData])
 
   const getMockData = (): ReportData => ({
     revenue: [
