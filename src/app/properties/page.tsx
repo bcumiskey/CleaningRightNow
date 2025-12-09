@@ -1,8 +1,6 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
@@ -65,7 +63,7 @@ interface PropertyFormData {
   active: boolean
 }
 
-export default function PropertiesPage() {
+function PropertiesContent() {
   const searchParams = useSearchParams()
   const [properties, setProperties] = useState<Property[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -420,5 +418,20 @@ export default function PropertiesPage() {
         </form>
       </Modal>
     </DashboardLayout>
+  )
+}
+
+export default function PropertiesPage() {
+  return (
+    <Suspense fallback={
+      <DashboardLayout>
+        <Header title="Properties" />
+        <div className="flex items-center justify-center h-96">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        </div>
+      </DashboardLayout>
+    }>
+      <PropertiesContent />
+    </Suspense>
   )
 }
