@@ -24,6 +24,7 @@ import {
   Home,
   CheckCircle2,
   Loader2,
+  Shirt,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -80,6 +81,16 @@ interface DashboardData {
     quantity: number
     lowStockThreshold: number
     unit: string
+  }>
+  linensNeedingAttention: Array<{
+    id: string
+    type: string
+    quantity: number
+    condition: string
+    property: {
+      id: string
+      name: string
+    }
   }>
   recentActivity: Array<{
     id: string
@@ -377,6 +388,39 @@ export default function DashboardPage() {
                   <Link href="/supplies" className="block mt-4">
                     <Button variant="outline" size="sm" className="w-full">
                       View Inventory
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Linen Alerts */}
+            {data?.linensNeedingAttention && data.linensNeedingAttention.length > 0 && (
+              <Card className="border-red-200 bg-red-50/50">
+                <CardHeader className="flex flex-row items-center gap-2">
+                  <Shirt className="w-5 h-5 text-red-600" />
+                  <CardTitle className="text-red-800">Linens Need Attention</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {data.linensNeedingAttention.slice(0, 5).map((linen) => (
+                      <div
+                        key={linen.id}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <div>
+                          <span className="text-gray-700">{linen.type}</span>
+                          <span className="text-gray-500 text-xs ml-2">({linen.property.name})</span>
+                        </div>
+                        <Badge variant="danger" size="sm">
+                          {linen.condition.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  <Link href="/linens" className="block mt-4">
+                    <Button variant="outline" size="sm" className="w-full">
+                      View Linens
                     </Button>
                   </Link>
                 </CardContent>

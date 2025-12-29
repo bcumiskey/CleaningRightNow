@@ -123,6 +123,26 @@ export async function GET() {
       },
     })
 
+    // Linens needing attention (damaged or needs replacement)
+    const linensNeedingAttention = await prisma.linen.findMany({
+      where: {
+        condition: {
+          in: ['DAMAGED', 'NEEDS_REPLACEMENT'],
+        },
+      },
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    })
+
     // Recent activity (audit logs)
     const recentActivity = await prisma.auditLog.findMany({
       orderBy: {
@@ -143,8 +163,10 @@ export async function GET() {
         upcomingJobsCount: upcomingJobs.length,
         lowStockItemsCount: lowStockItems.length,
         completedJobsThisMonth: completedJobsThisMonth.length,
+        linensNeedingAttentionCount: linensNeedingAttention.length,
       },
       lowStockItems,
+      linensNeedingAttention,
       recentActivity,
     })
   } catch (error) {
