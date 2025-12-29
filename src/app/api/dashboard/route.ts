@@ -143,6 +143,50 @@ export async function GET() {
       },
     })
 
+    // Overdue invoices
+    const overdueInvoices = await prisma.invoice.findMany({
+      where: {
+        status: {
+          in: ['UNPAID', 'SENT'],
+        },
+        dueDate: {
+          lt: startOfToday,
+        },
+      },
+      include: {
+        job: {
+          include: {
+            property: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        dueDate: 'asc',
+      },
+    })
+
+    // Update overdue invoices status
+    if (overdueInvoices.length > 0) {
+      await prisma.invoice.updateMany({
+        where: {
+          id: {
+            in: overdueInvoices.map((i) => i.id),
+          },
+          status: {
+            in: ['UNPAID', 'SENT'],
+          },
+        },
+        data: {
+          status: 'OVERDUE',
+        },
+      })
+    }
+
     // Recent activity (audit logs)
     const recentActivity = await prisma.auditLog.findMany({
       orderBy: {
@@ -164,9 +208,12 @@ export async function GET() {
         lowStockItemsCount: lowStockItems.length,
         completedJobsThisMonth: completedJobsThisMonth.length,
         linensNeedingAttentionCount: linensNeedingAttention.length,
+        overdueInvoicesCount: overdueInvoices.length,
+        overdueInvoicesTotal: overdueInvoices.reduce((sum, i) => sum + i.total, 0),
       },
       lowStockItems,
       linensNeedingAttention,
+      overdueInvoices,
       recentActivity,
     })
   } catch (error) {

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { createAuditLog, generateDescription } from '@/lib/audit'
 import { calculateJobPayment } from '@/lib/utils'
+import { syncJobToGoogleCalendar } from '@/lib/google-calendar'
 import { z } from 'zod'
 
 const jobSchema = z.object({
@@ -154,6 +155,19 @@ export async function POST(request: NextRequest) {
       newValues: job,
       description: generateDescription('CREATE', 'Job', `at ${job.property.name}`),
     })
+
+    // Sync to Google Calendar (async, don't wait for it)
+    syncJobToGoogleCalendar(session.user.id, {
+      id: job.id,
+      scheduledDate: job.scheduledDate,
+      scheduledTime: job.scheduledTime,
+      property: {
+        name: job.property.name,
+        address: job.property.address,
+      },
+      status: job.status,
+      notes: job.notes,
+    }).catch((err) => console.error('Google Calendar sync error:', err))
 
     return NextResponse.json(job, { status: 201 })
   } catch (error) {

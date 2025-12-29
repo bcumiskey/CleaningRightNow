@@ -14,6 +14,7 @@ import {
   Shirt,
   WashingMachine,
   FileText,
+  Receipt,
   BarChart3,
   History,
   Settings,
@@ -41,6 +42,7 @@ const navigation = [
   },
   { name: 'Laundry', href: '/laundry', icon: WashingMachine },
   { name: 'Invoices', href: '/invoices', icon: FileText },
+  { name: 'Expenses', href: '/expenses', icon: Receipt },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
   { name: 'Audit Log', href: '/audit-log', icon: History },
 ]

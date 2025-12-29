@@ -22,8 +22,22 @@ import {
   CheckCircle,
   Clock,
   DollarSign,
+  Download,
+  CreditCard,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+
+const PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Cash' },
+  { value: 'CHECK', label: 'Check' },
+  { value: 'CREDIT_CARD', label: 'Credit Card' },
+  { value: 'DEBIT_CARD', label: 'Debit Card' },
+  { value: 'VENMO', label: 'Venmo' },
+  { value: 'ZELLE', label: 'Zelle' },
+  { value: 'PAYPAL', label: 'PayPal' },
+  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+  { value: 'OTHER', label: 'Other' },
+]
 
 interface Invoice {
   id: string
@@ -35,6 +49,8 @@ interface Invoice {
   total: number
   status: string
   paidAt?: string
+  paymentMethod?: string
+  paymentReference?: string
   notes?: string
   job: {
     id: string
@@ -78,12 +94,18 @@ export default function InvoicesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState({
     jobId: '',
     dueDate: '',
     tax: '0',
     notes: '',
+  })
+  const [paymentData, setPaymentData] = useState({
+    paymentMethod: 'CASH',
+    paymentReference: '',
   })
 
   useEffect(() => {
@@ -155,22 +177,68 @@ export default function InvoicesPage() {
     }
   }
 
-  const handleMarkPaid = async (invoice: Invoice) => {
+  const openPaymentModal = (invoice: Invoice) => {
+    setPayingInvoice(invoice)
+    setPaymentData({ paymentMethod: 'CASH', paymentReference: '' })
+    setIsPaymentModalOpen(true)
+  }
+
+  const handleMarkPaid = async () => {
+    if (!payingInvoice) return
+    setIsSaving(true)
+
     try {
-      const response = await fetch(`/api/invoices/${invoice.id}`, {
+      const response = await fetch(`/api/invoices/${payingInvoice.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID', paidAt: new Date().toISOString() }),
+        body: JSON.stringify({
+          status: 'PAID',
+          paidAt: new Date().toISOString(),
+          paymentMethod: paymentData.paymentMethod,
+          paymentReference: paymentData.paymentReference || null,
+        }),
       })
 
       if (response.ok) {
         toast.success('Invoice marked as paid')
+        setIsPaymentModalOpen(false)
+        setPayingInvoice(null)
         fetchInvoices()
+      } else {
+        toast.error('Failed to update invoice')
       }
     } catch (error) {
       console.error('Failed to update invoice:', error)
       toast.error('Failed to update invoice')
+    } finally {
+      setIsSaving(false)
     }
+  }
+
+  const exportInvoicesCSV = () => {
+    const headers = ['Invoice #', 'Property', 'Date', 'Due Date', 'Subtotal', 'Tax', 'Total', 'Status', 'Payment Method', 'Paid At']
+    const rows = filteredInvoices.map((i) => [
+      i.invoiceNumber,
+      i.job.property.name,
+      formatDate(i.issueDate),
+      i.dueDate ? formatDate(i.dueDate) : '',
+      i.subtotal.toFixed(2),
+      i.tax.toFixed(2),
+      i.total.toFixed(2),
+      i.status,
+      i.paymentMethod || '',
+      i.paidAt ? formatDate(i.paidAt) : '',
+    ])
+
+    const csv = [headers, ...rows].map((row) => row.map((cell) => `"${cell}"`).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `invoices-${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('Invoices exported')
   }
 
   const resetForm = () => {
@@ -285,6 +353,10 @@ export default function InvoicesPage() {
             ]}
             className="w-full sm:w-40"
           />
+          <Button variant="outline" onClick={exportInvoicesCSV}>
+            <Download className="w-4 h-4" />
+            Export CSV
+          </Button>
           <Button
             onClick={() => { resetForm(); setIsModalOpen(true); }}
             disabled={availableJobs.length === 0}
@@ -343,7 +415,8 @@ export default function InvoicesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleMarkPaid(invoice)}
+                              onClick={() => openPaymentModal(invoice)}
+                              title="Mark as Paid"
                             >
                               <DollarSign className="w-4 h-4 text-green-600" />
                             </Button>
@@ -533,6 +606,65 @@ export default function InvoicesPage() {
             Print
           </Button>
         </ModalFooter>
+      </Modal>
+
+      {/* Payment Modal */}
+      <Modal
+        isOpen={isPaymentModalOpen}
+        onClose={() => { setIsPaymentModalOpen(false); setPayingInvoice(null); }}
+        title="Record Payment"
+        size="sm"
+      >
+        {payingInvoice && (
+          <div className="space-y-4">
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-medium text-gray-900">{payingInvoice.invoiceNumber}</p>
+                  <p className="text-sm text-gray-500">{payingInvoice.job.property.name}</p>
+                </div>
+                <p className="text-xl font-bold text-green-600">
+                  {formatCurrency(payingInvoice.total)}
+                </p>
+              </div>
+            </div>
+
+            <Select
+              label="Payment Method"
+              value={paymentData.paymentMethod}
+              onChange={(e) => setPaymentData({ ...paymentData, paymentMethod: e.target.value })}
+              options={PAYMENT_METHODS}
+              required
+            />
+
+            <Input
+              label="Reference (optional)"
+              placeholder={
+                paymentData.paymentMethod === 'CHECK'
+                  ? 'Check number'
+                  : paymentData.paymentMethod === 'BANK_TRANSFER'
+                    ? 'Transaction ID'
+                    : 'Reference number'
+              }
+              value={paymentData.paymentReference}
+              onChange={(e) => setPaymentData({ ...paymentData, paymentReference: e.target.value })}
+            />
+
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setIsPaymentModalOpen(false); setPayingInvoice(null); }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleMarkPaid} isLoading={isSaving}>
+                <CheckCircle className="w-4 h-4" />
+                Mark as Paid
+              </Button>
+            </ModalFooter>
+          </div>
+        )}
       </Modal>
     </DashboardLayout>
   )

@@ -23,10 +23,14 @@ model User {
   calendarToken   String?   @unique  // Token for iCal feed authentication
   turnoApiKey     String?            // Turno API key for integration
   googleCalendarId String?           // Google Calendar ID for sync
+  googleAccessToken String?          // Google OAuth access token
+  googleRefreshToken String?         // Google OAuth refresh token
+  googleTokenExpiry DateTime?        // Google OAuth token expiry
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   sessions        Session[]
   auditLogs       AuditLog[]
+  expenses        Expense[]
 }
 
 model Session {
@@ -326,6 +330,8 @@ model Invoice {
   total         Float
   status        InvoiceStatus @default(UNPAID)
   paidAt        DateTime?
+  paymentMethod PaymentMethod?
+  paymentReference String?    // Check number, transaction ID, etc.
   notes         String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -338,6 +344,51 @@ enum InvoiceStatus {
   PAID
   OVERDUE
   CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CHECK
+  CREDIT_CARD
+  DEBIT_CARD
+  VENMO
+  ZELLE
+  PAYPAL
+  BANK_TRANSFER
+  OTHER
+}
+
+// Business Expenses
+model Expense {
+  id          String          @id @default(cuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  date        DateTime        @default(now())
+  category    ExpenseCategory
+  amount      Float
+  description String?
+  vendor      String?
+  receipt     String?         // URL to receipt image
+  mileage     Float?          // For mileage tracking
+  mileageRate Float?          // Rate per mile
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+enum ExpenseCategory {
+  SUPPLIES
+  EQUIPMENT
+  GAS_FUEL
+  MILEAGE
+  LAUNDRY
+  INSURANCE
+  MARKETING
+  SOFTWARE
+  VEHICLE
+  REPAIRS
+  UTILITIES
+  OTHER
 }
 
 // Audit log for tracking all changes

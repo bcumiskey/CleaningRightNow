@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   Loader2,
   Shirt,
+  FileWarning,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -74,6 +75,8 @@ interface DashboardData {
     upcomingJobsCount: number
     lowStockItemsCount: number
     completedJobsThisMonth: number
+    overdueInvoicesCount: number
+    overdueInvoicesTotal: number
   }
   lowStockItems: Array<{
     id: string
@@ -90,6 +93,18 @@ interface DashboardData {
     property: {
       id: string
       name: string
+    }
+  }>
+  overdueInvoices: Array<{
+    id: string
+    invoiceNumber: string
+    total: number
+    dueDate: string
+    job: {
+      property: {
+        id: string
+        name: string
+      }
     }
   }>
   recentActivity: Array<{
@@ -421,6 +436,47 @@ export default function DashboardPage() {
                   <Link href="/linens" className="block mt-4">
                     <Button variant="outline" size="sm" className="w-full">
                       View Linens
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Overdue Invoices Alert */}
+            {data?.overdueInvoices && data.overdueInvoices.length > 0 && (
+              <Card className="border-orange-200 bg-orange-50/50">
+                <CardHeader className="flex flex-row items-center gap-2">
+                  <FileWarning className="w-5 h-5 text-orange-600" />
+                  <CardTitle className="text-orange-800">Overdue Invoices</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-3 p-2 bg-orange-100 rounded-lg">
+                    <p className="text-orange-800 font-semibold text-lg">
+                      {formatCurrency(data.metrics.overdueInvoicesTotal)}
+                    </p>
+                    <p className="text-orange-600 text-xs">
+                      {data.metrics.overdueInvoicesCount} overdue invoice{data.metrics.overdueInvoicesCount !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    {data.overdueInvoices.slice(0, 3).map((invoice) => (
+                      <div
+                        key={invoice.id}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <div>
+                          <span className="text-gray-700 font-mono">{invoice.invoiceNumber}</span>
+                          <span className="text-gray-500 text-xs ml-2">({invoice.job.property.name})</span>
+                        </div>
+                        <span className="text-orange-700 font-medium">
+                          {formatCurrency(invoice.total)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <Link href="/invoices?status=OVERDUE" className="block mt-4">
+                    <Button variant="outline" size="sm" className="w-full">
+                      View Overdue Invoices
                     </Button>
                   </Link>
                 </CardContent>
