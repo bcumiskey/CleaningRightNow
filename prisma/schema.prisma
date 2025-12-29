@@ -11,19 +11,22 @@ datasource db {
 
 // User model for authentication
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  password       String
-  name           String?
-  businessName   String?
-  businessPhone  String?
-  businessEmail  String?
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  name            String?
+  businessName    String?
+  businessPhone   String?
+  businessEmail   String?
   businessAddress String?
   expensePercentage Float   @default(12.0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  sessions       Session[]
-  auditLogs      AuditLog[]
+  calendarToken   String?   @unique  // Token for iCal feed authentication
+  turnoApiKey     String?            // Turno API key for integration
+  googleCalendarId String?           // Google Calendar ID for sync
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sessions        Session[]
+  auditLogs       AuditLog[]
 }
 
 model Session {
