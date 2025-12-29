@@ -6,7 +6,7 @@ import Header from '@/components/layout/Header'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import { Settings, Save, Loader2, Key, Building, Percent, Plus, Trash2, Calendar, Copy, RefreshCw, Link2, ExternalLink } from 'lucide-react'
+import { Settings, Save, Loader2, Key, Building, Percent, Plus, Trash2, Calendar, Copy, RefreshCw, Link2, ExternalLink, Download, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface UserSettings {
@@ -50,6 +50,15 @@ export default function SettingsPage() {
     hasTurnoKey: false,
   })
   const [turnoApiKeyInput, setTurnoApiKeyInput] = useState('')
+  const [turnoImportUrl, setTurnoImportUrl] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResults, setImportResults] = useState<{
+    total: number
+    imported: number
+    duplicates: number
+    skipped: number
+    noPropertyMatch: number
+  } | null>(null)
   const [isGeneratingToken, setIsGeneratingToken] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -178,6 +187,53 @@ export default function SettingsPage() {
       toast.error('Failed to save Turno API key')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleImportFromTurno = async (dryRun = false) => {
+    if (!turnoImportUrl) {
+      toast.error('Please enter an iCal URL')
+      return
+    }
+
+    setIsImporting(true)
+    setImportResults(null)
+
+    try {
+      const response = await fetch('/api/calendar/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: turnoImportUrl,
+          dryRun,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setImportResults({
+          total: data.total,
+          imported: data.imported,
+          duplicates: data.duplicates,
+          skipped: data.skipped,
+          noPropertyMatch: data.noPropertyMatch,
+        })
+        if (!dryRun && data.imported > 0) {
+          toast.success(`Imported ${data.imported} jobs`)
+        } else if (dryRun) {
+          toast.success('Preview complete')
+        } else if (data.imported === 0) {
+          toast.error('No jobs could be imported')
+        }
+      } else {
+        toast.error(data.error || 'Import failed')
+      }
+    } catch (error) {
+      console.error('Failed to import:', error)
+      toast.error('Failed to import calendar feed')
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -496,29 +552,102 @@ export default function SettingsPage() {
                     <h4 className="font-medium text-gray-900">Turno Integration</h4>
                   </div>
                   <p className="text-sm text-gray-500 mb-3">
-                    Connect with Turno to sync vacation rental turnovers. Use the iCal feed URL above to import your schedule into Turno.
+                    Sync with Turno for vacation rental turnovers. Export your schedule to Turno using the iCal URL above, or import bookings from Turno below.
                   </p>
-                  <div className="flex gap-2">
-                    <Input
-                      type="password"
-                      placeholder={calendarSettings.hasTurnoKey ? '••••••••' : 'Enter Turno API key (optional)'}
-                      value={turnoApiKeyInput}
-                      onChange={(e) => setTurnoApiKeyInput(e.target.value)}
-                      className="flex-1"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={handleSaveTurnoKey}
-                      isLoading={isSaving}
-                      disabled={!turnoApiKeyInput}
-                    >
-                      <Save className="w-4 h-4" />
-                      Save
-                    </Button>
+
+                  {/* Import from Turno */}
+                  <div className="space-y-3 mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Import from Turno iCal Feed
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="url"
+                        placeholder="Paste Turno iCal feed URL here..."
+                        value={turnoImportUrl}
+                        onChange={(e) => setTurnoImportUrl(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => handleImportFromTurno(true)}
+                        isLoading={isImporting}
+                        disabled={!turnoImportUrl}
+                      >
+                        Preview
+                      </Button>
+                      <Button
+                        onClick={() => handleImportFromTurno(false)}
+                        isLoading={isImporting}
+                        disabled={!turnoImportUrl}
+                      >
+                        <Download className="w-4 h-4" />
+                        Import
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Find your Turno iCal feed URL in Turno under Settings &gt; Integrations &gt; Calendar Export
+                    </p>
+
+                    {/* Import Results */}
+                    {importResults && (
+                      <div className="mt-3 p-3 bg-white rounded border">
+                        <h5 className="font-medium text-gray-900 mb-2">Import Results</h5>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                            <span>{importResults.imported} imported</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <XCircle className="w-4 h-4 text-gray-400" />
+                            <span>{importResults.duplicates} duplicates</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-yellow-500" />
+                            <span>{importResults.noPropertyMatch} no match</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <XCircle className="w-4 h-4 text-gray-400" />
+                            <span>{importResults.skipped} skipped</span>
+                          </div>
+                        </div>
+                        {importResults.noPropertyMatch > 0 && (
+                          <p className="text-xs text-yellow-600 mt-2">
+                            Some events could not be matched to properties. Make sure property names or addresses in your Turno account match those in this app.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {calendarSettings.hasTurnoKey && (
-                    <p className="text-xs text-green-600 mt-2">Turno API key is configured</p>
-                  )}
+
+                  {/* Turno API Key (optional) */}
+                  <div className="pt-3 border-t">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Turno API Key (Optional)
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="password"
+                        placeholder={calendarSettings.hasTurnoKey ? '••••••••' : 'Enter Turno API key'}
+                        value={turnoApiKeyInput}
+                        onChange={(e) => setTurnoApiKeyInput(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={handleSaveTurnoKey}
+                        isLoading={isSaving}
+                        disabled={!turnoApiKeyInput}
+                      >
+                        <Save className="w-4 h-4" />
+                        Save
+                      </Button>
+                    </div>
+                    {calendarSettings.hasTurnoKey && (
+                      <p className="text-xs text-green-600 mt-2">Turno API key is configured</p>
+                    )}
+                  </div>
+
                   <a
                     href="https://turno.com"
                     target="_blank"
