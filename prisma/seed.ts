@@ -16,16 +16,16 @@ async function main() {
   console.log('Cleaning up old data...');
 
   // Delete in order to respect foreign key constraints
-  await prisma.payment.deleteMany({});
+  // Use correct model names from schema
   await prisma.jobAssignment.deleteMany({});
   await prisma.invoiceLineItem.deleteMany({});
   await prisma.invoice.deleteMany({});
   await prisma.job.deleteMany({});
   await prisma.propertyNote.deleteMany({});
-  await prisma.cleaningInstruction.deleteMany({});
+  await prisma.propertyInstruction.deleteMany({});
   await prisma.propertyPhoto.deleteMany({});
-  await prisma.linenInventory.deleteMany({});
-  await prisma.linenRequirement.deleteMany({});
+  await prisma.propertyLinenInventory.deleteMany({});
+  await prisma.propertyLinenRequirement.deleteMany({});
   await prisma.property.deleteMany({});
   await prisma.teamMember.deleteMany({});
   // Don't delete User/Session - let users re-register
