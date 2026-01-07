@@ -50,10 +50,10 @@ export async function GET(
 
     const company = {
       companyName: settings?.companyName || 'Cleaning Right Now',
-      address: settings?.address,
-      phone: settings?.phone,
-      email: settings?.email,
-      logoUrl: settings?.logoUrl,
+      address: settings?.address || undefined,
+      phone: settings?.phone || undefined,
+      email: settings?.email || undefined,
+      logoUrl: settings?.logoUrl || undefined,
     }
 
     // Generate PDF
