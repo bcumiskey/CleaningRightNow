@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { calculateJobPayment } from '@/lib/utils'
 import { z } from 'zod'
 
@@ -157,15 +156,6 @@ export async function POST(request: NextRequest) {
           },
         },
       },
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'CREATE',
-      entityType: 'Job',
-      entityId: job.id,
-      newValues: job,
-      description: generateDescription('CREATE', 'Job', `at ${job.property.name}`),
     })
 
     return NextResponse.json(job, { status: 201 })

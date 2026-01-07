@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
 const invoiceUpdateSchema = z.object({
@@ -159,16 +158,6 @@ export async function PUT(
       },
     })
 
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'UPDATE',
-      entityType: 'Invoice',
-      entityId: invoice.id,
-      oldValues: existingInvoice,
-      newValues: invoice,
-      description: generateDescription('UPDATE', 'Invoice', invoice.invoiceNumber),
-    })
-
     return NextResponse.json(invoice)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -215,15 +204,6 @@ export async function DELETE(
 
     await prisma.invoice.delete({
       where: { id },
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'DELETE',
-      entityType: 'Invoice',
-      entityId: id,
-      oldValues: existingInvoice,
-      description: generateDescription('DELETE', 'Invoice', existingInvoice.invoiceNumber),
     })
 
     return NextResponse.json({ success: true })

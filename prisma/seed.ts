@@ -1,35 +1,14 @@
 // prisma/seed.ts
+// Seed ONLY linen catalog data - NO mock users, properties, jobs, etc.
 // Run with: npx prisma db seed
 
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Starting database seed...');
-
-  // ============================================================
-  // ADMIN USER (for authentication)
-  // ============================================================
-  const hashedPassword = await bcrypt.hash(
-    process.env.ADMIN_PASSWORD || 'changeme123',
-    10
-  );
-
-  const user = await prisma.user.upsert({
-    where: { email: process.env.ADMIN_EMAIL || 'admin@cleaningrightnow.com' },
-    update: {},
-    create: {
-      email: process.env.ADMIN_EMAIL || 'admin@cleaningrightnow.com',
-      password: hashedPassword,
-      name: 'Admin',
-      businessName: 'Cleaning Right Now',
-      expensePercentage: 12,
-    },
-  });
-
-  console.log('Created admin user:', user.email);
+  console.log('Seeding linen catalog only - no mock data');
 
   // ============================================================
   // LINEN CATEGORIES
@@ -61,7 +40,7 @@ async function main() {
   console.log('Created linen categories');
 
   // ============================================================
-  // LINEN ITEMS (from spreadsheet)
+  // LINEN ITEMS (from owner's spreadsheet)
   // ============================================================
 
   // Sheets
@@ -114,7 +93,7 @@ async function main() {
     { name: 'Makeup Towel (Black)', code: 'Makeup', unitCost: 3.00 },
   ];
 
-  // Insert all items
+  // Insert all linen items
   for (const item of sheetItems) {
     await prisma.linenItem.upsert({
       where: { code: item.code },
@@ -171,7 +150,7 @@ async function main() {
   console.log('Created vendors');
 
   // ============================================================
-  // CUSTOM BILLING ITEMS (presets)
+  // CUSTOM BILLING ITEMS (presets for invoicing)
   // ============================================================
   const billingItems = [
     { name: 'Turnover Cleaning', category: 'service' },
@@ -194,23 +173,15 @@ async function main() {
 
   console.log('Created custom billing items');
 
-  // ============================================================
-  // ADMIN TEAM MEMBER
-  // ============================================================
-  await prisma.teamMember.upsert({
-    where: { email: 'admin@cleaningrightnow.com' },
-    update: {},
-    create: {
-      name: 'Admin',
-      email: 'admin@cleaningrightnow.com',
-      role: 'admin',
-      isActive: true,
-    },
-  });
-
-  console.log('Created admin team member');
-
-  console.log('Seed data inserted successfully!');
+  console.log('');
+  console.log('Seed completed successfully!');
+  console.log('- Linen categories: 4');
+  console.log('- Linen items: 34');
+  console.log('- Vendors: 5');
+  console.log('- Billing presets: 8');
+  console.log('');
+  console.log('NOTE: No users, properties, jobs, or team members were created.');
+  console.log('Use /register to create your admin account.');
 }
 
 main()

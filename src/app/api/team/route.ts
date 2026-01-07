@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
 const teamMemberSchema = z.object({
@@ -78,15 +77,6 @@ export async function POST(request: NextRequest) {
 
     const teamMember = await prisma.teamMember.create({
       data: validatedData,
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'CREATE',
-      entityType: 'TeamMember',
-      entityId: teamMember.id,
-      newValues: { ...teamMember, passwordHash: undefined },
-      description: generateDescription('CREATE', 'Team Member', teamMember.name),
     })
 
     return NextResponse.json({ ...teamMember, passwordHash: undefined }, { status: 201 })

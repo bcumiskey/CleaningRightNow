@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
 const propertySchema = z.object({
@@ -55,6 +54,7 @@ export async function GET(request: NextRequest) {
             invoices: true,
             notes: { where: { status: 'active' } },
             photos: true,
+            standingInstructions: true,
             linenRequirements: true,
           },
         },
@@ -89,15 +89,6 @@ export async function POST(request: NextRequest) {
 
     const property = await prisma.property.create({
       data: validatedData,
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'CREATE',
-      entityType: 'Property',
-      entityId: property.id,
-      newValues: property,
-      description: generateDescription('CREATE', 'Property', property.name),
     })
 
     return NextResponse.json(property, { status: 201 })

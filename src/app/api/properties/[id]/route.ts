@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
 const propertyUpdateSchema = z.object({
@@ -134,16 +133,6 @@ export async function PUT(
       data: validatedData,
     })
 
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'UPDATE',
-      entityType: 'Property',
-      entityId: property.id,
-      oldValues: existingProperty,
-      newValues: property,
-      description: generateDescription('UPDATE', 'Property', property.name),
-    })
-
     return NextResponse.json(property)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -158,6 +147,13 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  return PUT(request, { params })
 }
 
 export async function DELETE(
@@ -182,15 +178,6 @@ export async function DELETE(
 
     await prisma.property.delete({
       where: { id },
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'DELETE',
-      entityType: 'Property',
-      entityId: id,
-      oldValues: existingProperty,
-      description: generateDescription('DELETE', 'Property', existingProperty.name),
     })
 
     return NextResponse.json({ success: true })

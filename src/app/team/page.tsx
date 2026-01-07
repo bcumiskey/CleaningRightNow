@@ -36,11 +36,10 @@ interface TeamMember {
   phone?: string
   email?: string
   role: 'admin' | 'worker'
-  active: boolean
-  balance: number
+  isActive: boolean
+  owedAmount: number
   _count: {
-    assignments: number
-    payments: number
+    jobAssignments: number
   }
 }
 
@@ -57,7 +56,7 @@ interface TeamMemberFormData {
   phone: string
   email: string
   role: 'admin' | 'worker'
-  active: boolean
+  isActive: boolean
 }
 
 export default function TeamPage() {
@@ -79,7 +78,7 @@ export default function TeamPage() {
     phone: '',
     email: '',
     role: 'worker',
-    active: true,
+    isActive: true,
   })
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState('cash')
@@ -128,7 +127,7 @@ export default function TeamPage() {
         phone: formData.phone || null,
         email: formData.email || null,
         role: formData.role,
-        active: formData.active,
+        isActive: formData.isActive,
       }
 
       const url = editingMember
@@ -216,14 +215,14 @@ export default function TeamPage() {
       phone: member.phone || '',
       email: member.email || '',
       role: member.role,
-      active: member.active,
+      isActive: member.isActive,
     })
     setIsModalOpen(true)
   }
 
   const openPayModal = (member: TeamMember) => {
     setSelectedMember(member)
-    setPayAmount(member.balance > 0 ? member.balance.toString() : '')
+    setPayAmount(member.owedAmount > 0 ? member.owedAmount.toString() : '')
     setIsPayModalOpen(true)
   }
 
@@ -240,7 +239,7 @@ export default function TeamPage() {
       phone: '',
       email: '',
       role: 'worker',
-      active: true,
+      isActive: true,
     })
   }
 
@@ -250,13 +249,13 @@ export default function TeamPage() {
       m.email?.toLowerCase().includes(search.toLowerCase())
     const matchesStatus =
       statusFilter === 'all' ||
-      (statusFilter === 'active' && m.active) ||
-      (statusFilter === 'inactive' && !m.active)
+      (statusFilter === 'active' && m.isActive) ||
+      (statusFilter === 'inactive' && !m.isActive)
     return matchesSearch && matchesStatus
   })
 
-  const totalOwed = teamMembers.reduce((sum, m) => sum + m.balance, 0)
-  const activeCount = teamMembers.filter((m) => m.active).length
+  const totalOwed = teamMembers.reduce((sum, m) => sum + m.owedAmount, 0)
+  const activeCount = teamMembers.filter((m) => m.isActive).length
 
   if (status === 'loading') {
     return (
@@ -400,14 +399,14 @@ export default function TeamPage() {
                           </Badge>
                         </TableCell>
                         <TableCell align="center">
-                          <Badge variant="info">{member._count.assignments}</Badge>
+                          <Badge variant="info">{member._count.jobAssignments}</Badge>
                         </TableCell>
                         <TableCell align="right">
                           <div className="flex items-center justify-end gap-2">
-                            <span className={member.balance > 0 ? 'font-medium text-yellow-600' : 'text-gray-500'}>
-                              {formatCurrency(member.balance)}
+                            <span className={member.owedAmount > 0 ? 'font-medium text-yellow-600' : 'text-gray-500'}>
+                              {formatCurrency(member.owedAmount)}
                             </span>
-                            {member.balance > 0 && (
+                            {member.owedAmount > 0 && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -420,8 +419,8 @@ export default function TeamPage() {
                           </div>
                         </TableCell>
                         <TableCell align="center">
-                          <Badge variant={member.active ? 'success' : 'default'}>
-                            {member.active ? 'Active' : 'Inactive'}
+                          <Badge variant={member.isActive ? 'success' : 'default'}>
+                            {member.isActive ? 'Active' : 'Inactive'}
                           </Badge>
                         </TableCell>
                         <TableCell align="right">
@@ -500,12 +499,12 @@ export default function TeamPage() {
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                id="active"
-                checked={formData.active}
-                onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
                 className="w-4 h-4 text-indigo-600 rounded"
               />
-              <label htmlFor="active" className="text-sm text-gray-700">Active team member</label>
+              <label htmlFor="isActive" className="text-sm text-gray-700">Active team member</label>
             </div>
           </div>
 
@@ -529,9 +528,9 @@ export default function TeamPage() {
       >
         <div className="space-y-4">
           <div className="bg-gray-50 rounded-lg p-4 text-center">
-            <p className="text-sm text-gray-500">Current Balance</p>
+            <p className="text-sm text-gray-500">Amount Owed</p>
             <p className="text-2xl font-bold text-yellow-600">
-              {formatCurrency(selectedMember?.balance || 0)}
+              {formatCurrency(selectedMember?.owedAmount || 0)}
             </p>
           </div>
 
