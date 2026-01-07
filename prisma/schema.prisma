@@ -26,7 +26,6 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   sessions        Session[]
-  auditLogs       AuditLog[]
 }
 
 model Session {
@@ -38,7 +37,31 @@ model Session {
 }
 
 // ============================================================
-// CORE MODELS
+// TEAM
+// ============================================================
+
+model TeamMember {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  phone     String?
+  role      String   @default("worker") // "admin" or "worker"
+  isActive  Boolean  @default(true)
+
+  // Auth (for worker login)
+  passwordHash String?
+
+  // Relations
+  jobAssignments JobAssignment[]
+  notesAdded     PropertyNote[]  @relation("AddedBy")
+  photosAdded    PropertyPhoto[] @relation("PhotoAddedBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+// PROPERTIES
 // ============================================================
 
 model Property {
@@ -73,33 +96,58 @@ model Property {
   notes               PropertyNote[]
   photos              PropertyPhoto[]
   standingInstructions PropertyInstruction[]
-  replacementLogs     ReplacementLog[]
-  laundryRecords      LaundryRecord[]
-  propertySupplies    PropertySupply[]
-  supplyUsage         SupplyUsage[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
-model TeamMember {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique
-  phone     String?
-  role      String   @default("worker") // "admin" or "worker"
-  isActive  Boolean  @default(true)
+model PropertyNote {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  // Auth (if implementing login)
-  passwordHash String?
+  // Note content
+  type        String   // "issue", "reminder", "owner_request", "info"
+  content     String
 
-  // Relations
-  jobAssignments JobAssignment[]
-  notesAdded     PropertyNote[]  @relation("AddedBy")
-  photosAdded    PropertyPhoto[] @relation("PhotoAddedBy")
+  // Status
+  status      String   @default("active") // "active", "resolved"
+  resolvedAt  DateTime?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Tracking
+  addedById   String
+  addedBy     TeamMember @relation("AddedBy", fields: [addedById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PropertyInstruction {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  instruction String
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+}
+
+model PropertyPhoto {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  room        String   // "Master Bedroom", "Kitchen", etc.
+  caption     String?
+  url         String   // Storage URL
+
+  addedById   String
+  addedBy     TeamMember @relation("PhotoAddedBy", fields: [addedById], references: [id])
+
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
 }
 
 // ============================================================
@@ -212,67 +260,11 @@ model InvoiceLineItem {
   createdAt     DateTime @default(now())
 }
 
-// Saved custom billing items for reuse
 model CustomBillingItem {
   id          String   @id @default(cuid())
   name        String
   category    String   // "service", "supplies", "expense", "other"
   defaultAmount Float?
-
-  createdAt   DateTime @default(now())
-}
-
-// ============================================================
-// PROPERTY NOTES (Timeline)
-// ============================================================
-
-model PropertyNote {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  // Note content
-  type        String   // "issue", "reminder", "owner_request", "info"
-  content     String
-
-  // Status
-  status      String   @default("active") // "active", "resolved"
-  resolvedAt  DateTime?
-
-  // Tracking
-  addedById   String
-  addedBy     TeamMember @relation("AddedBy", fields: [addedById], references: [id])
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// Standing instructions (persistent, not timeline)
-model PropertyInstruction {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  instruction String
-  sortOrder   Int      @default(0)
-
-  createdAt   DateTime @default(now())
-}
-
-// Reference photos
-model PropertyPhoto {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  room        String   // "Master Bedroom", "Kitchen", etc.
-  caption     String?
-  url         String   // Storage URL
-
-  addedById   String
-  addedBy     TeamMember @relation("PhotoAddedBy", fields: [addedById], references: [id])
-
-  sortOrder   Int      @default(0)
 
   createdAt   DateTime @default(now())
 }
@@ -301,13 +293,11 @@ model LinenItem {
   requirements   PropertyLinenRequirement[]
   inventory      PropertyLinenInventory[]
   vendorProducts VendorProduct[]
-  replacements   ReplacementLog[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
-// Per-flip requirements per property
 model PropertyLinenRequirement {
   id          String   @id @default(cuid())
   propertyId  String
@@ -321,7 +311,6 @@ model PropertyLinenRequirement {
   @@unique([propertyId, linenItemId])
 }
 
-// Current inventory on-hand
 model PropertyLinenInventory {
   id          String   @id @default(cuid())
   propertyId  String
@@ -369,172 +358,4 @@ model VendorProduct {
   updatedAt   DateTime @updatedAt
 
   @@unique([vendorId, linenItemId])
-}
-
-// ============================================================
-// REPLACEMENT & DAMAGE LOG
-// ============================================================
-
-model ReplacementLog {
-  id          String    @id @default(cuid())
-  date        DateTime  @default(now())
-
-  propertyId  String
-  linenItemId String
-
-  quantity    Int
-  unitCost    Float
-  totalCost   Float
-  reason      String    // "Stained", "Torn", "Lost", "Worn out"
-
-  replaced    Boolean   @default(false)
-  replacedAt  DateTime?
-  notes       String?
-
-  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
-
-  createdAt   DateTime @default(now())
-}
-
-// ============================================================
-// LAUNDRY TRACKING
-// ============================================================
-
-model LaundryProvider {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  contactInfo String?
-  notes       String?
-
-  records     LaundryRecord[]
-
-  createdAt   DateTime @default(now())
-}
-
-model LaundryRecord {
-  id            String   @id @default(cuid())
-  providerId    String?
-  propertyId    String
-
-  dropOffDate   DateTime
-  pickupDate    DateTime?
-
-  status        String   @default("DROPPED_OFF") // "DROPPED_OFF", "READY_FOR_PICKUP", "PICKED_UP", "DELIVERED"
-  cost          Float?
-  items         String?
-  notes         String?
-
-  provider      LaundryProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
-  property      Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
-
-// ============================================================
-// SUPPLIES TRACKING
-// ============================================================
-
-model Supply {
-  id                String   @id @default(cuid())
-  name              String   @unique
-  description       String?
-  unit              String   @default("unit") // "unit", "bottle", "box", etc.
-  quantity          Float    @default(0)
-  costPerUnit       Float    @default(0)
-  lowStockThreshold Float    @default(5)
-  category          String?
-
-  restocks          SupplyRestock[]
-  usage             SupplyUsage[]
-  propertySupplies  PropertySupply[]
-
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-}
-
-model PropertySupply {
-  id          String   @id @default(cuid())
-  propertyId  String
-  supplyId    String
-
-  currentStock Float   @default(0)
-
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
-
-  updatedAt   DateTime @updatedAt
-
-  @@unique([propertyId, supplyId])
-}
-
-model SupplyRestock {
-  id        String   @id @default(cuid())
-  supplyId  String
-
-  quantity  Float
-  cost      Float    @default(0)
-  notes     String?
-
-  supply    Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-}
-
-model SupplyUsage {
-  id          String   @id @default(cuid())
-  propertyId  String
-  supplyId    String
-  jobId       String?
-
-  quantity    Float
-
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
-
-  createdAt   DateTime @default(now())
-}
-
-// ============================================================
-// SERVICES
-// ============================================================
-
-model Service {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  description String?
-  basePrice   Float    @default(0)
-  active      Boolean  @default(true)
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// ============================================================
-// SYSTEM
-// ============================================================
-
-// Audit log for tracking all changes
-model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id])
-  action      String   // e.g., "CREATE", "UPDATE", "DELETE"
-  entityType  String   // e.g., "Job", "Property", "TeamMember"
-  entityId    String
-  oldValues   Json?
-  newValues   Json?
-  description String?
-  ipAddress   String?
-  createdAt   DateTime @default(now())
-}
-
-// Settings for app configuration
-model Setting {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

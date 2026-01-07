@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { calculateJobPayment } from '@/lib/utils'
 import { z } from 'zod'
 
@@ -173,16 +172,6 @@ export async function PUT(
       },
     })
 
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'UPDATE',
-      entityType: 'Job',
-      entityId: job.id,
-      oldValues: existingJob,
-      newValues: job,
-      description: generateDescription('UPDATE', 'Job', `at ${job.property.name}`),
-    })
-
     return NextResponse.json(job)
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -213,7 +202,6 @@ export async function DELETE(
 
     const existingJob = await prisma.job.findUnique({
       where: { id },
-      include: { property: true },
     })
 
     if (!existingJob) {
@@ -222,15 +210,6 @@ export async function DELETE(
 
     await prisma.job.delete({
       where: { id },
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'DELETE',
-      entityType: 'Job',
-      entityId: id,
-      oldValues: existingJob,
-      description: generateDescription('DELETE', 'Job', `at ${existingJob.property.name}`),
     })
 
     return NextResponse.json({ success: true })

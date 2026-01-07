@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
 const invoiceSchema = z.object({
@@ -167,15 +166,6 @@ export async function POST(request: NextRequest) {
           orderBy: { sortOrder: 'asc' },
         },
       },
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'CREATE',
-      entityType: 'Invoice',
-      entityId: invoice.id,
-      newValues: invoice,
-      description: generateDescription('CREATE', 'Invoice', invoice.invoiceNumber),
     })
 
     return NextResponse.json(invoice, { status: 201 })

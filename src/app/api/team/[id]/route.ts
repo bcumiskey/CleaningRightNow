@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
 const teamMemberUpdateSchema = z.object({
@@ -110,16 +109,6 @@ export async function PUT(
       data: validatedData,
     })
 
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'UPDATE',
-      entityType: 'TeamMember',
-      entityId: teamMember.id,
-      oldValues: { ...existingMember, passwordHash: undefined },
-      newValues: { ...teamMember, passwordHash: undefined },
-      description: generateDescription('UPDATE', 'Team Member', teamMember.name),
-    })
-
     return NextResponse.json({ ...teamMember, passwordHash: undefined })
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -158,15 +147,6 @@ export async function DELETE(
 
     await prisma.teamMember.delete({
       where: { id },
-    })
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'DELETE',
-      entityType: 'TeamMember',
-      entityId: id,
-      oldValues: { ...existingMember, passwordHash: undefined },
-      description: generateDescription('DELETE', 'Team Member', existingMember.name),
     })
 
     return NextResponse.json({ success: true })

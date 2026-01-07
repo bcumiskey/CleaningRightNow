@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 
 export async function POST(
   request: NextRequest,
@@ -66,26 +65,6 @@ export async function POST(
           orderBy: { sortOrder: 'asc' },
         },
       },
-    })
-
-    // Mark linked jobs as client paid pending (invoice sent)
-    const jobIds = existingInvoice.lineItems
-      .filter((item: { jobId: string | null }) => item.jobId)
-      .map((item: { jobId: string | null }) => item.jobId!)
-
-    if (jobIds.length > 0) {
-      // Jobs are now invoiced but not yet paid
-      // We could add an "invoiced" flag if needed
-    }
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'UPDATE',
-      entityType: 'Invoice',
-      entityId: invoice.id,
-      oldValues: { status: existingInvoice.status },
-      newValues: { status: 'sent', sentAt: invoice.sentAt },
-      description: generateDescription('SEND', 'Invoice', invoice.invoiceNumber),
     })
 
     return NextResponse.json(invoice)

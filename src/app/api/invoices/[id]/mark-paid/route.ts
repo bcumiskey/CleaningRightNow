@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 
 export async function POST(
   request: NextRequest,
@@ -65,16 +64,6 @@ export async function POST(
         },
       })
     }
-
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'UPDATE',
-      entityType: 'Invoice',
-      entityId: invoice.id,
-      oldValues: { status: existingInvoice.status },
-      newValues: { status: 'paid', paidAt: invoice.paidAt },
-      description: generateDescription('PAID', 'Invoice', invoice.invoiceNumber),
-    })
 
     return NextResponse.json(invoice)
   } catch (error) {

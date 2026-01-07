@@ -25,7 +25,6 @@ import {
   Trash2,
   Eye,
   Loader2,
-  Square,
   AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -35,33 +34,37 @@ interface Property {
   id: string
   name: string
   address: string
-  squareFootage?: number
   baseRate: number
   billingType: 'per_job' | 'monthly'
+  monthlyBillingDay?: number
+  autoSendInvoice: boolean
+  calendarSource?: string
   ownerName: string
   ownerEmail?: string
   ownerPhone?: string
-  notes?: string
-  active: boolean
+  accessCode?: string
+  accessNotes?: string
   _count: {
     jobs: number
     notes: number
     photos: number
-    instructions: number
+    standingInstructions: number
   }
 }
 
 interface PropertyFormData {
   name: string
   address: string
-  squareFootage: string
   baseRate: string
   billingType: 'per_job' | 'monthly'
+  monthlyBillingDay: string
+  autoSendInvoice: boolean
+  calendarSource: string
   ownerName: string
   ownerEmail: string
   ownerPhone: string
-  notes: string
-  active: boolean
+  accessCode: string
+  accessNotes: string
 }
 
 function PropertiesPageContent() {
@@ -71,21 +74,23 @@ function PropertiesPageContent() {
   const [properties, setProperties] = useState<Property[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  const [billingFilter, setBillingFilter] = useState('all')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProperty, setEditingProperty] = useState<Property | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState<PropertyFormData>({
     name: '',
     address: '',
-    squareFootage: '',
     baseRate: '',
     billingType: 'per_job',
+    monthlyBillingDay: '',
+    autoSendInvoice: false,
+    calendarSource: '',
     ownerName: '',
     ownerEmail: '',
     ownerPhone: '',
-    notes: '',
-    active: true,
+    accessCode: '',
+    accessNotes: '',
   })
 
   useEffect(() => {
@@ -123,14 +128,16 @@ function PropertiesPageContent() {
       const payload = {
         name: formData.name,
         address: formData.address,
-        squareFootage: formData.squareFootage ? parseInt(formData.squareFootage) : null,
         baseRate: formData.baseRate ? parseFloat(formData.baseRate) : 0,
         billingType: formData.billingType,
+        monthlyBillingDay: formData.monthlyBillingDay ? parseInt(formData.monthlyBillingDay) : null,
+        autoSendInvoice: formData.autoSendInvoice,
+        calendarSource: formData.calendarSource || null,
         ownerName: formData.ownerName,
         ownerEmail: formData.ownerEmail || null,
         ownerPhone: formData.ownerPhone || null,
-        notes: formData.notes || null,
-        active: formData.active,
+        accessCode: formData.accessCode || null,
+        accessNotes: formData.accessNotes || null,
       }
 
       const url = editingProperty
@@ -186,14 +193,16 @@ function PropertiesPageContent() {
     setFormData({
       name: property.name,
       address: property.address,
-      squareFootage: property.squareFootage?.toString() || '',
       baseRate: property.baseRate.toString(),
       billingType: property.billingType,
+      monthlyBillingDay: property.monthlyBillingDay?.toString() || '',
+      autoSendInvoice: property.autoSendInvoice,
+      calendarSource: property.calendarSource || '',
       ownerName: property.ownerName,
       ownerEmail: property.ownerEmail || '',
       ownerPhone: property.ownerPhone || '',
-      notes: property.notes || '',
-      active: property.active,
+      accessCode: property.accessCode || '',
+      accessNotes: property.accessNotes || '',
     })
     setIsModalOpen(true)
   }
@@ -203,14 +212,16 @@ function PropertiesPageContent() {
     setFormData({
       name: '',
       address: '',
-      squareFootage: '',
       baseRate: '',
       billingType: 'per_job',
+      monthlyBillingDay: '',
+      autoSendInvoice: false,
+      calendarSource: '',
       ownerName: '',
       ownerEmail: '',
       ownerPhone: '',
-      notes: '',
-      active: true,
+      accessCode: '',
+      accessNotes: '',
     })
   }
 
@@ -219,11 +230,9 @@ function PropertiesPageContent() {
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.address.toLowerCase().includes(search.toLowerCase()) ||
       p.ownerName.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && p.active) ||
-      (statusFilter === 'inactive' && !p.active)
-    return matchesSearch && matchesStatus
+    const matchesBilling =
+      billingFilter === 'all' || p.billingType === billingFilter
+    return matchesSearch && matchesBilling
   })
 
   if (status === 'loading') {
@@ -237,6 +246,20 @@ function PropertiesPageContent() {
   if (!session) {
     router.push('/login')
     return null
+  }
+
+  const getSourceBadge = (source?: string) => {
+    if (!source) return null
+    const colors: Record<string, string> = {
+      turno: 'bg-purple-100 text-purple-800',
+      google: 'bg-green-100 text-green-800',
+      manual: 'bg-gray-100 text-gray-800',
+    }
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[source] || colors.manual}`}>
+        {source}
+      </span>
+    )
   }
 
   return (
@@ -256,13 +279,13 @@ function PropertiesPageContent() {
             />
           </div>
           <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="w-full sm:w-32"
+            value={billingFilter}
+            onChange={(e) => setBillingFilter(e.target.value)}
+            className="w-full sm:w-40"
           >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="all">All Billing</option>
+            <option value="per_job">Per Job</option>
+            <option value="monthly">Monthly</option>
           </Select>
           <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
             <Plus className="w-4 h-4" />
@@ -288,7 +311,6 @@ function PropertiesPageContent() {
                       <TableHead align="center">Billing</TableHead>
                       <TableHead align="center">Jobs</TableHead>
                       <TableHead align="center">Notes</TableHead>
-                      <TableHead align="center">Status</TableHead>
                       <TableHead align="right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -301,22 +323,19 @@ function PropertiesPageContent() {
                               <Home className="w-5 h-5 text-indigo-600" />
                             </div>
                             <div className="min-w-0">
-                              <Link
-                                href={`/properties/${property.id}`}
-                                className="font-medium text-gray-900 hover:text-indigo-600"
-                              >
-                                {property.name}
-                              </Link>
+                              <div className="flex items-center gap-2">
+                                <Link
+                                  href={`/properties/${property.id}`}
+                                  className="font-medium text-gray-900 hover:text-indigo-600"
+                                >
+                                  {property.name}
+                                </Link>
+                                {getSourceBadge(property.calendarSource)}
+                              </div>
                               <div className="flex items-center gap-1 text-sm text-gray-500">
                                 <MapPin className="w-3 h-3" />
                                 <span className="truncate">{property.address}</span>
                               </div>
-                              {property.squareFootage && (
-                                <div className="flex items-center gap-1 text-xs text-gray-400">
-                                  <Square className="w-3 h-3" />
-                                  {property.squareFootage.toLocaleString()} sq ft
-                                </div>
-                              )}
                             </div>
                           </div>
                         </TableCell>
@@ -355,11 +374,6 @@ function PropertiesPageContent() {
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
-                        </TableCell>
-                        <TableCell align="center">
-                          <Badge variant={property.active ? 'success' : 'default'}>
-                            {property.active ? 'Active' : 'Inactive'}
-                          </Badge>
                         </TableCell>
                         <TableCell align="right">
                           <div className="flex items-center justify-end gap-1">
@@ -432,28 +446,6 @@ function PropertiesPageContent() {
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   required
                 />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Square Footage"
-                    type="number"
-                    placeholder="1500"
-                    value={formData.squareFootage}
-                    onChange={(e) => setFormData({ ...formData, squareFootage: e.target.value })}
-                  />
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="active"
-                      checked={formData.active}
-                      onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                    />
-                    <label htmlFor="active" className="text-sm text-gray-700">
-                      Active property
-                    </label>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -514,20 +506,57 @@ function PropertiesPageContent() {
                   </Select>
                 </div>
               </div>
+
+              {formData.billingType === 'monthly' && (
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <Input
+                    label="Billing Day of Month"
+                    type="number"
+                    min="1"
+                    max="31"
+                    placeholder="1"
+                    value={formData.monthlyBillingDay}
+                    onChange={(e) => setFormData({ ...formData, monthlyBillingDay: e.target.value })}
+                  />
+                  <div className="flex items-center gap-2 pt-6">
+                    <input
+                      type="checkbox"
+                      id="autoSend"
+                      checked={formData.autoSendInvoice}
+                      onChange={(e) => setFormData({ ...formData, autoSendInvoice: e.target.checked })}
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                    />
+                    <label htmlFor="autoSend" className="text-sm text-gray-700">
+                      Auto-send invoices
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Notes */}
+            {/* Access Info */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Internal Notes
-              </label>
-              <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                rows={3}
-                placeholder="Special instructions, access codes, etc."
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              />
+              <h4 className="text-sm font-medium text-gray-900 mb-3">Access Information</h4>
+              <div className="space-y-4">
+                <Input
+                  label="Access Code"
+                  placeholder="1234, Gate code, etc."
+                  value={formData.accessCode}
+                  onChange={(e) => setFormData({ ...formData, accessCode: e.target.value })}
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Access Notes
+                  </label>
+                  <textarea
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                    rows={2}
+                    placeholder="Key under mat, ring doorbell, etc."
+                    value={formData.accessNotes}
+                    onChange={(e) => setFormData({ ...formData, accessNotes: e.target.value })}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
