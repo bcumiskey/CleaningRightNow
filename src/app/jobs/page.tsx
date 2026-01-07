@@ -276,7 +276,7 @@ export default function JobsPage() {
         toast.success('Marked as client paid')
         fetchJobs()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update job')
     }
   }
@@ -292,7 +292,7 @@ export default function JobsPage() {
         toast.success('Marked as team paid')
         fetchJobs()
       }
-    } catch (error) {
+    } catch {
       toast.error('Failed to update job')
     }
   }

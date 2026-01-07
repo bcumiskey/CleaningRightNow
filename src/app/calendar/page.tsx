@@ -143,7 +143,7 @@ export default function CalendarPage() {
       await new Promise((resolve) => setTimeout(resolve, 1500))
       toast.success('Calendars synced successfully')
       fetchJobs()
-    } catch (error) {
+    } catch {
       toast.error('Failed to sync calendars')
     } finally {
       setIsSyncing(false)

@@ -12,7 +12,7 @@ import Modal from '@/components/ui/Modal'
 import Select from '@/components/ui/Select'
 import Textarea from '@/components/ui/Textarea'
 import StatCard from '@/components/ui/StatCard'
-import { formatDate, formatDateTime } from '@/lib/utils'
+import { formatDateTime } from '@/lib/utils'
 import {
   Plus,
   AlertCircle,
@@ -80,7 +80,7 @@ export default function NotesPage() {
   const router = useRouter()
   const [notes, setNotes] = useState<PropertyNote[]>([])
   const [properties, setProperties] = useState<Property[]>([])
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [, setTeamMembers] = useState<TeamMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
 

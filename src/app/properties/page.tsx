@@ -26,7 +26,6 @@ import {
   Eye,
   Loader2,
   Square,
-  DollarSign,
   AlertCircle,
 } from 'lucide-react'
 import Link from 'next/link'

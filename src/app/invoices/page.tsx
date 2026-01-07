@@ -85,7 +85,7 @@ export default function InvoicesPage() {
   const router = useRouter()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [properties, setProperties] = useState<Property[]>([])
-  const [billingItems, setBillingItems] = useState<CustomBillingItem[]>([])
+  const [, setBillingItems] = useState<CustomBillingItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
