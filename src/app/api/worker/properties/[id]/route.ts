@@ -26,11 +26,10 @@ export async function GET(
         ownerPhone: true,
         ownerEmail: true,
         accessCode: true,
-        instructions: {
+        standingInstructions: {
           select: {
             id: true,
-            category: true,
-            content: true,
+            instruction: true,
             sortOrder: true,
           },
           orderBy: { sortOrder: 'asc' },
@@ -97,7 +96,7 @@ export async function GET(
       ownerPhone: property.ownerPhone,
       ownerEmail: property.ownerEmail,
       accessCode: property.accessCode,
-      instructions: property.instructions,
+      instructions: property.standingInstructions,
       photos: property.photos,
       notes: property.notes,
       linens,

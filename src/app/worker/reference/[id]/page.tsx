@@ -27,8 +27,7 @@ interface PropertyDetail {
   accessCode?: string
   instructions: Array<{
     id: string
-    category: string
-    content: string
+    instruction: string
     sortOrder: number
   }>
   photos: Array<{
@@ -305,12 +304,9 @@ export default function WorkerPropertyReferencePage() {
                   <h3 className="font-medium text-gray-900">Standing Instructions</h3>
                 </div>
                 <div className="divide-y divide-gray-100">
-                  {property.instructions.map((instruction) => (
-                    <div key={instruction.id} className="px-4 py-3">
-                      <p className="text-xs text-gray-500 uppercase mb-1">
-                        {instruction.category}
-                      </p>
-                      <p className="text-gray-700">{instruction.content}</p>
+                  {property.instructions.map((instr) => (
+                    <div key={instr.id} className="px-4 py-3">
+                      <p className="text-gray-700">{instr.instruction}</p>
                     </div>
                   ))}
                 </div>
