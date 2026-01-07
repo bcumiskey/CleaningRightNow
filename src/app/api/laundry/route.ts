@@ -74,13 +74,13 @@ export async function POST(request: NextRequest) {
     const laundryRecord = await prisma.laundryRecord.create({
       data: {
         propertyId: validatedData.propertyId,
-        providerId: validatedData.providerId,
+        providerId: validatedData.providerId ?? undefined,
         dropOffDate: new Date(validatedData.dropOffDate),
-        pickupDate: validatedData.pickupDate ? new Date(validatedData.pickupDate) : null,
+        pickupDate: validatedData.pickupDate ? new Date(validatedData.pickupDate) : undefined,
         status: validatedData.status,
-        cost: validatedData.cost,
-        items: validatedData.items,
-        notes: validatedData.notes,
+        cost: validatedData.cost ?? undefined,
+        items: validatedData.items ?? undefined,
+        notes: validatedData.notes ?? undefined,
       },
       include: {
         property: {

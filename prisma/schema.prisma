@@ -414,18 +414,19 @@ model LaundryProvider {
 
 model LaundryRecord {
   id            String   @id @default(cuid())
-  providerId    String
+  providerId    String?
   propertyId    String
 
   dropOffDate   DateTime
-  pickUpDate    DateTime?
+  pickupDate    DateTime?
 
-  status        String   @default("pending") // "pending", "in_progress", "completed"
-  bagCount      Int      @default(1)
+  status        String   @default("DROPPED_OFF") // "DROPPED_OFF", "READY_FOR_PICKUP", "PICKED_UP", "DELIVERED"
+  cost          Float?
+  items         String?
   notes         String?
 
-  provider      LaundryProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
-  property      Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  provider      LaundryProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  property      Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
