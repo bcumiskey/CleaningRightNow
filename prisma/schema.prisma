@@ -74,6 +74,9 @@ model Property {
   photos              PropertyPhoto[]
   standingInstructions PropertyInstruction[]
   replacementLogs     ReplacementLog[]
+  laundryRecords      LaundryRecord[]
+  propertySupplies    PropertySupply[]
+  supplyUsage         SupplyUsage[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -390,6 +393,104 @@ model ReplacementLog {
 
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// LAUNDRY TRACKING
+// ============================================================
+
+model LaundryProvider {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  contactInfo String?
+  notes       String?
+
+  records     LaundryRecord[]
+
+  createdAt   DateTime @default(now())
+}
+
+model LaundryRecord {
+  id            String   @id @default(cuid())
+  providerId    String
+  propertyId    String
+
+  dropOffDate   DateTime
+  pickUpDate    DateTime?
+
+  status        String   @default("pending") // "pending", "in_progress", "completed"
+  bagCount      Int      @default(1)
+  notes         String?
+
+  provider      LaundryProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  property      Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================
+// SUPPLIES TRACKING
+// ============================================================
+
+model Supply {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String?
+  unit              String   @default("unit") // "unit", "bottle", "box", etc.
+  quantity          Float    @default(0)
+  costPerUnit       Float    @default(0)
+  lowStockThreshold Float    @default(5)
+  category          String?
+
+  restocks          SupplyRestock[]
+  usage             SupplyUsage[]
+  propertySupplies  PropertySupply[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model PropertySupply {
+  id          String   @id @default(cuid())
+  propertyId  String
+  supplyId    String
+
+  currentStock Float   @default(0)
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  updatedAt   DateTime @updatedAt
+
+  @@unique([propertyId, supplyId])
+}
+
+model SupplyRestock {
+  id        String   @id @default(cuid())
+  supplyId  String
+
+  quantity  Float
+  cost      Float    @default(0)
+  notes     String?
+
+  supply    Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model SupplyUsage {
+  id          String   @id @default(cuid())
+  propertyId  String
+  supplyId    String
+  jobId       String?
+
+  quantity    Float
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
 
   createdAt   DateTime @default(now())
 }
