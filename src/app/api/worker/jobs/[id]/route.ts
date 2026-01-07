@@ -26,7 +26,7 @@ export async function GET(
             address: true,
             ownerName: true,
             ownerPhone: true,
-            accessCodes: true,
+            accessCode: true,
           },
         },
         assignments: {

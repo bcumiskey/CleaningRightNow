@@ -32,7 +32,7 @@ interface JobDetail {
     address: string
     ownerName: string
     ownerPhone?: string
-    accessCodes?: string
+    accessCode?: string
   }
   assignments: Array<{
     teamMember: {
@@ -159,9 +159,9 @@ export default function WorkerJobDetailPage() {
             <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
             <div className="flex-1">
               <p className="text-gray-900">{job.property.address}</p>
-              {job.property.accessCodes && (
+              {job.property.accessCode && (
                 <p className="text-sm text-indigo-600 mt-1 font-medium">
-                  Access: {job.property.accessCodes}
+                  Access: {job.property.accessCode}
                 </p>
               )}
             </div>

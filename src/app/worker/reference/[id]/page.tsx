@@ -24,7 +24,7 @@ interface PropertyDetail {
   ownerName: string
   ownerPhone?: string
   ownerEmail?: string
-  accessCodes?: string
+  accessCode?: string
   instructions: Array<{
     id: string
     category: string
@@ -265,14 +265,14 @@ export default function WorkerPropertyReferencePage() {
               </div>
             </div>
 
-            {/* Access Codes */}
-            {property.accessCodes && (
+            {/* Access Code */}
+            {property.accessCode && (
               <div className="bg-white rounded-xl p-4 border border-gray-100">
                 <div className="flex items-start gap-3">
                   <Key className="w-5 h-5 text-gray-400 mt-0.5" />
                   <div>
-                    <p className="text-sm text-gray-500">Access Codes</p>
-                    <p className="text-gray-900 font-mono">{property.accessCodes}</p>
+                    <p className="text-sm text-gray-500">Access Code</p>
+                    <p className="text-gray-900 font-mono">{property.accessCode}</p>
                   </div>
                 </div>
               </div>

@@ -25,7 +25,7 @@ export async function GET(
         ownerName: true,
         ownerPhone: true,
         ownerEmail: true,
-        accessCodes: true,
+        accessCode: true,
         instructions: {
           select: {
             id: true,
@@ -96,7 +96,7 @@ export async function GET(
       ownerName: property.ownerName,
       ownerPhone: property.ownerPhone,
       ownerEmail: property.ownerEmail,
-      accessCodes: property.accessCodes,
+      accessCode: property.accessCode,
       instructions: property.instructions,
       photos: property.photos,
       notes: property.notes,
