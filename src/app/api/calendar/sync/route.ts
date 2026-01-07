@@ -4,13 +4,32 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import ical from 'node-ical'
 
-interface ICalEvent {
-  type: string
+interface ParsedEvent {
   uid: string
   start: Date
   end: Date
   summary?: string
-  description?: string
+}
+
+function parseICalEvents(icalData: ical.CalendarResponse): ParsedEvent[] {
+  const events: ParsedEvent[] = []
+
+  for (const key in icalData) {
+    const component = icalData[key]
+    if (component.type === 'VEVENT') {
+      const vevent = component as ical.VEvent
+      if (vevent.start && vevent.uid) {
+        events.push({
+          uid: vevent.uid,
+          start: vevent.start instanceof Date ? vevent.start : new Date(vevent.start),
+          end: vevent.end instanceof Date ? vevent.end : new Date(vevent.end || vevent.start),
+          summary: vevent.summary,
+        })
+      }
+    }
+  }
+
+  return events
 }
 
 export async function POST(request: NextRequest) {
@@ -45,14 +64,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch and parse iCal feed
-    let events: ICalEvent[]
+    let events: ParsedEvent[]
     try {
       const icalData = await ical.async.fromURL(property.icalUrl)
-      events = Object.values(icalData)
-        .filter((event): event is ICalEvent =>
-          event.type === 'VEVENT' &&
-          event.start instanceof Date
-        )
+      events = parseICalEvents(icalData)
     } catch (error) {
       console.error('Failed to fetch iCal:', error)
       return NextResponse.json({ error: 'Failed to fetch calendar feed' }, { status: 502 })
@@ -149,11 +164,7 @@ export async function PUT(request: NextRequest) {
 
       try {
         const icalData = await ical.async.fromURL(property.icalUrl)
-        const events = Object.values(icalData)
-          .filter((event): event is ICalEvent =>
-            event.type === 'VEVENT' &&
-            event.start instanceof Date
-          )
+        const events = parseICalEvents(icalData)
 
         const existingJobs = await prisma.job.findMany({
           where: {
