@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
@@ -64,7 +64,7 @@ interface PropertyFormData {
   active: boolean
 }
 
-export default function PropertiesPage() {
+function PropertiesPageContent() {
   const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -546,5 +546,17 @@ export default function PropertiesPage() {
         </form>
       </Modal>
     </DashboardLayout>
+  )
+}
+
+export default function PropertiesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    }>
+      <PropertiesPageContent />
+    </Suspense>
   )
 }
