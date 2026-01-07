@@ -102,6 +102,7 @@ model TeamMember {
   name        String
   email       String?   @unique
   phone       String?
+  password    String?   // Hashed password for worker login
   role        String    @default("worker") // "admin" | "worker"
   isActive    Boolean   @default(true)
 
@@ -318,4 +319,21 @@ model User {
   role          String    @default("admin") // "admin" | "worker"
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+// ============================================================
+// COMPANY SETTINGS
+// ============================================================
+
+model CompanySettings {
+  id              String    @id @default("default")
+  companyName     String    @default("Cleaning Right Now")
+  address         String?
+  phone           String?
+  email           String?
+  website         String?
+  logoUrl         String?   // URL to company logo
+  invoiceFooter   String?   // Custom footer text for invoices
+  invoiceTerms    String?   // Payment terms text
+  updatedAt       DateTime  @updatedAt
 }

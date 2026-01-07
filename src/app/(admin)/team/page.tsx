@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, Shield, User } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -19,13 +19,16 @@ interface TeamMember {
   phone: string | null
   role: string
   isActive: boolean
+  hasPassword?: boolean
 }
 
 export default function TeamPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
+  const [passwordMember, setPasswordMember] = useState<TeamMember | null>(null)
 
   useEffect(() => {
     fetchTeamMembers()
@@ -55,7 +58,13 @@ export default function TeamPage() {
     setShowModal(true)
   }
 
-  const handleSave = async (data: any) => {
+  const handleSetPassword = (member: TeamMember, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setPasswordMember(member)
+    setShowPasswordModal(true)
+  }
+
+  const handleSave = async (data: Partial<TeamMember>) => {
     try {
       const url = editingMember ? `/api/team/${editingMember.id}` : '/api/team'
       const method = editingMember ? 'PUT' : 'POST'
@@ -75,6 +84,30 @@ export default function TeamPage() {
       }
     } catch (error) {
       toast.error('Failed to save team member')
+    }
+  }
+
+  const handleSavePassword = async (password: string) => {
+    if (!passwordMember) return
+
+    try {
+      const response = await fetch(`/api/team/${passwordMember.id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+
+      if (response.ok) {
+        toast.success(`Password set for ${passwordMember.name}`)
+        setShowPasswordModal(false)
+        setPasswordMember(null)
+        fetchTeamMembers()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to set password')
+      }
+    } catch (error) {
+      toast.error('Failed to set password')
     }
   }
 
@@ -139,6 +172,32 @@ export default function TeamPage() {
                           {member.email}
                         </div>
                       )}
+
+                      {/* Worker Login Status */}
+                      {member.role === 'worker' && member.email && (
+                        <div className="mt-3 pt-3 border-t">
+                          {member.hasPassword ? (
+                            <div className="flex items-center gap-2 text-sm text-green-600">
+                              <Check size={14} />
+                              <span>Login enabled</span>
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => handleSetPassword(member, e)}
+                            >
+                              <Key size={14} />
+                              Set Password
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                      {member.role === 'worker' && !member.email && (
+                        <p className="mt-3 pt-3 border-t text-xs text-gray-400">
+                          Add email to enable worker login
+                        </p>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -154,6 +213,16 @@ export default function TeamPage() {
         onSave={handleSave}
         member={editingMember}
       />
+
+      <SetPasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => {
+          setShowPasswordModal(false)
+          setPasswordMember(null)
+        }}
+        onSave={handleSavePassword}
+        memberName={passwordMember?.name || ''}
+      />
     </div>
   )
 }
@@ -161,7 +230,7 @@ export default function TeamPage() {
 interface TeamMemberModalProps {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: any) => void
+  onSave: (data: Partial<TeamMember>) => void
   member: TeamMember | null
 }
 
@@ -245,6 +314,82 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
           </Button>
           <Button type="submit" isLoading={isSaving}>
             {member ? 'Save Changes' : 'Add Team Member'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+interface SetPasswordModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (password: string) => void
+  memberName: string
+}
+
+function SetPasswordModal({ isOpen, onClose, onSave, memberName }: SetPasswordModalProps) {
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setPassword('')
+      setConfirmPassword('')
+    }
+  }, [isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+
+    if (password !== confirmPassword) {
+      toast.error('Passwords do not match')
+      return
+    }
+
+    setIsSaving(true)
+    await onSave(password)
+    setIsSaving(false)
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={`Set Password for ${memberName}`}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Set a password to allow this worker to log in to the worker portal.
+        </p>
+
+        <Input
+          label="Password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter password"
+          required
+        />
+
+        <Input
+          label="Confirm Password"
+          type="password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          placeholder="Confirm password"
+          required
+        />
+
+        <div className="flex justify-end gap-3 pt-4">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" isLoading={isSaving}>
+            <Key size={16} />
+            Set Password
           </Button>
         </div>
       </form>

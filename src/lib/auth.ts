@@ -22,25 +22,43 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
+        // First try to find admin user
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         })
 
-        if (!user) {
+        if (user) {
+          const isValid = await compare(credentials.password, user.password)
+          if (!isValid) {
+            return null
+          }
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: 'admin',
+          }
+        }
+
+        // If not admin, try to find worker (team member)
+        const worker = await prisma.teamMember.findUnique({
+          where: { email: credentials.email },
+        })
+
+        if (!worker || !worker.password || !worker.isActive) {
           return null
         }
 
-        const isValid = await compare(credentials.password, user.password)
-
-        if (!isValid) {
+        const isValidWorker = await compare(credentials.password, worker.password)
+        if (!isValidWorker) {
           return null
         }
 
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
+          id: worker.id,
+          email: worker.email,
+          name: worker.name,
+          role: 'worker',
         }
       },
     }),

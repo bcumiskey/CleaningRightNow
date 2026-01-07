@@ -15,7 +15,18 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    return NextResponse.json(teamMembers)
+    // Add hasPassword indicator without exposing password
+    const membersWithPasswordStatus = teamMembers.map((member) => ({
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      role: member.role,
+      isActive: member.isActive,
+      hasPassword: !!member.password,
+    }))
+
+    return NextResponse.json(membersWithPasswordStatus)
   } catch (error) {
     console.error('Team GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch team' }, { status: 500 })
