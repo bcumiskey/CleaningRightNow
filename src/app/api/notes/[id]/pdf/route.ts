@@ -71,7 +71,12 @@ export async function GET(
           caption: p.caption || undefined,
         })),
       },
-      property: note.property,
+      property: {
+        name: note.property.name,
+        address: note.property.address,
+        ownerName: note.property.ownerName,
+        ownerEmail: note.property.ownerEmail || undefined,
+      },
       company,
     })
 
