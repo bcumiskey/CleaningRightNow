@@ -8,8 +8,8 @@ describe('Card Components', () => {
   })
 
   it('applies custom className to Card', () => {
-    render(<Card className="custom-class">Content</Card>)
-    expect(screen.getByText('Content').parentElement || screen.getByText('Content')).toHaveClass('custom-class')
+    render(<Card className="custom-class" data-testid="card">Content</Card>)
+    expect(screen.getByTestId('card')).toHaveClass('custom-class')
   })
 
   it('renders CardHeader with children', () => {

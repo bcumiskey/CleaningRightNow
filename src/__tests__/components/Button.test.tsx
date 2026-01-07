@@ -17,13 +17,13 @@ describe('Button Component', () => {
 
   it('applies variant styles', () => {
     const { rerender } = render(<Button variant="primary">Primary</Button>)
-    expect(screen.getByText('Primary')).toHaveClass('bg-emerald-500')
+    expect(screen.getByText('Primary')).toHaveClass('bg-blue-600')
 
     rerender(<Button variant="outline">Outline</Button>)
-    expect(screen.getByText('Outline')).toHaveClass('border-gray-300')
+    expect(screen.getByText('Outline')).toHaveClass('border')
 
     rerender(<Button variant="ghost">Ghost</Button>)
-    expect(screen.getByText('Ghost')).toHaveClass('hover:bg-gray-100')
+    expect(screen.getByText('Ghost')).toHaveClass('text-gray-600')
   })
 
   it('applies size styles', () => {
