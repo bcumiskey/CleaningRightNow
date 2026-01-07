@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Building } from 'lucide-react'
+import { Building, ShieldX } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import toast from 'react-hot-toast'
@@ -15,6 +15,25 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [registrationDisabled, setRegistrationDisabled] = useState(false)
+  const [checkingStatus, setCheckingStatus] = useState(true)
+
+  // Check if registration is allowed (only before first admin exists)
+  useEffect(() => {
+    const checkRegistrationStatus = async () => {
+      try {
+        const response = await fetch('/api/auth/setup-status')
+        const data = await response.json()
+        setRegistrationDisabled(data.hasAdmin)
+      } catch {
+        // If check fails, allow form to show - API will still block if needed
+        setRegistrationDisabled(false)
+      } finally {
+        setCheckingStatus(false)
+      }
+    }
+    checkRegistrationStatus()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +71,33 @@ export default function RegisterPage() {
     }
   }
 
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    )
+  }
+
+  if (registrationDisabled) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md text-center">
+          <div className="w-16 h-16 bg-red-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <ShieldX className="text-red-600" size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Registration Disabled</h1>
+          <p className="text-gray-500 mt-2 mb-6">
+            Public registration is not available. New accounts must be created by an administrator through the Team management page.
+          </p>
+          <Link href="/login">
+            <Button className="w-full">Go to Login</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
@@ -59,8 +105,8 @@ export default function RegisterPage() {
           <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
             <Building className="text-white" size={32} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-gray-500 mt-1">Get started with Cleaning Right Now</p>
+          <h1 className="text-2xl font-bold text-gray-900">Initial Setup</h1>
+          <p className="text-gray-500 mt-1">Create the first admin account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

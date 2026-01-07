@@ -40,6 +40,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Only admins can create team members
+    const userRole = (session.user as { role?: string })?.role
+    if (userRole !== 'admin') {
+      return NextResponse.json({ error: 'Only administrators can add team members' }, { status: 403 })
+    }
+
     const data = await request.json()
 
     const teamMember = await prisma.teamMember.create({

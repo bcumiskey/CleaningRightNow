@@ -10,6 +10,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
     }
 
+    // Security: Only allow registration if no admin users exist (first-time setup)
+    const existingAdminCount = await prisma.user.count({
+      where: { role: 'admin' },
+    })
+
+    if (existingAdminCount > 0) {
+      return NextResponse.json(
+        { error: 'Registration is disabled. Please contact your administrator to create an account.' },
+        { status: 403 }
+      )
+    }
+
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
@@ -22,7 +34,7 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await hash(password, 12)
 
-    // Create user
+    // Create first admin user
     const user = await prisma.user.create({
       data: {
         name,
