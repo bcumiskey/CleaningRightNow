@@ -155,10 +155,11 @@ model TeamMember {
   isActive    Boolean   @default(true)
 
   // Relations
-  jobAssignments  JobAssignment[]
-  notesAdded      PropertyNote[]    @relation("AddedNotes")
-  notesResolved   PropertyNote[]    @relation("ResolvedNotes")
-  photosAdded     PropertyPhoto[]
+  jobAssignments    JobAssignment[]
+  notesAdded        PropertyNote[]      @relation("AddedNotes")
+  notesResolved     PropertyNote[]      @relation("ResolvedNotes")
+  photosAdded       PropertyPhoto[]
+  pushSubscriptions PushSubscription[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -385,4 +386,28 @@ model CompanySettings {
   invoiceFooter   String?   // Custom footer text for invoices
   invoiceTerms    String?   // Payment terms text
   updatedAt       DateTime  @updatedAt
+}
+
+// ============================================================
+// PUSH NOTIFICATIONS
+// ============================================================
+
+model PushSubscription {
+  id            String      @id @default(cuid())
+  endpoint      String      @unique
+  p256dh        String      // Public key for encryption
+  auth          String      // Auth secret
+
+  // Link to team member (worker) if applicable
+  teamMemberId  String?
+  teamMember    TeamMember? @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+
+  // Link to admin user if applicable
+  userId        String?
+
+  // Device info
+  userAgent     String?
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 }
