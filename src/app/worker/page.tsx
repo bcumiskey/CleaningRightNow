@@ -68,7 +68,7 @@ export default function WorkerTodayPage() {
           {format(new Date(), 'EEEE, MMMM d')}
         </p>
         <h1 className="text-2xl font-bold text-gray-900">
-          Today's Jobs
+          Today&apos;s Jobs
         </h1>
       </div>
 

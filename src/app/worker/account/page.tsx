@@ -1,7 +1,7 @@
 'use client'
 
 import { useSession, signOut } from 'next-auth/react'
-import { User, LogOut, Phone, Mail, Loader2 } from 'lucide-react'
+import { User, LogOut, Mail, Loader2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 
 export default function WorkerAccountPage() {
