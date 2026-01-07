@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, User, Key, Check } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -197,6 +197,22 @@ export default function TeamPage() {
                         <p className="mt-3 pt-3 border-t text-xs text-gray-400">
                           Add email to enable worker login
                         </p>
+                      )}
+
+                      {/* View Pay Button for Workers */}
+                      {member.role === 'worker' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 w-full justify-start text-gray-600"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            window.location.href = `/team/${member.id}/pay`
+                          }}
+                        >
+                          <DollarSign size={14} />
+                          View Pay History
+                        </Button>
                       )}
                     </div>
                   </div>
