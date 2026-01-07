@@ -94,12 +94,12 @@ export async function GET() {
     })
 
     const monthlyRevenue = completedJobsThisMonth.reduce(
-      (sum, job) => sum + job.rate,
+      (sum: number, job: { rate: number }) => sum + job.rate,
       0
     )
 
     const monthlyExpenses = completedJobsThisMonth.reduce(
-      (sum, job) => sum + (job.rate * job.expensePercent / 100),
+      (sum: number, job: { rate: number; expensePercent: number }) => sum + (job.rate * job.expensePercent / 100),
       0
     )
 
@@ -146,7 +146,7 @@ export async function GET() {
       for (const requirement of property.linenRequirements) {
         const target = requirement.perFlip * 2
         const inventory = property.linenInventory.find(
-          (inv) => inv.linenItemId === requirement.linenItemId
+          (inv: { linenItemId: string; onHand: number }) => inv.linenItemId === requirement.linenItemId
         )
         const onHand = inventory?.onHand || 0
         if (onHand < target) {
@@ -173,7 +173,8 @@ export async function GET() {
     })
 
     // Group notes by property
-    const notesByProperty = activeNotes.reduce((acc, note) => {
+    type NotesByPropertyAcc = Record<string, { property: { id: string; name: string }; notes: typeof activeNotes }>
+    const notesByProperty = activeNotes.reduce((acc: NotesByPropertyAcc, note: (typeof activeNotes)[number]) => {
       const key = note.property.id
       if (!acc[key]) {
         acc[key] = {
@@ -183,7 +184,7 @@ export async function GET() {
       }
       acc[key].notes.push(note)
       return acc
-    }, {} as Record<string, { property: { id: string; name: string }; notes: typeof activeNotes }>)
+    }, {} as NotesByPropertyAcc)
 
     // Team balances
     const teamMembers = await prisma.teamMember.findMany({
@@ -204,14 +205,14 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    const teamBalances = teamMembers.map((member) => ({
+    const teamBalances = teamMembers.map((member: (typeof teamMembers)[number]) => ({
       id: member.id,
       name: member.name,
       owed: member.jobAssignments.reduce(
-        (sum, a) => sum + (a.amountEarned || 0),
+        (sum: number, a: { amountEarned: number | null }) => sum + (a.amountEarned || 0),
         0
       ),
-    })).filter((m) => m.owed > 0)
+    })).filter((m: { id: string; name: string; owed: number }) => m.owed > 0)
 
     // Notes resolved this week
     const notesResolvedThisWeek = await prisma.propertyNote.count({

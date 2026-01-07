@@ -70,8 +70,8 @@ export async function POST(
 
     // Mark linked jobs as client paid pending (invoice sent)
     const jobIds = existingInvoice.lineItems
-      .filter((item) => item.jobId)
-      .map((item) => item.jobId!)
+      .filter((item: { jobId: string | null }) => item.jobId)
+      .map((item: { jobId: string | null }) => item.jobId!)
 
     if (jobIds.length > 0) {
       // Jobs are now invoiced but not yet paid

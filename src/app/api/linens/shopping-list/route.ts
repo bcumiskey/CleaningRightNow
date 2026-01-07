@@ -41,7 +41,7 @@ export async function GET() {
       for (const requirement of property.linenRequirements) {
         const target = requirement.perFlip * 2 // 2x target
         const inventory = property.linenInventory.find(
-          (inv) => inv.linenItemId === requirement.linenItemId
+          (inv: { linenItemId: string; onHand: number }) => inv.linenItemId === requirement.linenItemId
         )
         const onHand = inventory?.onHand || 0
         const needed = Math.max(0, target - onHand)

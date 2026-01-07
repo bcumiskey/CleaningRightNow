@@ -65,7 +65,7 @@ export async function GET(
     })
 
     const owedAmount = unpaidAssignments.reduce(
-      (sum, a) => sum + (a.amountEarned || 0),
+      (sum: number, a: { amountEarned: number | null }) => sum + (a.amountEarned || 0),
       0
     )
 
@@ -124,7 +124,7 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

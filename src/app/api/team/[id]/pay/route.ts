@@ -49,15 +49,15 @@ export async function POST(
     }
 
     // Calculate total payment
-    const totalPayment = unpaidJobs.reduce((sum, job) => {
-      return sum + job.assignments.reduce((assignSum, a) => assignSum + (a.amountEarned || 0), 0)
+    const totalPayment = unpaidJobs.reduce((sum: number, job: (typeof unpaidJobs)[number]) => {
+      return sum + job.assignments.reduce((assignSum: number, a: { amountEarned: number | null }) => assignSum + (a.amountEarned || 0), 0)
     }, 0)
 
     // Mark all those jobs as team paid
     await prisma.job.updateMany({
       where: {
         id: {
-          in: unpaidJobs.map((j) => j.id),
+          in: unpaidJobs.map((j: { id: string }) => j.id),
         },
       },
       data: {
@@ -75,7 +75,7 @@ export async function POST(
         teamMemberId: id,
         amount: totalPayment,
         jobCount: unpaidJobs.length,
-        jobIds: unpaidJobs.map((j) => j.id),
+        jobIds: unpaidJobs.map((j: { id: string }) => j.id),
       },
       description: generateDescription('PAY', 'Team Member', `${teamMember.name} - $${totalPayment.toFixed(2)}`),
     })

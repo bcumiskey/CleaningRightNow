@@ -51,8 +51,8 @@ export async function POST(
 
     // Mark linked jobs as client paid
     const jobIds = existingInvoice.lineItems
-      .filter((item) => item.jobId)
-      .map((item) => item.jobId!)
+      .filter((item: { jobId: string | null }) => item.jobId)
+      .map((item: { jobId: string | null }) => item.jobId!)
 
     if (jobIds.length > 0) {
       await prisma.job.updateMany({

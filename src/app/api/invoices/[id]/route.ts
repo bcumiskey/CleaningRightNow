@@ -129,7 +129,7 @@ export async function PUT(
 
     // Calculate new totals
     const lineItems = validatedData.lineItems || existingInvoice.lineItems
-    const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0)
+    const subtotal = lineItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0)
     const discount = validatedData.discount ?? existingInvoice.discount
     const total = subtotal - discount
 
@@ -173,7 +173,7 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

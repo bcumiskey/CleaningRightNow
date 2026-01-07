@@ -1,6 +1,6 @@
 import prisma from './prisma'
 
-type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE'
+type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PAID' | 'SEND' | 'COMPLETE' | 'PAY'
 
 interface AuditLogParams {
   userId?: string
@@ -42,13 +42,19 @@ export function generateDescription(
   entityType: string,
   details?: string
 ): string {
-  const actionText = {
+  const actionText: Record<AuditAction, string> = {
     CREATE: 'Created',
     UPDATE: 'Updated',
-    DELETE: 'Deleted'
-  }[action]
+    DELETE: 'Deleted',
+    PAID: 'Marked as paid',
+    SEND: 'Sent',
+    COMPLETE: 'Completed',
+    PAY: 'Paid'
+  }
+
+  const text = actionText[action]
 
   return details
-    ? `${actionText} ${entityType}: ${details}`
-    : `${actionText} ${entityType}`
+    ? `${text} ${entityType}: ${details}`
+    : `${text} ${entityType}`
 }

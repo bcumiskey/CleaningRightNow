@@ -39,7 +39,8 @@ export async function GET(
     })
 
     // Group by payment date
-    const paymentHistory = paidJobs.reduce((acc, job) => {
+    type PaymentHistoryAcc = Record<string, { date: string; jobs: unknown[]; total: number }>
+    const paymentHistory = paidJobs.reduce((acc: PaymentHistoryAcc, job: (typeof paidJobs)[number]) => {
       const paidAt = job.teamPaidAt?.toISOString().split('T')[0] || 'unknown'
       if (!acc[paidAt]) {
         acc[paidAt] = {

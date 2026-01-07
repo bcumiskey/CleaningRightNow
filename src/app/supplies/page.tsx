@@ -201,7 +201,7 @@ export default function SuppliesPage() {
     })
   }
 
-  const categories = [...new Set(supplies.map((s) => s.category).filter(Boolean))]
+  const categories = Array.from(new Set(supplies.map((s) => s.category).filter((c): c is string => c !== undefined && c !== null)))
 
   const filteredSupplies = supplies.filter((s) => {
     const matchesSearch = s.name.toLowerCase().includes(search.toLowerCase())

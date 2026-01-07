@@ -46,9 +46,9 @@ export async function GET(
     })
 
     // Transform into a more useful format
-    const result = linenCategories.map((category) => ({
+    const result = linenCategories.map((category: (typeof linenCategories)[number]) => ({
       ...category,
-      items: category.items.map((item) => ({
+      items: category.items.map((item: (typeof category.items)[number]) => ({
         id: item.id,
         name: item.name,
         code: item.code,
@@ -144,7 +144,7 @@ export async function PUT(
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

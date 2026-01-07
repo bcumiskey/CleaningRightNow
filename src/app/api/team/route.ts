@@ -47,10 +47,10 @@ export async function GET() {
     })
 
     // Calculate owed amounts
-    const membersWithOwed = teamMembers.map((member) => ({
+    const membersWithOwed = teamMembers.map((member: (typeof teamMembers)[number]) => ({
       ...member,
       owedAmount: member.jobAssignments.reduce(
-        (sum, assignment) => sum + (assignment.amountEarned || 0),
+        (sum: number, assignment: { amountEarned: number | null }) => sum + (assignment.amountEarned || 0),
         0
       ),
       passwordHash: undefined, // Don't expose password hash
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }
