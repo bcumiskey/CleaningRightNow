@@ -16,15 +16,22 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
 
     // Find team member by user ID or email
-    const teamMember = await prisma.teamMember.findFirst({
-      where: {
-        OR: [
-          { email: session.user.email },
-          { name: session.user.name },
-        ],
-        isActive: true,
-      },
-    })
+    const orConditions = []
+    if (session.user.email) {
+      orConditions.push({ email: session.user.email })
+    }
+    if (session.user.name) {
+      orConditions.push({ name: session.user.name })
+    }
+
+    const teamMember = orConditions.length > 0
+      ? await prisma.teamMember.findFirst({
+          where: {
+            OR: orConditions,
+            isActive: true,
+          },
+        })
+      : null
 
     // Build where clause
     const whereClause: Record<string, unknown> = {}
