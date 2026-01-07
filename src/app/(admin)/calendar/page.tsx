@@ -2,18 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
 import { cn } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 interface Job {
   id: string
   date: string
   time: string | null
   completed: boolean
+  source: string
   property: { name: string }
 }
 
@@ -21,6 +22,7 @@ export default function CalendarPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
 
   useEffect(() => {
     fetchJobs()
@@ -41,6 +43,29 @@ export default function CalendarPage() {
     }
   }
 
+  const handleSyncCalendars = async () => {
+    setIsSyncing(true)
+    try {
+      const res = await fetch('/api/calendar/sync', { method: 'PUT' })
+      if (res.ok) {
+        const data = await res.json()
+        const totalCreated = data.results.reduce((sum: number, r: { created?: number }) => sum + (r.created || 0), 0)
+        if (totalCreated > 0) {
+          toast.success(`Synced ${totalCreated} new job(s) from calendars`)
+          fetchJobs()
+        } else {
+          toast.success('Calendars are up to date')
+        }
+      } else {
+        toast.error('Failed to sync calendars')
+      }
+    } catch (error) {
+      toast.error('Failed to sync calendars')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd })
@@ -58,6 +83,22 @@ export default function CalendarPage() {
       <AdminHeader title="Calendar" />
 
       <div className="p-6">
+        {/* Header with Sync Button */}
+        <div className="flex justify-between items-center mb-4">
+          <p className="text-sm text-gray-500">
+            Jobs synced from Turno, Google Calendar, or added manually
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncCalendars}
+            isLoading={isSyncing}
+          >
+            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+            Sync Calendars
+          </Button>
+        </div>
+
         <Card>
           <CardContent>
             {/* Month Navigation */}

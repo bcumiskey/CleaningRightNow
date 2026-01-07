@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Printer, Send, CheckCircle, Download, Edit } from 'lucide-react'
+import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -58,6 +58,8 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -89,6 +91,60 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
 
   const handlePrint = () => {
     window.print()
+  }
+
+  const handleDownloadPDF = async () => {
+    if (!invoice) return
+    setIsDownloading(true)
+
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/pdf`)
+      if (!res.ok) throw new Error('Failed to generate PDF')
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${invoice.invoiceNumber}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast.success('PDF downloaded')
+    } catch (error) {
+      toast.error('Failed to download PDF')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  const handleSendEmail = async () => {
+    if (!invoice) return
+
+    if (!invoice.property.ownerEmail) {
+      toast.error('Property owner has no email address')
+      return
+    }
+
+    setIsSending(true)
+
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send`, {
+        method: 'POST',
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || 'Failed to send')
+      }
+
+      setInvoice({ ...invoice, status: 'sent' })
+      toast.success(`Invoice sent to ${invoice.property.ownerEmail}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to send invoice')
+    } finally {
+      setIsSending(false)
+    }
   }
 
   const handleMarkSent = async () => {
@@ -183,7 +239,17 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
             </Button>
 
             <div className="flex gap-2">
-              {invoice.status === 'draft' && (
+              {invoice.status === 'draft' && invoice.property.ownerEmail && (
+                <Button
+                  variant="primary"
+                  onClick={handleSendEmail}
+                  isLoading={isSending}
+                >
+                  <Mail size={16} />
+                  Send Email
+                </Button>
+              )}
+              {invoice.status === 'draft' && !invoice.property.ownerEmail && (
                 <Button
                   variant="outline"
                   onClick={handleMarkSent}
@@ -203,6 +269,14 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
                   Mark as Paid
                 </Button>
               )}
+              <Button
+                variant="outline"
+                onClick={handleDownloadPDF}
+                isLoading={isDownloading}
+              >
+                <Download size={16} />
+                PDF
+              </Button>
               <Button variant="outline" onClick={handlePrint}>
                 <Printer size={16} />
                 Print

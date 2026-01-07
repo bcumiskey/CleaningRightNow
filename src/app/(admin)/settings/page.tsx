@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import ImageUpload from '@/components/ui/ImageUpload'
 import toast from 'react-hot-toast'
 
 interface CompanySettings {
@@ -152,29 +153,32 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Input
-              label="Logo URL"
-              value={settings.logoUrl || ''}
-              onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
-              placeholder="https://example.com/your-logo.png"
-            />
-            <p className="text-sm text-gray-500">
-              Enter a URL to your company logo. The logo will appear on invoices and other documents.
-              Recommended size: 200x80 pixels, PNG or JPG format.
-            </p>
-            {settings.logoUrl && (
-              <div className="mt-4 p-4 border rounded-lg bg-gray-50">
-                <p className="text-xs text-gray-500 mb-2">Preview:</p>
-                <img
-                  src={settings.logoUrl}
-                  alt="Company Logo Preview"
-                  className="h-16 w-auto object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none'
-                  }}
-                />
+            <div className="flex items-start gap-6">
+              <ImageUpload
+                value={settings.logoUrl || undefined}
+                onChange={(url) => setSettings({ ...settings, logoUrl: url })}
+                onRemove={() => setSettings({ ...settings, logoUrl: '' })}
+                folder="logos"
+                label="Upload Logo"
+                previewSize="md"
+              />
+              <div className="flex-1">
+                <p className="text-sm text-gray-600 mb-3">
+                  Upload your company logo. It will appear on invoices, statements, and other documents.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Recommended: PNG or JPG, at least 200x80 pixels. Max 5MB.
+                </p>
+                <div className="mt-4">
+                  <Input
+                    label="Or enter a URL"
+                    value={settings.logoUrl || ''}
+                    onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
+                    placeholder="https://example.com/your-logo.png"
+                  />
+                </div>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
