@@ -1,54 +1,34 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import {
-  MapPin,
-  Clock,
-  Users,
-  CheckCircle,
-  AlertTriangle,
-  Loader2,
-  Sparkles,
-} from 'lucide-react'
-import { formatTime } from '@/lib/utils'
 import { format } from 'date-fns'
+import { Building, ChevronRight, AlertCircle, Calendar } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/Card'
+import EmptyState from '@/components/ui/EmptyState'
+import { cn } from '@/lib/utils'
 
-interface Job {
+interface TodayJob {
   id: string
-  date: string
-  time?: string
+  time: string | null
   completed: boolean
-  property: {
-    id: string
-    name: string
-    address: string
-  }
-  assignments: Array<{
-    teamMember: {
-      id: string
-      name: string
-    }
-  }>
-  _activeNotes?: number
+  property: { id: string; name: string; address: string }
+  _activeNotes: number
 }
 
 export default function WorkerTodayPage() {
-  const { data: session } = useSession()
-  const [jobs, setJobs] = useState<Job[]>([])
+  const [jobs, setJobs] = useState<TodayJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    fetchTodaysJobs()
+    fetchTodayJobs()
   }, [])
 
-  const fetchTodaysJobs = async () => {
+  const fetchTodayJobs = async () => {
     try {
       const response = await fetch('/api/worker/jobs/today')
       if (response.ok) {
-        const data = await response.json()
-        setJobs(data)
+        setJobs(await response.json())
       }
     } catch (error) {
       console.error('Failed to fetch jobs:', error)
@@ -57,107 +37,75 @@ export default function WorkerTodayPage() {
     }
   }
 
-  const completedCount = jobs.filter(j => j.completed).length
-  const pendingCount = jobs.length - completedCount
+  const today = format(new Date(), 'EEEE, MMMM d')
+  const completedCount = jobs.filter((j) => j.completed).length
 
   return (
-    <div className="px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <p className="text-gray-500 text-sm">
-          {format(new Date(), 'EEEE, MMMM d')}
-        </p>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Today&apos;s Jobs
-        </h1>
-      </div>
-
-      {/* Summary */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center gap-2 text-amber-600 mb-1">
-            <Clock className="w-4 h-4" />
-            <span className="text-sm font-medium">Pending</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{pendingCount}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <div className="flex items-center gap-2 text-green-600 mb-1">
-            <CheckCircle className="w-4 h-4" />
-            <span className="text-sm font-medium">Completed</span>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{completedCount}</p>
-        </div>
-      </div>
+    <div className="p-4 space-y-4">
+      {/* Today Summary */}
+      <Card>
+        <CardContent>
+          <div className="text-sm text-gray-500">{today}</div>
+          <div className="text-3xl font-bold mt-1">{jobs.length} Jobs</div>
+          {jobs.length > 0 && (
+            <div className="text-sm text-gray-500 mt-1">
+              {completedCount} completed, {jobs.length - completedCount} remaining
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Jobs List */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-        </div>
-      ) : jobs.length > 0 ? (
+        <div className="text-center py-8 text-gray-500">Loading...</div>
+      ) : jobs.length === 0 ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              icon={Calendar}
+              title="No jobs today"
+              description="Check the schedule for upcoming jobs."
+            />
+          </CardContent>
+        </Card>
+      ) : (
         <div className="space-y-3">
           {jobs.map((job) => (
-            <Link
-              key={job.id}
-              href={`/worker/job/${job.id}`}
-              className={`block bg-white rounded-xl p-4 shadow-sm border transition-all ${
-                job.completed
-                  ? 'border-green-200 bg-green-50/50'
-                  : 'border-gray-100 hover:border-indigo-200 hover:shadow'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">
-                    {job.property.name}
-                  </h3>
-                  <div className="flex items-center gap-1 text-gray-500 text-sm mt-0.5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span className="truncate">{job.property.address}</span>
+            <Link key={job.id} href={`/worker/job/${job.id}`}>
+              <Card className="hover:shadow-md transition-shadow">
+                <CardContent className="flex items-center gap-4">
+                  <div
+                    className={cn(
+                      'w-14 h-14 rounded-xl flex items-center justify-center',
+                      job._activeNotes > 0 ? 'bg-amber-100' : 'bg-emerald-100'
+                    )}
+                  >
+                    <Building
+                      className={job._activeNotes > 0 ? 'text-amber-600' : 'text-emerald-600'}
+                      size={24}
+                    />
                   </div>
-                </div>
-                {job.completed && (
-                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                )}
-              </div>
-
-              <div className="flex items-center gap-4 text-sm">
-                {job.time && (
-                  <div className="flex items-center gap-1 text-gray-600">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{formatTime(job.time)}</span>
+                  <div className="flex-1">
+                    <div className="font-semibold text-lg text-gray-900">{job.property.name}</div>
+                    <div className="text-gray-500">{job.time || 'No time set'}</div>
+                    {job._activeNotes > 0 && (
+                      <div className="flex items-center gap-1 text-xs text-amber-600 mt-1">
+                        <AlertCircle size={12} />
+                        {job._activeNotes} active note{job._activeNotes !== 1 && 's'}
+                      </div>
+                    )}
                   </div>
-                )}
-                {job.assignments.length > 1 && (
-                  <div className="flex items-center gap-1 text-gray-600">
-                    <Users className="w-3.5 h-3.5" />
-                    <span>
-                      {job.assignments
-                        .filter(a => a.teamMember.id !== session?.user?.id)
-                        .map(a => a.teamMember.name.split(' ')[0])
-                        .join(', ') || 'Solo'}
+                  {job.completed ? (
+                    <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                      Done
                     </span>
-                  </div>
-                )}
-              </div>
-
-              {job._activeNotes && job._activeNotes > 0 && (
-                <div className="mt-2 flex items-center gap-1 text-amber-600 text-sm">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  <span>{job._activeNotes} active note{job._activeNotes > 1 ? 's' : ''}</span>
-                </div>
-              )}
+                  ) : (
+                    <ChevronRight className="text-gray-400" size={24} />
+                  )}
+                </CardContent>
+              </Card>
             </Link>
           ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Sparkles className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="font-medium text-gray-900 mb-1">No jobs today</h3>
-          <p className="text-gray-500 text-sm">Enjoy your day off!</p>
         </div>
       )}
     </div>

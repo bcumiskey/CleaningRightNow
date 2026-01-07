@@ -6,8 +6,7 @@ import prisma from '@/lib/prisma'
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-
-    if (!session?.user?.id) {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -16,28 +15,23 @@ export async function GET() {
         id: true,
         name: true,
         address: true,
+        notes: {
+          where: { status: 'active' },
+          select: { id: true },
+        },
       },
       orderBy: { name: 'asc' },
     })
 
-    // Add active notes count for each property
-    const propertiesWithNotes = await Promise.all(
-      properties.map(async (property: typeof properties[number]) => {
-        const activeNotes = await prisma.propertyNote.count({
-          where: {
-            propertyId: property.id,
-            status: 'active',
-          },
-        })
+    // Add active notes count
+    const propertiesWithCount = properties.map((p) => ({
+      id: p.id,
+      name: p.name,
+      address: p.address,
+      _activeNotes: p.notes.length,
+    }))
 
-        return {
-          ...property,
-          _activeNotes: activeNotes,
-        }
-      })
-    )
-
-    return NextResponse.json(propertiesWithNotes)
+    return NextResponse.json(propertiesWithCount)
   } catch (error) {
     console.error('Worker properties GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch properties' }, { status: 500 })

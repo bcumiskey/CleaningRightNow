@@ -6,8 +6,7 @@ import prisma from '@/lib/prisma'
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-
-    if (!session?.user?.id) {
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -15,27 +14,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
-    // Find team member by user ID or email
-    const orConditions = []
-    if (session.user.email) {
-      orConditions.push({ email: session.user.email })
-    }
-    if (session.user.name) {
-      orConditions.push({ name: session.user.name })
-    }
-
-    const teamMember = orConditions.length > 0
-      ? await prisma.teamMember.findFirst({
-          where: {
-            OR: orConditions,
-            isActive: true,
-          },
-        })
-      : null
-
-    // Build where clause
     const whereClause: Record<string, unknown> = {}
-
     if (startDate) {
       whereClause.date = { ...whereClause.date as object, gte: new Date(startDate) }
     }
@@ -43,43 +22,23 @@ export async function GET(request: NextRequest) {
       whereClause.date = { ...whereClause.date as object, lte: new Date(endDate) }
     }
 
-    // Filter by team member assignments
-    if (teamMember) {
-      whereClause.assignments = { some: { teamMemberId: teamMember.id } }
-    }
-
     const jobs = await prisma.job.findMany({
       where: whereClause,
       include: {
         property: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
-          },
-        },
-        assignments: {
-          include: {
-            teamMember: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
+          select: { id: true, name: true, address: true },
         },
       },
       orderBy: [{ date: 'asc' }, { time: 'asc' }],
     })
 
     // Remove financial data
-    const sanitizedJobs = jobs.map((job: typeof jobs[number]) => ({
+    const sanitizedJobs = jobs.map((job) => ({
       id: job.id,
       date: job.date,
       time: job.time,
       completed: job.completed,
       property: job.property,
-      assignments: job.assignments,
     }))
 
     return NextResponse.json(sanitizedJobs)

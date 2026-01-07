@@ -2,16 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import {
-  Home,
-  ChevronRight,
-  Loader2,
-  Search,
-  AlertTriangle,
-} from 'lucide-react'
+import { Building, ChevronRight, AlertCircle, Search } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/Card'
+import EmptyState from '@/components/ui/EmptyState'
 import Input from '@/components/ui/Input'
+import { cn } from '@/lib/utils'
 
-interface Property {
+interface PropertyRef {
   id: string
   name: string
   address: string
@@ -19,9 +16,9 @@ interface Property {
 }
 
 export default function WorkerReferencePage() {
-  const [properties, setProperties] = useState<Property[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [properties, setProperties] = useState<PropertyRef[]>([])
   const [search, setSearch] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     fetchProperties()
@@ -31,8 +28,7 @@ export default function WorkerReferencePage() {
     try {
       const response = await fetch('/api/worker/properties')
       if (response.ok) {
-        const data = await response.json()
-        setProperties(data)
+        setProperties(await response.json())
       }
     } catch (error) {
       console.error('Failed to fetch properties:', error)
@@ -41,80 +37,69 @@ export default function WorkerReferencePage() {
     }
   }
 
-  const filteredProperties = properties.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.address.toLowerCase().includes(search.toLowerCase())
+  const filteredProperties = properties.filter(
+    (p) =>
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.address.toLowerCase().includes(search.toLowerCase())
   )
 
   return (
-    <div className="px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Property Reference</h1>
-        <p className="text-gray-500 text-sm">Stocking, photos, and instructions</p>
-      </div>
-
-      {/* Search */}
-      <div className="relative mb-4">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <Input
+    <div className="p-4 space-y-4">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+        <input
           type="text"
-          placeholder="Search properties..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-10"
+          placeholder="Search properties..."
+          className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
       </div>
 
-      {/* Properties List */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-        </div>
-      ) : filteredProperties.length > 0 ? (
-        <div className="space-y-2">
+        <div className="text-center py-8 text-gray-500">Loading...</div>
+      ) : filteredProperties.length === 0 ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              icon={Building}
+              title="No properties found"
+              description={search ? 'Try a different search term.' : 'No properties available.'}
+            />
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
           {filteredProperties.map((property) => (
-            <Link
-              key={property.id}
-              href={`/worker/reference/${property.id}`}
-              className="flex items-center justify-between bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-indigo-200 transition-colors"
-            >
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Home className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-medium text-gray-900 truncate">
-                    {property.name}
-                  </h3>
-                  <p className="text-sm text-gray-500 truncate">
-                    {property.address}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {property._activeNotes > 0 && (
-                  <div className="flex items-center gap-1 text-amber-600">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span className="text-xs font-medium">{property._activeNotes}</span>
+            <Link key={property.id} href={`/worker/reference/${property.id}`}>
+              <Card className="hover:shadow-md transition-shadow">
+                <CardContent className="flex items-center gap-4">
+                  <div
+                    className={cn(
+                      'w-14 h-14 rounded-xl flex items-center justify-center',
+                      property._activeNotes > 0 ? 'bg-red-100' : 'bg-emerald-100'
+                    )}
+                  >
+                    <Building
+                      className={property._activeNotes > 0 ? 'text-red-600' : 'text-emerald-600'}
+                      size={24}
+                    />
                   </div>
-                )}
-                <ChevronRight className="w-5 h-5 text-gray-400" />
-              </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-lg text-gray-900">{property.name}</div>
+                    <div className="text-sm text-gray-500">{property.address}</div>
+                    {property._activeNotes > 0 && (
+                      <div className="flex items-center gap-1 text-xs text-amber-600 mt-1">
+                        <AlertCircle size={12} />
+                        {property._activeNotes} active note{property._activeNotes !== 1 && 's'}
+                      </div>
+                    )}
+                  </div>
+                  <ChevronRight className="text-gray-400" size={24} />
+                </CardContent>
+              </Card>
             </Link>
           ))}
-        </div>
-      ) : (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Home className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="font-medium text-gray-900 mb-1">
-            {search ? 'No properties found' : 'No properties yet'}
-          </h3>
-          <p className="text-gray-500 text-sm">
-            {search ? 'Try a different search' : 'Properties will appear here'}
-          </p>
         </div>
       )}
     </div>

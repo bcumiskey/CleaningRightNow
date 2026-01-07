@@ -2,155 +2,101 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import {
-  Clock,
-  Users,
-  ChevronRight,
-  Loader2,
-  CalendarDays,
-} from 'lucide-react'
-import { formatTime } from '@/lib/utils'
-import { format, isToday, isTomorrow, addDays, startOfDay } from 'date-fns'
+import { format, addDays } from 'date-fns'
+import { Building, ChevronRight, Calendar } from 'lucide-react'
+import { Card, CardContent, CardHeader } from '@/components/ui/Card'
+import EmptyState from '@/components/ui/EmptyState'
+import { cn } from '@/lib/utils'
 
-interface Job {
+interface ScheduledJob {
   id: string
   date: string
-  time?: string
+  time: string | null
+  property: { id: string; name: string; address: string }
   completed: boolean
-  property: {
-    id: string
-    name: string
-    address: string
-  }
-  assignments: Array<{
-    teamMember: {
-      id: string
-      name: string
-    }
-  }>
-}
-
-interface GroupedJobs {
-  date: string
-  label: string
-  jobs: Job[]
 }
 
 export default function WorkerSchedulePage() {
-  const [jobs, setJobs] = useState<Job[]>([])
+  const [jobs, setJobs] = useState<ScheduledJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    fetchUpcomingJobs()
+    fetchSchedule()
   }, [])
 
-  const fetchUpcomingJobs = async () => {
+  const fetchSchedule = async () => {
     try {
-      const startDate = startOfDay(new Date())
-      const endDate = addDays(startDate, 14) // Next 2 weeks
-
-      const response = await fetch(
-        `/api/worker/jobs?startDate=${startDate.toISOString()}&endDate=${endDate.toISOString()}`
-      )
+      const startDate = format(new Date(), 'yyyy-MM-dd')
+      const endDate = format(addDays(new Date(), 14), 'yyyy-MM-dd')
+      const response = await fetch(`/api/worker/jobs?startDate=${startDate}&endDate=${endDate}`)
       if (response.ok) {
-        const data = await response.json()
-        setJobs(data)
+        setJobs(await response.json())
       }
     } catch (error) {
-      console.error('Failed to fetch jobs:', error)
+      console.error('Failed to fetch schedule:', error)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const getDateLabel = (dateStr: string): string => {
-    const date = new Date(dateStr)
-    if (isToday(date)) return 'Today'
-    if (isTomorrow(date)) return 'Tomorrow'
-    return format(date, 'EEEE, MMMM d')
-  }
-
-  const groupedJobs: GroupedJobs[] = jobs.reduce((acc, job) => {
+  // Group jobs by date
+  const jobsByDate = jobs.reduce((acc, job) => {
     const dateKey = format(new Date(job.date), 'yyyy-MM-dd')
-    const existing = acc.find(g => g.date === dateKey)
-
-    if (existing) {
-      existing.jobs.push(job)
-    } else {
-      acc.push({
-        date: dateKey,
-        label: getDateLabel(job.date),
-        jobs: [job],
-      })
-    }
-
+    if (!acc[dateKey]) acc[dateKey] = []
+    acc[dateKey].push(job)
     return acc
-  }, [] as GroupedJobs[])
+  }, {} as Record<string, ScheduledJob[]>)
 
-  // Sort by date
-  groupedJobs.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  const sortedDates = Object.keys(jobsByDate).sort()
 
   return (
-    <div className="px-4 py-6">
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
-        <p className="text-gray-500 text-sm">Next 2 weeks</p>
-      </div>
+    <div className="p-4 space-y-4">
+      <h2 className="text-xl font-semibold text-gray-900">Upcoming 2 Weeks</h2>
 
-      {/* Jobs List */}
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-        </div>
-      ) : groupedJobs.length > 0 ? (
-        <div className="space-y-6">
-          {groupedJobs.map((group) => (
-            <div key={group.date}>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                {group.label}
-              </h2>
-              <div className="space-y-2">
-                {group.jobs.map((job) => (
-                  <Link
-                    key={job.id}
-                    href={`/worker/job/${job.id}`}
-                    className="flex items-center justify-between bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-indigo-200 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-900 truncate">
-                        {job.property.name}
-                      </h3>
-                      <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
-                        {job.time && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            <span>{formatTime(job.time)}</span>
-                          </div>
-                        )}
-                        {job.assignments.length > 1 && (
-                          <div className="flex items-center gap-1">
-                            <Users className="w-3.5 h-3.5" />
-                            <span>{job.assignments.length}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
-                  </Link>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className="text-center py-8 text-gray-500">Loading...</div>
+      ) : jobs.length === 0 ? (
+        <Card>
+          <CardContent>
+            <EmptyState
+              icon={Calendar}
+              title="No upcoming jobs"
+              description="No jobs scheduled for the next two weeks."
+            />
+          </CardContent>
+        </Card>
       ) : (
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CalendarDays className="w-8 h-8 text-gray-400" />
-          </div>
-          <h3 className="font-medium text-gray-900 mb-1">No upcoming jobs</h3>
-          <p className="text-gray-500 text-sm">Check back later for new assignments</p>
-        </div>
+        sortedDates.map((dateKey) => (
+          <Card key={dateKey}>
+            <CardHeader className="pb-2">
+              <div className="font-semibold text-gray-900">
+                {format(new Date(dateKey), 'EEEE, MMMM d')}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-2">
+              {jobsByDate[dateKey].map((job) => (
+                <Link key={job.id} href={`/worker/job/${job.id}`}>
+                  <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <Building className="text-emerald-600" size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{job.property.name}</div>
+                      <div className="text-sm text-gray-500">{job.time || 'No time set'}</div>
+                    </div>
+                    {job.completed ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
+                        Done
+                      </span>
+                    ) : (
+                      <ChevronRight className="text-gray-400" size={20} />
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        ))
       )}
     </div>
   )

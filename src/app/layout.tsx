@@ -1,26 +1,22 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import Providers from "@/components/Providers";
-
-const inter = Inter({ subsets: ["latin"] });
+import type { Metadata } from 'next'
+import './globals.css'
+import Providers from '@/components/Providers'
 
 export const metadata: Metadata = {
-  title: "Cleaning Right Now - Business Management",
-  description: "Professional cleaning business management application for scheduling, invoicing, and team management.",
-  keywords: ["cleaning business", "property management", "scheduling", "invoicing"],
-};
+  title: 'Cleaning Right Now',
+  description: 'Business Management System',
+}
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <body className={`${inter.className} antialiased`}>
+      <body className="antialiased">
         <Providers>{children}</Providers>
       </body>
     </html>
-  );
+  )
 }

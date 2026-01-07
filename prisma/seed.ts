@@ -1,180 +1,121 @@
-// prisma/seed.ts
-// Seed ONLY linen catalog data - NO mock users, properties, jobs, etc.
-// Run with: npx prisma db seed
+import { PrismaClient } from '@prisma/client'
 
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 async function main() {
-  console.log('Starting database seed...');
-  console.log('Seeding linen catalog only - no mock data');
+  console.log('Starting database seed...')
+  console.log('Seeding linen catalog only - no mock data')
 
-  // ============================================================
-  // CLEANUP: Delete ALL old mock data first
-  // ============================================================
-  console.log('Cleaning up old data...');
+  // Clean up existing data (for fresh deploys)
+  console.log('Cleaning up old data...')
+  await prisma.invoiceLineItem.deleteMany({})
+  await prisma.invoice.deleteMany({})
+  await prisma.jobAssignment.deleteMany({})
+  await prisma.job.deleteMany({})
+  await prisma.propertyNote.deleteMany({})
+  await prisma.propertyInstruction.deleteMany({})
+  await prisma.propertyPhoto.deleteMany({})
+  await prisma.propertyLinenInventory.deleteMany({})
+  await prisma.propertyLinenRequirement.deleteMany({})
+  await prisma.vendorProduct.deleteMany({})
+  await prisma.property.deleteMany({})
+  await prisma.teamMember.deleteMany({})
+  await prisma.user.deleteMany({})
+  console.log('Old data cleaned up')
 
-  // Delete in order to respect foreign key constraints
-  // Use correct model names from schema
-  await prisma.jobAssignment.deleteMany({});
-  await prisma.invoiceLineItem.deleteMany({});
-  await prisma.invoice.deleteMany({});
-  await prisma.job.deleteMany({});
-  await prisma.propertyNote.deleteMany({});
-  await prisma.propertyInstruction.deleteMany({});
-  await prisma.propertyPhoto.deleteMany({});
-  await prisma.propertyLinenInventory.deleteMany({});
-  await prisma.propertyLinenRequirement.deleteMany({});
-  await prisma.property.deleteMany({});
-  await prisma.teamMember.deleteMany({});
-  // Don't delete User/Session - let users re-register
-  // Don't delete linen catalog items - we'll upsert them
+  // Categories
+  const sheets = await prisma.linenCategory.upsert({
+    where: { name: 'Sheets' },
+    update: {},
+    create: { name: 'Sheets', sortOrder: 1 },
+  })
+  const bedding = await prisma.linenCategory.upsert({
+    where: { name: 'Bedding' },
+    update: {},
+    create: { name: 'Bedding', sortOrder: 2 },
+  })
+  const pillows = await prisma.linenCategory.upsert({
+    where: { name: 'Pillows' },
+    update: {},
+    create: { name: 'Pillows', sortOrder: 3 },
+  })
+  const towels = await prisma.linenCategory.upsert({
+    where: { name: 'Towels' },
+    update: {},
+    create: { name: 'Towels', sortOrder: 4 },
+  })
+  console.log('Created linen categories')
 
-  console.log('Old data cleaned up');
+  // Linen Items from owner's spreadsheet
+  const items = [
+    // Sheets
+    { name: 'King Top', code: 'K-Top', unitCost: 13.33, categoryId: sheets.id },
+    { name: 'King Bottom', code: 'K-Bottom', unitCost: 13.33, categoryId: sheets.id },
+    { name: 'Queen Top', code: 'Q-Top', unitCost: 11.67, categoryId: sheets.id },
+    { name: 'Queen Bottom', code: 'Q-Bottom', unitCost: 11.67, categoryId: sheets.id },
+    { name: 'Full Top', code: 'F-Top', unitCost: 10.00, categoryId: sheets.id },
+    { name: 'Full Bottom', code: 'F-Bottom', unitCost: 10.00, categoryId: sheets.id },
+    { name: 'Twin Top', code: 'T-Top', unitCost: 3.33, categoryId: sheets.id },
+    { name: 'Twin Bottom', code: 'T-Bottom', unitCost: 3.33, categoryId: sheets.id },
+    // Bedding
+    { name: 'King Duvet Cover', code: 'K-Duvet', unitCost: 40.00, categoryId: bedding.id },
+    { name: 'Full/Queen Duvet Cover', code: 'FQ-Duvet', unitCost: 35.00, categoryId: bedding.id },
+    { name: 'Twin Duvet Cover', code: 'T-Duvet', unitCost: 30.00, categoryId: bedding.id },
+    { name: 'King Insert (Comforter)', code: 'K-Insert', unitCost: 99.99, categoryId: bedding.id },
+    { name: 'Full/Queen Insert', code: 'FQ-Insert', unitCost: 89.99, categoryId: bedding.id },
+    { name: 'Twin Insert', code: 'T-Insert', unitCost: 69.99, categoryId: bedding.id },
+    { name: 'King Mattress Pad', code: 'K-MattPad', unitCost: 45.00, categoryId: bedding.id },
+    { name: 'Queen Mattress Pad', code: 'Q-MattPad', unitCost: 40.00, categoryId: bedding.id },
+    { name: 'Full Mattress Pad', code: 'F-MattPad', unitCost: 35.00, categoryId: bedding.id },
+    { name: 'Twin Mattress Pad', code: 'T-MattPad', unitCost: 30.00, categoryId: bedding.id },
+    { name: 'King Blanket', code: 'K-Blanket', unitCost: 50.00, categoryId: bedding.id },
+    { name: 'Queen Blanket', code: 'Q-Blanket', unitCost: 45.00, categoryId: bedding.id },
+    // Pillows
+    { name: 'Standard Pillow Case', code: 'Std-PCase', unitCost: 6.67, categoryId: pillows.id },
+    { name: 'King Pillow Case', code: 'K-PCase', unitCost: 8.33, categoryId: pillows.id },
+    { name: 'Standard Pillow Protector', code: 'Std-PProt', unitCost: 5.00, categoryId: pillows.id },
+    { name: 'King Pillow Protector', code: 'K-PProt', unitCost: 6.00, categoryId: pillows.id },
+    { name: 'Standard Pillow', code: 'Std-Pillow', unitCost: 19.99, categoryId: pillows.id },
+    { name: 'King Pillow', code: 'K-Pillow', unitCost: 24.99, categoryId: pillows.id },
+    // Towels
+    { name: 'Bath Towel (Big)', code: 'Bath-Big', unitCost: 6.90, categoryId: towels.id },
+    { name: 'Hand Towel', code: 'Hand', unitCost: 2.10, categoryId: towels.id },
+    { name: 'White Wash Cloth', code: 'White-Wash', unitCost: 0.85, categoryId: towels.id },
+    { name: 'Black Wash Cloth', code: 'Black-Wash', unitCost: 0.85, categoryId: towels.id },
+    { name: 'Bath Mat', code: 'Bath-Mat', unitCost: 4.50, categoryId: towels.id },
+    { name: 'Beach Towel', code: 'Beach', unitCost: 8.00, categoryId: towels.id },
+    { name: 'Kitchen Towel', code: 'Kitchen', unitCost: 1.40, categoryId: towels.id },
+    { name: 'Makeup Towel (Black)', code: 'Makeup', unitCost: 3.00, categoryId: towels.id },
+  ]
 
-  // ============================================================
-  // LINEN CATEGORIES
-  // ============================================================
-  const categories = await Promise.all([
-    prisma.linenCategory.upsert({
-      where: { name: 'Sheets' },
-      update: {},
-      create: { name: 'Sheets', sortOrder: 1 },
-    }),
-    prisma.linenCategory.upsert({
-      where: { name: 'Bedding' },
-      update: {},
-      create: { name: 'Bedding', sortOrder: 2 },
-    }),
-    prisma.linenCategory.upsert({
-      where: { name: 'Pillows' },
-      update: {},
-      create: { name: 'Pillows', sortOrder: 3 },
-    }),
-    prisma.linenCategory.upsert({
-      where: { name: 'Towels' },
-      update: {},
-      create: { name: 'Towels', sortOrder: 4 },
-    }),
-  ]);
-
-  const [sheets, bedding, pillows, towels] = categories;
-  console.log('Created linen categories');
-
-  // ============================================================
-  // LINEN ITEMS (from owner's spreadsheet)
-  // ============================================================
-
-  // Sheets
-  const sheetItems = [
-    { name: 'King Top', code: 'K-Top', unitCost: 13.33 },
-    { name: 'King Bottom', code: 'K-Bottom', unitCost: 13.33 },
-    { name: 'Queen Top', code: 'Q-Top', unitCost: 11.67 },
-    { name: 'Queen Bottom', code: 'Q-Bottom', unitCost: 11.67 },
-    { name: 'Full Top', code: 'F-Top', unitCost: 10.00 },
-    { name: 'Full Bottom', code: 'F-Bottom', unitCost: 10.00 },
-    { name: 'Twin Top', code: 'T-Top', unitCost: 3.33 },
-    { name: 'Twin Bottom', code: 'T-Bottom', unitCost: 3.33 },
-  ];
-
-  // Bedding
-  const beddingItems = [
-    { name: 'King Duvet Cover', code: 'K-Duvet', unitCost: 40.00 },
-    { name: 'Full/Queen Duvet Cover', code: 'FQ-Duvet', unitCost: 35.00 },
-    { name: 'Twin Duvet Cover', code: 'T-Duvet', unitCost: 30.00 },
-    { name: 'King Insert (Comforter)', code: 'K-Insert', unitCost: 99.99 },
-    { name: 'Full/Queen Insert (Comforter)', code: 'FQ-Insert', unitCost: 89.99 },
-    { name: 'Twin Insert (Comforter)', code: 'T-Insert', unitCost: 69.99 },
-    { name: 'King Mattress Pad', code: 'K-MattPad', unitCost: 45.00 },
-    { name: 'Queen Mattress Pad', code: 'Q-MattPad', unitCost: 40.00 },
-    { name: 'Full Mattress Pad', code: 'F-MattPad', unitCost: 35.00 },
-    { name: 'Twin Mattress Pad', code: 'T-MattPad', unitCost: 30.00 },
-    { name: 'King Blanket', code: 'K-Blanket', unitCost: 50.00 },
-    { name: 'Queen Blanket', code: 'Q-Blanket', unitCost: 45.00 },
-  ];
-
-  // Pillows
-  const pillowItems = [
-    { name: 'Standard Pillow Case', code: 'Std-PCase', unitCost: 6.67 },
-    { name: 'King Pillow Case', code: 'K-PCase', unitCost: 8.33 },
-    { name: 'Standard Pillow Protector', code: 'Std-PProt', unitCost: 5.00 },
-    { name: 'King Pillow Protector', code: 'K-PProt', unitCost: 6.00 },
-    { name: 'Standard Pillow (Downluxe)', code: 'Std-Pillow', unitCost: 19.99 },
-    { name: 'King Pillow (Downluxe)', code: 'K-Pillow', unitCost: 24.99 },
-  ];
-
-  // Towels
-  const towelItems = [
-    { name: 'Bath Towel (Big)', code: 'Bath-Big', unitCost: 6.90 },
-    { name: 'Hand Towel', code: 'Hand', unitCost: 2.10 },
-    { name: 'White Wash Cloth', code: 'White-Wash', unitCost: 0.85 },
-    { name: 'Black Wash Cloth', code: 'Black-Wash', unitCost: 0.85 },
-    { name: 'Bath Mat/Rug', code: 'Bath-Mat', unitCost: 4.50 },
-    { name: 'Beach Towel', code: 'Beach', unitCost: 8.00 },
-    { name: 'Kitchen Towel', code: 'Kitchen', unitCost: 1.40 },
-    { name: 'Makeup Towel (Black)', code: 'Makeup', unitCost: 3.00 },
-  ];
-
-  // Insert all linen items
-  for (const item of sheetItems) {
+  for (const item of items) {
     await prisma.linenItem.upsert({
       where: { code: item.code },
-      update: { unitCost: item.unitCost },
-      create: { ...item, categoryId: sheets.id },
-    });
+      update: { name: item.name, unitCost: item.unitCost },
+      create: item,
+    })
   }
+  console.log('Created linen items')
 
-  for (const item of beddingItems) {
-    await prisma.linenItem.upsert({
-      where: { code: item.code },
-      update: { unitCost: item.unitCost },
-      create: { ...item, categoryId: bedding.id },
-    });
-  }
-
-  for (const item of pillowItems) {
-    await prisma.linenItem.upsert({
-      where: { code: item.code },
-      update: { unitCost: item.unitCost },
-      create: { ...item, categoryId: pillows.id },
-    });
-  }
-
-  for (const item of towelItems) {
-    await prisma.linenItem.upsert({
-      where: { code: item.code },
-      update: { unitCost: item.unitCost },
-      create: { ...item, categoryId: towels.id },
-    });
-  }
-
-  console.log('Created linen items');
-
-  // ============================================================
-  // VENDORS
-  // ============================================================
+  // Vendors
   const vendors = [
-    { name: 'Palmetto', website: null, notes: 'Imperial Line towels' },
-    { name: 'Costco', website: 'https://costco.com', notes: 'Kirkland sheets, Hotel Grand bedding' },
-    { name: 'Amazon', website: 'https://amazon.com', notes: 'Arkwright makeup towels, Downluxe pillows' },
-    { name: 'Target', website: 'https://target.com', notes: 'Room Essentials microfiber sheets' },
-    { name: 'Oxford', website: null, notes: 'Economy kitchen towels' },
-  ];
+    { name: 'Palmetto', notes: 'Imperial Line - bath/hand towels' },
+    { name: 'Costco', website: 'https://costco.com', notes: 'Kirkland sheets' },
+    { name: 'Amazon', website: 'https://amazon.com', notes: 'Downluxe pillows, Arkwright makeup towels' },
+    { name: 'Target', website: 'https://target.com', notes: 'Room Essentials twin sheets' },
+    { name: 'Oxford', notes: 'Economy kitchen towels' },
+  ]
 
-  for (const vendor of vendors) {
+  for (const v of vendors) {
     await prisma.vendor.upsert({
-      where: { name: vendor.name },
+      where: { name: v.name },
       update: {},
-      create: vendor,
-    });
+      create: v,
+    })
   }
+  console.log('Created vendors')
 
-  console.log('Created vendors');
-
-  // ============================================================
-  // CUSTOM BILLING ITEMS (presets for invoicing)
-  // ============================================================
+  // Billing presets
   const billingItems = [
     { name: 'Turnover Cleaning', category: 'service' },
     { name: 'Deep Clean', category: 'service' },
@@ -184,34 +125,28 @@ async function main() {
     { name: 'Linen Replacement', category: 'supplies' },
     { name: 'Mileage', category: 'expense' },
     { name: 'Miscellaneous', category: 'other' },
-  ];
+  ]
 
-  for (const item of billingItems) {
+  for (const b of billingItems) {
     await prisma.customBillingItem.upsert({
-      where: { id: item.name.toLowerCase().replace(/\s+/g, '-') },
+      where: { name: b.name },
       update: {},
-      create: { id: item.name.toLowerCase().replace(/\s+/g, '-'), ...item },
-    });
+      create: b,
+    })
   }
+  console.log('Created custom billing items')
 
-  console.log('Created custom billing items');
-
-  console.log('');
-  console.log('Seed completed successfully!');
-  console.log('- Linen categories: 4');
-  console.log('- Linen items: 34');
-  console.log('- Vendors: 5');
-  console.log('- Billing presets: 8');
-  console.log('');
-  console.log('NOTE: No users, properties, jobs, or team members were created.');
-  console.log('Use /register to create your admin account.');
+  console.log('')
+  console.log('Seed completed successfully!')
+  console.log('- Linen categories: 4')
+  console.log('- Linen items:', items.length)
+  console.log('- Vendors:', vendors.length)
+  console.log('- Billing presets:', billingItems.length)
+  console.log('')
+  console.log('NOTE: No users, properties, jobs, or team members were created.')
+  console.log('Use /register to create your admin account.')
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .catch(console.error)
+  .finally(() => prisma.$disconnect())

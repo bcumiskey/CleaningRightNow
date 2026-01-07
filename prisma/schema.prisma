@@ -1,5 +1,3 @@
-// Prisma schema for Cleaning Right Now Business Management Application
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,83 +8,35 @@ datasource db {
 }
 
 // ============================================================
-// AUTHENTICATION
-// ============================================================
-
-model User {
-  id              String    @id @default(cuid())
-  email           String    @unique
-  password        String
-  name            String?
-  businessName    String?
-  businessPhone   String?
-  businessEmail   String?
-  businessAddress String?
-  expensePercentage Float   @default(12.0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  sessions        Session[]
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-// ============================================================
-// TEAM
-// ============================================================
-
-model TeamMember {
-  id        String   @id @default(cuid())
-  name      String
-  email     String?  @unique
-  phone     String?
-  role      String   @default("worker") // "admin" or "worker"
-  isActive  Boolean  @default(true)
-
-  // Auth (for worker login)
-  passwordHash String?
-
-  // Relations
-  jobAssignments JobAssignment[]
-  notesAdded     PropertyNote[]  @relation("AddedBy")
-  photosAdded    PropertyPhoto[] @relation("PhotoAddedBy")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-// ============================================================
 // PROPERTIES
 // ============================================================
 
 model Property {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  address       String
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  address             String
 
-  // Owner Info
-  ownerName     String
-  ownerEmail    String?
-  ownerPhone    String?
+  // Owner
+  ownerName           String
+  ownerEmail          String?
+  ownerPhone          String?
 
   // Rates & Billing
-  baseRate      Float
-  billingType   String   @default("per_job") // "per_job" or "monthly"
-  monthlyBillingDay Int?  // 1, 15, or last day (null if per_job)
-  autoSendInvoice Boolean @default(false)
+  baseRate            Float
+  billingType         String   @default("per_job") // "per_job" | "monthly"
+  monthlyBillingDay   Int?     // 1, 15, or 31
+  autoSendInvoice     Boolean  @default(false)
 
   // Calendar Integration
-  calendarSource String?  // "turno", "google", "manual"
-  icalUrl        String?  // For Turno iCal import
+  calendarSource      String?  // "turno" | "google" | "manual"
+  icalUrl             String?
 
-  // Access
-  accessCode     String?
-  accessNotes    String?
+  // Access Info (visible to workers)
+  accessCode          String?
+  accessNotes         String?
+
+  // Bed Configuration (for linen reference)
+  bedConfig           String?  // e.g., "3 King, 2 Queen, 1 Twin"
 
   // Relations
   jobs                Job[]
@@ -95,59 +45,73 @@ model Property {
   linenInventory      PropertyLinenInventory[]
   notes               PropertyNote[]
   photos              PropertyPhoto[]
-  standingInstructions PropertyInstruction[]
+  instructions        PropertyInstruction[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
+// Property Notes - Timeline of issues/reminders/requests
 model PropertyNote {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  // Note content
-  type        String   // "issue", "reminder", "owner_request", "info"
+  type        String    // "issue" | "reminder" | "owner_request" | "info"
   content     String
-
-  // Status
-  status      String   @default("active") // "active", "resolved"
+  status      String    @default("active") // "active" | "resolved"
   resolvedAt  DateTime?
 
-  // Tracking
   addedById   String
-  addedBy     TeamMember @relation("AddedBy", fields: [addedById], references: [id])
+  addedBy     TeamMember @relation(fields: [addedById], references: [id])
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
+// Standing Instructions - Permanent property info
 model PropertyInstruction {
   id          String   @id @default(cuid())
   propertyId  String
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
   instruction String
   sortOrder   Int      @default(0)
-
   createdAt   DateTime @default(now())
 }
 
+// Reference Photos - How things should look
 model PropertyPhoto {
   id          String   @id @default(cuid())
   propertyId  String
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-
   room        String   // "Master Bedroom", "Kitchen", etc.
   caption     String?
-  url         String   // Storage URL
-
+  url         String
   addedById   String
-  addedBy     TeamMember @relation("PhotoAddedBy", fields: [addedById], references: [id])
-
+  addedBy     TeamMember @relation(fields: [addedById], references: [id])
   sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// TEAM MEMBERS
+// ============================================================
+
+model TeamMember {
+  id          String    @id @default(cuid())
+  name        String
+  email       String?   @unique
+  phone       String?
+  role        String    @default("worker") // "admin" | "worker"
+  isActive    Boolean   @default(true)
+
+  // Relations
+  jobAssignments JobAssignment[]
+  notesAdded     PropertyNote[]
+  photosAdded    PropertyPhoto[]
 
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ============================================================
@@ -155,46 +119,45 @@ model PropertyPhoto {
 // ============================================================
 
 model Job {
-  id            String   @id @default(cuid())
-  date          DateTime
-  time          String?  // "9:00 AM"
+  id              String    @id @default(cuid())
+  date            DateTime
+  time            String?   // "9:00 AM"
 
-  propertyId    String
-  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId      String
+  property        Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  rate          Float
-  expensePercent Float   @default(12) // Business expense percentage
+  rate            Float
+  expensePercent  Float     @default(12)
 
-  // Status
-  completed     Boolean  @default(false)
-  completedAt   DateTime?
-  clientPaid    Boolean  @default(false)
-  clientPaidAt  DateTime?
-  teamPaid      Boolean  @default(false)
-  teamPaidAt    DateTime?
+  // Status Tracking
+  completed       Boolean   @default(false)
+  completedAt     DateTime?
+  clientPaid      Boolean   @default(false)
+  clientPaidAt    DateTime?
+  teamPaid        Boolean   @default(false)
+  teamPaidAt      DateTime?
 
-  // Source tracking
-  source        String   @default("manual") // "manual", "turno", "google"
-  externalId    String?  // ID from external calendar
+  // Calendar Source
+  source          String    @default("manual") // "manual" | "turno" | "google"
+  externalId      String?
 
   // Relations
-  assignments   JobAssignment[]
-  invoiceItems  InvoiceLineItem[]
+  assignments     JobAssignment[]
+  invoiceItems    InvoiceLineItem[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model JobAssignment {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   jobId         String
   teamMemberId  String
+  amountEarned  Float?      // Calculated when job completed
+  paidAt        DateTime?   // When this worker was paid
 
-  // Calculated when job is marked complete
-  amountEarned  Float?
-
-  job           Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  teamMember    TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
+  job           Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  teamMember    TeamMember  @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, teamMemberId])
 }
@@ -204,69 +167,60 @@ model JobAssignment {
 // ============================================================
 
 model Invoice {
-  id            String   @id @default(cuid())
-  invoiceNumber String   @unique // "INV-2026-001"
+  id              String    @id @default(cuid())
+  invoiceNumber   String    @unique // "INV-2026-001"
 
-  propertyId    String
-  property      Property @relation(fields: [propertyId], references: [id])
+  propertyId      String
+  property        Property  @relation(fields: [propertyId], references: [id])
 
-  // Billing details
-  type          String   // "per_job" or "monthly"
-  billingPeriod String?  // "January 2026" for monthly
+  type            String    // "per_job" | "monthly"
+  billingPeriod   String?   // "January 2026" for monthly
 
-  invoiceDate   DateTime
-  dueDate       DateTime?
-  paymentTerms  String   @default("Due upon receipt")
+  invoiceDate     DateTime
+  paymentTerms    String    @default("Due upon receipt")
 
-  // Totals
-  subtotal      Float
-  discount      Float    @default(0)
-  total         Float
+  subtotal        Float
+  discount        Float     @default(0)
+  total           Float
 
-  // Status
-  status        String   @default("draft") // "draft", "sent", "paid", "overdue"
-  sentAt        DateTime?
-  paidAt        DateTime?
+  status          String    @default("draft") // "draft" | "sent" | "paid"
+  sentAt          DateTime?
+  paidAt          DateTime?
 
-  // Custom content
-  notes         String?  // Client-visible notes
+  notes           String?   // Client-visible notes
 
-  // Relations
-  lineItems     InvoiceLineItem[]
+  lineItems       InvoiceLineItem[]
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model InvoiceLineItem {
-  id            String   @id @default(cuid())
-  invoiceId     String
-  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
-  // Item details
-  date          DateTime?
-  description   String
-  amount        Float
+  date        DateTime?
+  description String
+  amount      Float
 
-  // Link to job (if applicable)
-  jobId         String?
-  job           Job?     @relation(fields: [jobId], references: [id])
+  // Link to job (for sync)
+  jobId       String?
+  job         Job?      @relation(fields: [jobId], references: [id])
 
-  // Type for categorization
-  itemType      String   @default("service") // "service", "supplies", "expense", "misc", "custom"
+  itemType    String    @default("service") // "service" | "supplies" | "expense" | "misc" | "custom"
+  sortOrder   Int       @default(0)
 
-  sortOrder     Int      @default(0)
-
-  createdAt     DateTime @default(now())
+  createdAt   DateTime  @default(now())
 }
 
+// Saved custom billing items
 model CustomBillingItem {
-  id          String   @id @default(cuid())
-  name        String
-  category    String   // "service", "supplies", "expense", "other"
+  id            String   @id @default(cuid())
+  name          String   @unique
+  category      String   // "service" | "supplies" | "expense" | "other"
   defaultAmount Float?
-
-  createdAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
 }
 
 // ============================================================
@@ -275,21 +229,20 @@ model CustomBillingItem {
 
 model LinenCategory {
   id        String      @id @default(cuid())
-  name      String      @unique // "Sheets", "Bedding", "Pillows", "Towels"
+  name      String      @unique
   sortOrder Int         @default(0)
   items     LinenItem[]
 }
 
 model LinenItem {
-  id          String   @id @default(cuid())
-  name        String   // "King Top Sheet", "Bath Towel (Big)"
-  code        String   @unique // "K-Top", "Bath-Big"
-  unitCost    Float    @default(0)
+  id          String    @id @default(cuid())
+  name        String
+  code        String    @unique
+  unitCost    Float     @default(0)
 
   categoryId  String
   category    LinenCategory @relation(fields: [categoryId], references: [id])
 
-  // Relations
   requirements   PropertyLinenRequirement[]
   inventory      PropertyLinenInventory[]
   vendorProducts VendorProduct[]
@@ -298,12 +251,12 @@ model LinenItem {
   updatedAt   DateTime @updatedAt
 }
 
+// Per-flip requirements (how many needed per turnover)
 model PropertyLinenRequirement {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   propertyId  String
   linenItemId String
-
-  perFlip     Int      @default(0) // Qty needed per turnover
+  perFlip     Int       @default(0)
 
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
@@ -311,43 +264,36 @@ model PropertyLinenRequirement {
   @@unique([propertyId, linenItemId])
 }
 
+// Current inventory on-hand
 model PropertyLinenInventory {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   propertyId  String
   linenItemId String
-
-  onHand      Int      @default(0)
+  onHand      Int       @default(0)
 
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
 
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime  @updatedAt
 
   @@unique([propertyId, linenItemId])
 }
-
-// ============================================================
-// VENDORS & PURCHASING
-// ============================================================
 
 model Vendor {
   id        String          @id @default(cuid())
-  name      String          @unique // "Palmetto", "Costco", "Amazon"
+  name      String          @unique
   website   String?
   notes     String?
-
   products  VendorProduct[]
-
-  createdAt DateTime @default(now())
+  createdAt DateTime        @default(now())
 }
 
 model VendorProduct {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   vendorId    String
   linenItemId String
-
   productName String
-  packSize    Int      @default(1)
+  packSize    Int       @default(1)
   costPerPack Float
   link        String?
   notes       String?
@@ -355,7 +301,21 @@ model VendorProduct {
   vendor      Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
 
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime  @updatedAt
 
   @@unique([vendorId, linenItemId])
+}
+
+// ============================================================
+// AUTHENTICATION
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  role          String    @default("admin") // "admin" | "worker"
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
