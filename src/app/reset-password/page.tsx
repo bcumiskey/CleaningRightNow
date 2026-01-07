@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Sparkles, Loader2, Key } from 'lucide-react'
+import { Loader2, Key } from 'lucide-react'
 import Link from 'next/link'
 
 interface User {
@@ -35,7 +35,7 @@ export default function ResetPasswordPage() {
           setSelectedEmail(data.users[0].email)
         }
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch users')
     } finally {
       setIsFetching(false)
