@@ -28,8 +28,9 @@ export async function GET() {
     })
 
     // Add active notes count
+    interface JobData { id: string; date: Date; time: string | null; completed: boolean; property: { id: string; name: string; address: string } }
     const jobsWithNotes = await Promise.all(
-      jobs.map(async (job) => {
+      jobs.map(async (job: JobData) => {
         const activeNotes = await prisma.propertyNote.count({
           where: {
             propertyId: job.property.id,

@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       },
       select: { externalId: true },
     })
-    const existingIds = new Set(existingJobs.map((j) => j.externalId))
+    const existingIds = new Set(existingJobs.map((j: { externalId: string | null }) => j.externalId))
 
     // Filter to future events and checkout dates (typically when cleaning happens)
     const now = new Date()
@@ -173,7 +173,7 @@ export async function PUT(request: NextRequest) {
           },
           select: { externalId: true },
         })
-        const existingIds = new Set(existingJobs.map((j) => j.externalId))
+        const existingIds = new Set(existingJobs.map((j: { externalId: string | null }) => j.externalId))
 
         const now = new Date()
         const futureEvents = events.filter((event) => new Date(event.start) >= now)

@@ -33,7 +33,8 @@ export async function GET(request: NextRequest) {
     })
 
     // Remove financial data
-    const sanitizedJobs = jobs.map((job) => ({
+    interface JobWithProperty { id: string; date: Date; time: string | null; completed: boolean; property: { id: string; name: string; address: string } }
+    const sanitizedJobs = jobs.map((job: JobWithProperty) => ({
       id: job.id,
       date: job.date,
       time: job.time,

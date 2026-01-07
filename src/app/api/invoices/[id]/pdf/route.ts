@@ -67,7 +67,7 @@ export async function GET(
           total: invoice.total,
           status: invoice.status,
           notes: invoice.notes,
-          lineItems: invoice.lineItems.map((item) => ({
+          lineItems: invoice.lineItems.map((item: { id: string; date: Date | null; description: string; amount: number }) => ({
             id: item.id,
             date: item.date,
             description: item.description,
@@ -79,8 +79,8 @@ export async function GET(
       })
     )
 
-    // Return PDF as download
-    return new NextResponse(pdfBuffer, {
+    // Return PDF as download (convert Buffer to Uint8Array for NextResponse compatibility)
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${invoice.invoiceNumber}.pdf"`,

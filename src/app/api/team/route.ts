@@ -16,7 +16,7 @@ export async function GET() {
     })
 
     // Add hasPassword indicator without exposing password
-    const membersWithPasswordStatus = teamMembers.map((member) => ({
+    const membersWithPasswordStatus = teamMembers.map((member: { id: string; name: string; email: string | null; phone: string | null; role: string; isActive: boolean; password: string | null }) => ({
       id: member.id,
       name: member.name,
       email: member.email,

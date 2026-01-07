@@ -80,7 +80,7 @@ export async function POST(
           total: invoice.total,
           status: invoice.status,
           notes: invoice.notes,
-          lineItems: invoice.lineItems.map((item) => ({
+          lineItems: invoice.lineItems.map((item: { id: string; date: Date | null; description: string; amount: number }) => ({
             id: item.id,
             date: item.date,
             description: item.description,

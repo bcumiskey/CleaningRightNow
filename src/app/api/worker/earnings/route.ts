@@ -88,7 +88,19 @@ export async function GET(request: NextRequest) {
     })
 
     // Calculate earnings for each job
-    const earnings = assignments.map((assignment) => {
+    interface Assignment {
+      id: string
+      paidAt: Date | null
+      job: {
+        id: string
+        date: Date
+        rate: number
+        expensePercent: number
+        property: { name: string }
+        assignments: { id: string }[]
+      }
+    }
+    const earnings = assignments.map((assignment: Assignment) => {
       const job = assignment.job
       const workerCount = job.assignments.length
       const netAfterExpenses = job.rate * (1 - job.expensePercent / 100)
@@ -109,13 +121,14 @@ export async function GET(request: NextRequest) {
     })
 
     // Calculate summary
-    const totalGrossEarnings = earnings.reduce((sum, e) => sum + e.workerShare, 0)
+    interface EarningRecord { workerShare: number; status: string }
+    const totalGrossEarnings = earnings.reduce((sum: number, e: EarningRecord) => sum + e.workerShare, 0)
     const totalPaid = earnings
-      .filter((e) => e.status === 'paid')
-      .reduce((sum, e) => sum + e.workerShare, 0)
+      .filter((e: EarningRecord) => e.status === 'paid')
+      .reduce((sum: number, e: EarningRecord) => sum + e.workerShare, 0)
     const totalPending = earnings
-      .filter((e) => e.status === 'pending')
-      .reduce((sum, e) => sum + e.workerShare, 0)
+      .filter((e: EarningRecord) => e.status === 'pending')
+      .reduce((sum: number, e: EarningRecord) => sum + e.workerShare, 0)
 
     return NextResponse.json({
       worker,

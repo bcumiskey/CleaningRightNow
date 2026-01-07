@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       select: { jobId: true },
     })
 
-    const uniqueJobIds = [...new Set(assignments.map((a) => a.jobId))]
+    const uniqueJobIds = [...new Set(assignments.map((a: { jobId: string }) => a.jobId))]
 
     // For each job, check if all assignments are now paid
     for (const jobId of uniqueJobIds) {

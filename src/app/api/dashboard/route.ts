@@ -26,7 +26,7 @@ export async function GET() {
         date: { gte: monthStart, lte: monthEnd },
       },
     })
-    const monthlyRevenue = completedJobs.reduce((sum, job) => sum + job.rate, 0)
+    const monthlyRevenue = completedJobs.reduce((sum: number, job: { rate: number }) => sum + job.rate, 0)
 
     // Pending from clients (completed but not paid)
     const unpaidJobs = await prisma.job.findMany({
@@ -35,7 +35,7 @@ export async function GET() {
         clientPaid: false,
       },
     })
-    const pendingFromClients = unpaidJobs.reduce((sum, job) => sum + job.rate, 0)
+    const pendingFromClients = unpaidJobs.reduce((sum: number, job: { rate: number }) => sum + job.rate, 0)
 
     // Owed to team (completed jobs not paid to team)
     const teamUnpaidJobs = await prisma.job.findMany({
@@ -46,7 +46,7 @@ export async function GET() {
       include: { assignments: true },
     })
     let owedToTeam = 0
-    teamUnpaidJobs.forEach((job) => {
+    teamUnpaidJobs.forEach((job: { rate: number; expensePercent: number }) => {
       const teamTotal = job.rate * (1 - job.expensePercent / 100)
       owedToTeam += teamTotal
     })

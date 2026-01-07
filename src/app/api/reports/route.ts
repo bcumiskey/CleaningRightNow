@@ -16,13 +16,13 @@ export async function GET() {
       include: { assignments: true },
     })
 
-    const totalRevenue = completedJobs.reduce((sum, job) => sum + job.rate, 0)
+    const totalRevenue = completedJobs.reduce((sum: number, job: { rate: number }) => sum + job.rate, 0)
     const totalJobs = completedJobs.length
     const avgJobValue = totalJobs > 0 ? totalRevenue / totalJobs : 0
 
     // Calculate team payments
     let teamPayments = 0
-    completedJobs.forEach((job) => {
+    completedJobs.forEach((job: { rate: number; expensePercent: number }) => {
       const teamTotal = job.rate * (1 - job.expensePercent / 100)
       teamPayments += teamTotal
     })

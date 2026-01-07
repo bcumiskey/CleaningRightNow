@@ -24,7 +24,8 @@ export async function GET() {
     })
 
     // Add active notes count
-    const propertiesWithCount = properties.map((p) => ({
+    interface PropertyWithNotes { id: string; name: string; address: string; notes: { id: string }[] }
+    const propertiesWithCount = properties.map((p: PropertyWithNotes) => ({
       id: p.id,
       name: p.name,
       address: p.address,
