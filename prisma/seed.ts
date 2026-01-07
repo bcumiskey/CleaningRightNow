@@ -6,22 +6,8 @@ async function main() {
   console.log('Starting database seed...')
   console.log('Seeding linen catalog only - no mock data')
 
-  // Clean up existing data (for fresh deploys)
-  console.log('Cleaning up old data...')
-  await prisma.invoiceLineItem.deleteMany({})
-  await prisma.invoice.deleteMany({})
-  await prisma.jobAssignment.deleteMany({})
-  await prisma.job.deleteMany({})
-  await prisma.propertyNote.deleteMany({})
-  await prisma.propertyInstruction.deleteMany({})
-  await prisma.propertyPhoto.deleteMany({})
-  await prisma.propertyLinenInventory.deleteMany({})
-  await prisma.propertyLinenRequirement.deleteMany({})
-  await prisma.vendorProduct.deleteMany({})
-  await prisma.property.deleteMany({})
-  await prisma.teamMember.deleteMany({})
-  await prisma.user.deleteMany({})
-  console.log('Old data cleaned up')
+  // NOTE: We do NOT delete users, team members, properties, jobs, or invoices
+  // This seed only ensures linen catalog data exists
 
   // Categories
   const sheets = await prisma.linenCategory.upsert({
