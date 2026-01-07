@@ -1,38 +1,308 @@
-// Re-export Prisma types with some additional utility types
+// Local type definitions for the Cleaning Right Now app
+// These match the Prisma schema but are defined locally to avoid generation issues
 
-export type {
-  User,
-  Property,
-  PropertyOwner,
-  PropertyGroup,
-  PropertyPhoto,
-  TeamMember,
-  Service,
-  Job,
-  JobService,
-  JobAssignment,
-  TeamPayment,
-  Linen,
-  LinenReplacement,
-  Supply,
-  PropertySupply,
-  SupplyRestock,
-  SupplyUsage,
-  LaundryProvider,
-  LaundryRecord,
-  Invoice,
-  AuditLog,
-  Setting,
-} from '@prisma/client'
+// ============================================================
+// BASE TYPES
+// ============================================================
 
-export {
-  JobStatus,
-  LinenCondition,
-  LaundryStatus,
-  InvoiceStatus,
-} from '@prisma/client'
+export interface User {
+  id: string
+  email: string
+  password: string
+  name?: string | null
+  businessName?: string | null
+  businessPhone?: string | null
+  businessEmail?: string | null
+  businessAddress?: string | null
+  expensePercentage: number
+  createdAt: Date
+  updatedAt: Date
+}
 
-// Extended types with relations
+export interface Session {
+  id: string
+  sessionToken: string
+  userId: string
+  expires: Date
+}
+
+export interface Property {
+  id: string
+  name: string
+  address: string
+  ownerName: string
+  ownerEmail?: string | null
+  ownerPhone?: string | null
+  baseRate: number
+  billingType: string
+  monthlyBillingDay?: number | null
+  autoSendInvoice: boolean
+  calendarSource?: string | null
+  icalUrl?: string | null
+  accessCode?: string | null
+  accessNotes?: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface TeamMember {
+  id: string
+  name: string
+  email?: string | null
+  phone?: string | null
+  role: string
+  isActive: boolean
+  passwordHash?: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Job {
+  id: string
+  date: Date
+  time?: string | null
+  propertyId: string
+  rate: number
+  expensePercent: number
+  completed: boolean
+  completedAt?: Date | null
+  clientPaid: boolean
+  clientPaidAt?: Date | null
+  teamPaid: boolean
+  teamPaidAt?: Date | null
+  source: string
+  externalId?: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface JobAssignment {
+  id: string
+  jobId: string
+  teamMemberId: string
+  amountEarned?: number | null
+}
+
+export interface Invoice {
+  id: string
+  invoiceNumber: string
+  propertyId: string
+  type: string
+  billingPeriod?: string | null
+  invoiceDate: Date
+  dueDate?: Date | null
+  paymentTerms: string
+  subtotal: number
+  discount: number
+  total: number
+  status: string
+  sentAt?: Date | null
+  paidAt?: Date | null
+  notes?: string | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface InvoiceLineItem {
+  id: string
+  invoiceId: string
+  date?: Date | null
+  description: string
+  amount: number
+  jobId?: string | null
+  itemType: string
+  sortOrder: number
+  createdAt: Date
+}
+
+export interface CustomBillingItem {
+  id: string
+  name: string
+  category: string
+  defaultAmount?: number | null
+  createdAt: Date
+}
+
+export interface PropertyNote {
+  id: string
+  propertyId: string
+  type: string
+  content: string
+  status: string
+  resolvedAt?: Date | null
+  addedById: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PropertyInstruction {
+  id: string
+  propertyId: string
+  instruction: string
+  sortOrder: number
+  createdAt: Date
+}
+
+export interface PropertyPhoto {
+  id: string
+  propertyId: string
+  room: string
+  caption?: string | null
+  url: string
+  addedById: string
+  sortOrder: number
+  createdAt: Date
+}
+
+export interface LinenCategory {
+  id: string
+  name: string
+  sortOrder: number
+}
+
+export interface LinenItem {
+  id: string
+  name: string
+  code: string
+  unitCost: number
+  categoryId: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PropertyLinenRequirement {
+  id: string
+  propertyId: string
+  linenItemId: string
+  perFlip: number
+}
+
+export interface PropertyLinenInventory {
+  id: string
+  propertyId: string
+  linenItemId: string
+  onHand: number
+  updatedAt: Date
+}
+
+export interface Vendor {
+  id: string
+  name: string
+  website?: string | null
+  notes?: string | null
+  createdAt: Date
+}
+
+export interface VendorProduct {
+  id: string
+  vendorId: string
+  linenItemId: string
+  productName: string
+  packSize: number
+  costPerPack: number
+  link?: string | null
+  notes?: string | null
+  updatedAt: Date
+}
+
+export interface ReplacementLog {
+  id: string
+  date: Date
+  propertyId: string
+  linenItemId: string
+  quantity: number
+  unitCost: number
+  totalCost: number
+  reason: string
+  replaced: boolean
+  replacedAt?: Date | null
+  notes?: string | null
+  createdAt: Date
+}
+
+export interface Supply {
+  id: string
+  name: string
+  category: string
+  unit: string
+  minStock: number
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface PropertySupply {
+  id: string
+  propertyId: string
+  supplyId: string
+  currentStock: number
+  updatedAt: Date
+}
+
+export interface SupplyRestock {
+  id: string
+  supplyId: string
+  quantity: number
+  cost: number
+  notes?: string | null
+  createdAt: Date
+}
+
+export interface SupplyUsage {
+  id: string
+  propertyId: string
+  supplyId: string
+  quantity: number
+  jobId?: string | null
+  createdAt: Date
+}
+
+export interface LaundryProvider {
+  id: string
+  name: string
+  contactInfo?: string | null
+  createdAt: Date
+}
+
+export interface LaundryRecord {
+  id: string
+  providerId: string
+  propertyId: string
+  date: Date
+  status: string
+  notes?: string | null
+  createdAt: Date
+}
+
+export interface AuditLog {
+  id: string
+  userId?: string | null
+  action: string
+  entityType: string
+  entityId: string
+  oldValues?: unknown
+  newValues?: unknown
+  description?: string | null
+  ipAddress?: string | null
+  createdAt: Date
+}
+
+export interface Setting {
+  id: string
+  key: string
+  value: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+// String enum-like types for consistency
+export type LinenCondition = 'new' | 'good' | 'fair' | 'poor' | 'damaged'
+export type LaundryStatus = 'pending' | 'in_progress' | 'completed'
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'PAID' | 'SEND' | 'COMPLETE' | 'PAY'
+
+// ============================================================
+// EXTENDED TYPES WITH RELATIONS
+// ============================================================
+
 export interface JobWithRelations {
   id: string
   propertyId: string
@@ -40,42 +310,26 @@ export interface JobWithRelations {
     id: string
     name: string
     address: string
-    owner?: {
-      id: string
-      name: string
-      email?: string | null
-      phone?: string | null
-    } | null
+    ownerName: string
+    ownerEmail?: string | null
+    ownerPhone?: string | null
   }
-  scheduledDate: Date
-  scheduledTime?: string | null
+  date: Date
+  time?: string | null
+  source: 'manual' | 'turno' | 'google'
+  completed: boolean
   completedAt?: Date | null
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
-  totalAmount: number
+  rate: number
   expensePercent: number
-  expenseAmount: number
-  teamPayoutTotal: number
   notes?: string | null
   clientPaid: boolean
-  clientPaidAt?: Date | null
   teamPaid: boolean
-  teamPaidAt?: Date | null
-  services: Array<{
-    id: string
-    service: {
-      id: string
-      name: string
-    }
-    price: number
-  }>
-  teamAssignments: Array<{
+  assignments: Array<{
     id: string
     teamMember: {
       id: string
       name: string
     }
-    payoutAmount: number
-    paid: boolean
   }>
   createdAt: Date
   updatedAt: Date
@@ -87,47 +341,48 @@ export interface PropertyWithRelations {
   address: string
   squareFootage?: number | null
   baseRate: number
+  billingType: 'per_job' | 'monthly'
+  ownerName: string
+  ownerEmail?: string | null
+  ownerPhone?: string | null
   notes?: string | null
-  ownerId?: string | null
-  owner?: {
-    id: string
-    name: string
-    phone?: string | null
-    email?: string | null
-  } | null
-  groupId?: string | null
-  group?: {
-    id: string
-    name: string
-    color?: string | null
-  } | null
   active: boolean
-  linens?: Array<{
-    id: string
-    type: string
-    quantity: number
-    condition: string
-  }>
-  propertySupplies?: Array<{
-    id: string
-    supply: {
-      id: string
-      name: string
-      unit: string
-    }
-    quantity: number
-  }>
   photos?: Array<{
     id: string
     url: string
     description?: string | null
     category?: string | null
   }>
+  instructions?: Array<{
+    id: string
+    title: string
+    content: string
+    category?: string | null
+    sortOrder: number
+  }>
+  linenRequirements?: Array<{
+    id: string
+    linenItem: {
+      id: string
+      name: string
+      code: string
+    }
+    perFlip: number
+  }>
+  linenInventory?: Array<{
+    id: string
+    linenItem: {
+      id: string
+      name: string
+      code: string
+    }
+    onHand: number
+  }>
   _count?: {
     jobs: number
-    linens: number
-    propertySupplies: number
+    notes: number
     photos: number
+    instructions: number
   }
   createdAt: Date
   updatedAt: Date
@@ -138,36 +393,79 @@ export interface TeamMemberWithRelations {
   name: string
   phone?: string | null
   email?: string | null
+  role: 'admin' | 'worker'
   active: boolean
-  jobAssignments?: Array<{
+  balance: number
+  assignments?: Array<{
     id: string
     job: {
       id: string
-      scheduledDate: Date
+      date: Date
       property: {
         name: string
       }
     }
-    payoutAmount: number
-    paid: boolean
+  }>
+  payments?: Array<{
+    id: string
+    amount: number
+    method?: string | null
+    paidAt: Date
   }>
   _count?: {
-    jobAssignments: number
+    assignments: number
     payments: number
   }
   createdAt: Date
   updatedAt: Date
 }
 
+export interface InvoiceWithRelations {
+  id: string
+  invoiceNumber: string
+  propertyId: string
+  property: {
+    id: string
+    name: string
+    address: string
+    ownerName: string
+    ownerEmail?: string | null
+  }
+  periodStart: Date
+  periodEnd: Date
+  dueDate?: Date | null
+  subtotal: number
+  tax: number
+  total: number
+  status: 'draft' | 'sent' | 'paid'
+  sentAt?: Date | null
+  paidAt?: Date | null
+  notes?: string | null
+  lineItems: Array<{
+    id: string
+    description: string
+    quantity: number
+    unitPrice: number
+    total: number
+    jobId?: string | null
+    job?: {
+      id: string
+      date: Date
+    } | null
+  }>
+  _count?: {
+    lineItems: number
+  }
+  createdAt: Date
+  updatedAt: Date
+}
+
 export interface DashboardMetrics {
-  totalRevenue: number
-  totalExpenses: number
-  pendingPayments: number
+  monthlyRevenue: number
+  pendingFromClients: number
   owedToTeam: number
-  todayJobs: number
-  upcomingJobs: number
-  lowStockItems: number
-  completedJobsThisMonth: number
+  draftInvoices: number
+  lowStockCount: number
 }
 
 export interface ChartData {
@@ -178,4 +476,14 @@ export interface ChartData {
 export interface DateRange {
   from: Date
   to: Date
+}
+
+// Payment calculation utility type
+export interface PaymentBreakdown {
+  rate: number
+  expensePercent: number
+  expenseAmount: number
+  teamPayoutTotal: number
+  perPersonPayout: number
+  workerCount: number
 }

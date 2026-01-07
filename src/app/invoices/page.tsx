@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -10,6 +12,7 @@ import Select from '@/components/ui/Select'
 import Modal, { ModalFooter } from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
+import StatCard from '@/components/ui/StatCard'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import {
@@ -21,75 +24,94 @@ import {
   Printer,
   CheckCircle,
   Clock,
+  Send,
   DollarSign,
+  Trash2,
+  AlertCircle,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface Invoice {
   id: string
   invoiceNumber: string
-  issueDate: string
+  periodStart: string
+  periodEnd: string
   dueDate?: string
   subtotal: number
   tax: number
   total: number
   status: string
+  sentAt?: string
   paidAt?: string
   notes?: string
-  job: {
+  property: {
     id: string
-    scheduledDate: string
-    totalAmount: number
-    property: {
-      id: string
-      name: string
-      address: string
-      owner?: {
-        name: string
-        email?: string
-        phone?: string
-      }
+    name: string
+    address: string
+    ownerName: string
+    ownerEmail?: string
+  }
+  lineItems: Array<{
+    id: string
+    description: string
+    quantity: number
+    unitPrice: number
+    total: number
+    jobId?: string
+    job?: {
+      date: string
     }
-    services: Array<{
-      service: { name: string }
-      price: number
-    }>
+  }>
+  _count: {
+    lineItems: number
   }
 }
 
-interface Job {
+interface Property {
   id: string
-  scheduledDate: string
-  totalAmount: number
-  property: {
-    name: string
-  }
-  invoice?: {
-    id: string
-  }
+  name: string
+  billingType: 'per_job' | 'monthly'
+  ownerName: string
+}
+
+interface CustomBillingItem {
+  id: string
+  name: string
+  defaultPrice: number
 }
 
 export default function InvoicesPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
   const [invoices, setInvoices] = useState<Invoice[]>([])
-  const [availableJobs, setAvailableJobs] = useState<Job[]>([])
+  const [properties, setProperties] = useState<Property[]>([])
+  const [, setBillingItems] = useState<CustomBillingItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [propertyFilter, setPropertyFilter] = useState('')
+
+  // Create Invoice Modal
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState({
-    jobId: '',
+    propertyId: '',
+    periodStart: '',
+    periodEnd: '',
     dueDate: '',
     tax: '0',
     notes: '',
   })
 
   useEffect(() => {
-    fetchInvoices()
-    fetchAvailableJobs()
-  }, [])
+    if (status === 'authenticated') {
+      fetchInvoices()
+      fetchProperties()
+      fetchBillingItems()
+    }
+  }, [status])
 
   const fetchInvoices = async () => {
     try {
@@ -106,16 +128,27 @@ export default function InvoicesPage() {
     }
   }
 
-  const fetchAvailableJobs = async () => {
+  const fetchProperties = async () => {
     try {
-      const response = await fetch('/api/jobs?status=COMPLETED')
+      const response = await fetch('/api/properties')
       if (response.ok) {
         const data = await response.json()
-        // Filter jobs that don't have invoices
-        setAvailableJobs(data.filter((job: Job) => !job.invoice))
+        setProperties(data)
       }
     } catch (error) {
-      console.error('Failed to fetch jobs:', error)
+      console.error('Failed to fetch properties:', error)
+    }
+  }
+
+  const fetchBillingItems = async () => {
+    try {
+      const response = await fetch('/api/billing-items')
+      if (response.ok) {
+        const data = await response.json()
+        setBillingItems(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch billing items:', error)
     }
   }
 
@@ -125,7 +158,9 @@ export default function InvoicesPage() {
 
     try {
       const payload = {
-        jobId: formData.jobId,
+        propertyId: formData.propertyId,
+        periodStart: formData.periodStart,
+        periodEnd: formData.periodEnd,
         dueDate: formData.dueDate || null,
         tax: parseFloat(formData.tax) || 0,
         notes: formData.notes || null,
@@ -142,7 +177,6 @@ export default function InvoicesPage() {
         setIsModalOpen(false)
         resetForm()
         fetchInvoices()
-        fetchAvailableJobs()
       } else {
         const error = await response.json()
         toast.error(error.error || 'Failed to create invoice')
@@ -155,17 +189,35 @@ export default function InvoicesPage() {
     }
   }
 
+  const handleSendInvoice = async (invoice: Invoice) => {
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}/send`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        toast.success('Invoice sent')
+        fetchInvoices()
+      } else {
+        toast.error('Failed to send invoice')
+      }
+    } catch (error) {
+      console.error('Failed to send invoice:', error)
+      toast.error('Failed to send invoice')
+    }
+  }
+
   const handleMarkPaid = async (invoice: Invoice) => {
     try {
-      const response = await fetch(`/api/invoices/${invoice.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID', paidAt: new Date().toISOString() }),
+      const response = await fetch(`/api/invoices/${invoice.id}/mark-paid`, {
+        method: 'POST',
       })
 
       if (response.ok) {
         toast.success('Invoice marked as paid')
         fetchInvoices()
+      } else {
+        toast.error('Failed to update invoice')
       }
     } catch (error) {
       console.error('Failed to update invoice:', error)
@@ -173,46 +225,83 @@ export default function InvoicesPage() {
     }
   }
 
+  const handleDelete = async (invoice: Invoice) => {
+    if (!confirm(`Are you sure you want to delete invoice ${invoice.invoiceNumber}?`)) return
+
+    try {
+      const response = await fetch(`/api/invoices/${invoice.id}`, { method: 'DELETE' })
+      if (response.ok) {
+        toast.success('Invoice deleted')
+        fetchInvoices()
+      } else {
+        toast.error('Failed to delete invoice')
+      }
+    } catch (error) {
+      console.error('Failed to delete invoice:', error)
+      toast.error('Failed to delete invoice')
+    }
+  }
+
   const resetForm = () => {
     setFormData({
-      jobId: '',
+      propertyId: '',
+      periodStart: '',
+      periodEnd: '',
       dueDate: '',
       tax: '0',
       notes: '',
     })
   }
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (invoice: Invoice) => {
     const variants: Record<string, 'success' | 'warning' | 'danger' | 'info' | 'default'> = {
-      DRAFT: 'default',
-      SENT: 'info',
-      UNPAID: 'warning',
-      PAID: 'success',
-      OVERDUE: 'danger',
-      CANCELLED: 'default',
+      draft: 'default',
+      sent: 'info',
+      paid: 'success',
+      overdue: 'danger',
     }
-    return <Badge variant={variants[status] || 'default'}>{status}</Badge>
+
+    // Check if overdue
+    let effectiveStatus = invoice.status
+    if (invoice.status === 'sent' && invoice.dueDate) {
+      const dueDate = new Date(invoice.dueDate)
+      if (dueDate < new Date()) {
+        effectiveStatus = 'overdue'
+      }
+    }
+
+    return <Badge variant={variants[effectiveStatus] || 'default'}>{effectiveStatus}</Badge>
   }
 
   const filteredInvoices = invoices.filter((i) => {
     const matchesSearch =
       i.invoiceNumber.toLowerCase().includes(search.toLowerCase()) ||
-      i.job.property.name.toLowerCase().includes(search.toLowerCase())
+      i.property.name.toLowerCase().includes(search.toLowerCase()) ||
+      i.property.ownerName.toLowerCase().includes(search.toLowerCase())
     const matchesStatus = statusFilter === 'all' || i.status === statusFilter
-    return matchesSearch && matchesStatus
+    const matchesProperty = !propertyFilter || i.property.id === propertyFilter
+    return matchesSearch && matchesStatus && matchesProperty
   })
 
+  const draftCount = invoices.filter((i) => i.status === 'draft').length
   const totalPaid = invoices
-    .filter((i) => i.status === 'PAID')
+    .filter((i) => i.status === 'paid')
+    .reduce((sum, i) => sum + i.total, 0)
+  const totalOutstanding = invoices
+    .filter((i) => i.status === 'sent')
     .reduce((sum, i) => sum + i.total, 0)
 
-  const totalUnpaid = invoices
-    .filter((i) => i.status === 'UNPAID' || i.status === 'SENT')
-    .reduce((sum, i) => sum + i.total, 0)
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    )
+  }
 
-  const printInvoice = (invoice: Invoice) => {
-    setSelectedInvoice(invoice)
-    setIsViewModalOpen(true)
+  if (!session) {
+    router.push('/login')
+    return null
   }
 
   return (
@@ -221,46 +310,31 @@ export default function InvoicesPage() {
 
       <div className="page-container">
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Paid</p>
-                  <p className="text-xl font-bold">{formatCurrency(totalPaid)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-5 h-5 text-yellow-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Outstanding</p>
-                  <p className="text-xl font-bold">{formatCurrency(totalUnpaid)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Total Invoices</p>
-                  <p className="text-xl font-bold">{invoices.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <StatCard
+            title="Draft Invoices"
+            value={String(draftCount)}
+            icon={FileText}
+            iconColor="text-gray-600 bg-gray-100"
+          />
+          <StatCard
+            title="Outstanding"
+            value={formatCurrency(totalOutstanding)}
+            icon={Clock}
+            iconColor="text-yellow-600 bg-yellow-100"
+          />
+          <StatCard
+            title="Total Paid"
+            value={formatCurrency(totalPaid)}
+            icon={CheckCircle}
+            iconColor="text-green-600 bg-green-100"
+          />
+          <StatCard
+            title="Total Invoices"
+            value={String(invoices.length)}
+            icon={FileText}
+            iconColor="text-indigo-600 bg-indigo-100"
+          />
         </div>
 
         {/* Actions Bar */}
@@ -277,18 +351,24 @@ export default function InvoicesPage() {
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            options={[
-              { value: 'all', label: 'All Status' },
-              { value: 'UNPAID', label: 'Unpaid' },
-              { value: 'PAID', label: 'Paid' },
-              { value: 'OVERDUE', label: 'Overdue' },
-            ]}
-            className="w-full sm:w-40"
-          />
-          <Button
-            onClick={() => { resetForm(); setIsModalOpen(true); }}
-            disabled={availableJobs.length === 0}
+            className="w-full sm:w-32"
           >
+            <option value="all">All Status</option>
+            <option value="draft">Draft</option>
+            <option value="sent">Sent</option>
+            <option value="paid">Paid</option>
+          </Select>
+          <Select
+            value={propertyFilter}
+            onChange={(e) => setPropertyFilter(e.target.value)}
+            className="w-full sm:w-40"
+          >
+            <option value="">All Properties</option>
+            {properties.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </Select>
+          <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
             <Plus className="w-4 h-4" />
             Create Invoice
           </Button>
@@ -302,75 +382,100 @@ export default function InvoicesPage() {
                 <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
               </div>
             ) : filteredInvoices.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice #</TableHead>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead align="right">Amount</TableHead>
-                    <TableHead align="center">Status</TableHead>
-                    <TableHead align="right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredInvoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell>
-                        <span className="font-mono font-medium text-gray-900">
-                          {invoice.invoiceNumber}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-gray-900">{invoice.job.property.name}</p>
-                          {invoice.job.property.owner && (
-                            <p className="text-sm text-gray-500">{invoice.job.property.owner.name}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatDate(invoice.issueDate)}</TableCell>
-                      <TableCell align="right">
-                        <span className="font-medium">{formatCurrency(invoice.total)}</span>
-                      </TableCell>
-                      <TableCell align="center">{getStatusBadge(invoice.status)}</TableCell>
-                      <TableCell align="right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => printInvoice(invoice)}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          {invoice.status !== 'PAID' && (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Property</TableHead>
+                      <TableHead>Period</TableHead>
+                      <TableHead align="center">Items</TableHead>
+                      <TableHead align="right">Total</TableHead>
+                      <TableHead align="center">Status</TableHead>
+                      <TableHead align="right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredInvoices.map((invoice) => (
+                      <TableRow key={invoice.id}>
+                        <TableCell>
+                          <span className="font-mono font-medium text-gray-900">
+                            {invoice.invoiceNumber}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium text-gray-900">{invoice.property.name}</p>
+                            <p className="text-sm text-gray-500">{invoice.property.ownerName}</p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {formatDate(invoice.periodStart)} - {formatDate(invoice.periodEnd)}
+                          </span>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Badge variant="default">{invoice._count.lineItems}</Badge>
+                        </TableCell>
+                        <TableCell align="right">
+                          <span className="font-medium">{formatCurrency(invoice.total)}</span>
+                        </TableCell>
+                        <TableCell align="center">{getStatusBadge(invoice)}</TableCell>
+                        <TableCell align="right">
+                          <div className="flex items-center justify-end gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleMarkPaid(invoice)}
+                              onClick={() => {
+                                setSelectedInvoice(invoice)
+                                setIsViewModalOpen(true)
+                              }}
                             >
-                              <DollarSign className="w-4 h-4 text-green-600" />
+                              <Eye className="w-4 h-4" />
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                            {invoice.status === 'draft' && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleSendInvoice(invoice)}
+                                >
+                                  <Send className="w-4 h-4 text-blue-600" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(invoice)}
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                </Button>
+                              </>
+                            )}
+                            {invoice.status === 'sent' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleMarkPaid(invoice)}
+                              >
+                                <DollarSign className="w-4 h-4 text-green-600" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
               <EmptyState
                 icon={FileText}
                 title="No invoices yet"
-                description={
-                  availableJobs.length > 0
-                    ? 'Create your first invoice from a completed job.'
-                    : 'Complete a job first to create an invoice.'
-                }
-                action={
-                  availableJobs.length > 0
-                    ? {
-                        label: 'Create Invoice',
-                        onClick: () => setIsModalOpen(true),
-                      }
-                    : undefined
-                }
+                description="Create your first invoice to start billing clients."
+                action={{
+                  label: 'Create Invoice',
+                  onClick: () => setIsModalOpen(true),
+                }}
               />
             )}
           </CardContent>
@@ -386,17 +491,38 @@ export default function InvoicesPage() {
       >
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
-            <Select
-              label="Job"
-              value={formData.jobId}
-              onChange={(e) => setFormData({ ...formData, jobId: e.target.value })}
-              options={availableJobs.map((j) => ({
-                value: j.id,
-                label: `${j.property.name} - ${formatDate(j.scheduledDate)} (${formatCurrency(j.totalAmount)})`,
-              }))}
-              placeholder="Select job"
-              required
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Property *</label>
+              <Select
+                value={formData.propertyId}
+                onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })}
+              >
+                <option value="">Select property</option>
+                {properties.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.billingType === 'monthly' ? 'Monthly' : 'Per Job'})
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Period Start *"
+                type="date"
+                value={formData.periodStart}
+                onChange={(e) => setFormData({ ...formData, periodStart: e.target.value })}
+                required
+              />
+              <Input
+                label="Period End *"
+                type="date"
+                value={formData.periodEnd}
+                onChange={(e) => setFormData({ ...formData, periodEnd: e.target.value })}
+                required
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <Input
                 label="Due Date"
@@ -412,6 +538,7 @@ export default function InvoicesPage() {
                 onChange={(e) => setFormData({ ...formData, tax: e.target.value })}
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
               <textarea
@@ -421,6 +548,16 @@ export default function InvoicesPage() {
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
               />
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium">Jobs will be automatically added</p>
+                  <p>All completed jobs within the period will be added as line items.</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -447,7 +584,7 @@ export default function InvoicesPage() {
             <div className="flex justify-between items-start mb-8">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">INVOICE</h2>
-                <p className="text-gray-500">{selectedInvoice.invoiceNumber}</p>
+                <p className="text-gray-500 font-mono">{selectedInvoice.invoiceNumber}</p>
               </div>
               <div className="text-right">
                 <p className="font-semibold text-gray-900">Cleaning Right Now</p>
@@ -458,16 +595,14 @@ export default function InvoicesPage() {
             <div className="grid grid-cols-2 gap-8 mb-8">
               <div>
                 <p className="text-sm font-medium text-gray-500 mb-1">Bill To</p>
-                <p className="font-semibold text-gray-900">
-                  {selectedInvoice.job.property.owner?.name || 'Property Owner'}
-                </p>
-                <p className="text-gray-600">{selectedInvoice.job.property.name}</p>
-                <p className="text-gray-600">{selectedInvoice.job.property.address}</p>
+                <p className="font-semibold text-gray-900">{selectedInvoice.property.ownerName}</p>
+                <p className="text-gray-600">{selectedInvoice.property.name}</p>
+                <p className="text-gray-600">{selectedInvoice.property.address}</p>
               </div>
               <div className="text-right">
                 <p className="text-sm text-gray-500">
-                  <span className="font-medium">Issue Date:</span>{' '}
-                  {formatDate(selectedInvoice.issueDate)}
+                  <span className="font-medium">Period:</span>{' '}
+                  {formatDate(selectedInvoice.periodStart)} - {formatDate(selectedInvoice.periodEnd)}
                 </p>
                 {selectedInvoice.dueDate && (
                   <p className="text-sm text-gray-500">
@@ -475,21 +610,34 @@ export default function InvoicesPage() {
                     {formatDate(selectedInvoice.dueDate)}
                   </p>
                 )}
+                <p className="text-sm text-gray-500">
+                  <span className="font-medium">Status:</span>{' '}
+                  {selectedInvoice.status.toUpperCase()}
+                </p>
               </div>
             </div>
 
             <table className="w-full mb-8">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-2 text-sm font-medium text-gray-600">Service</th>
+                  <th className="text-left py-2 text-sm font-medium text-gray-600">Description</th>
+                  <th className="text-center py-2 text-sm font-medium text-gray-600">Qty</th>
+                  <th className="text-right py-2 text-sm font-medium text-gray-600">Unit Price</th>
                   <th className="text-right py-2 text-sm font-medium text-gray-600">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {selectedInvoice.job.services.map((s, idx) => (
-                  <tr key={idx} className="border-b border-gray-100">
-                    <td className="py-3">{s.service.name}</td>
-                    <td className="py-3 text-right">{formatCurrency(s.price)}</td>
+                {selectedInvoice.lineItems.map((item) => (
+                  <tr key={item.id} className="border-b border-gray-100">
+                    <td className="py-3">
+                      {item.description}
+                      {item.job && (
+                        <span className="text-sm text-gray-500 ml-2">({formatDate(item.job.date)})</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-center">{item.quantity}</td>
+                    <td className="py-3 text-right">{formatCurrency(item.unitPrice)}</td>
+                    <td className="py-3 text-right">{formatCurrency(item.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -505,7 +653,7 @@ export default function InvoicesPage() {
                   <span className="text-gray-600">Tax</span>
                   <span>{formatCurrency(selectedInvoice.tax)}</span>
                 </div>
-                <div className="flex justify-between py-2 border-t border-gray-200 font-bold">
+                <div className="flex justify-between py-2 border-t border-gray-200 font-bold text-lg">
                   <span>Total</span>
                   <span>{formatCurrency(selectedInvoice.total)}</span>
                 </div>

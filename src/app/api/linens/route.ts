@@ -2,15 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { createAuditLog, generateDescription } from '@/lib/audit'
 import { z } from 'zod'
 
-const linenSchema = z.object({
-  propertyId: z.string().min(1, 'Property is required'),
-  type: z.string().min(1, 'Type is required'),
-  quantity: z.number().min(0).default(0),
-  condition: z.enum(['GOOD', 'FAIR', 'DAMAGED', 'NEEDS_REPLACEMENT']).default('GOOD'),
-  notes: z.string().optional().nullable(),
+const linenItemSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  code: z.string().min(1, 'Code is required'),
+  unitCost: z.number().min(0).default(0),
+  categoryId: z.string().min(1, 'Category is required'),
 })
 
 export async function GET(request: NextRequest) {
@@ -21,41 +19,36 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams
-    const propertyId = searchParams.get('propertyId')
-    const condition = searchParams.get('condition')
+    const categoryId = searchParams.get('categoryId')
 
     const where: Record<string, unknown> = {}
 
-    if (propertyId) {
-      where.propertyId = propertyId
+    if (categoryId) {
+      where.categoryId = categoryId
     }
 
-    if (condition && condition !== 'all') {
-      where.condition = condition
-    }
-
-    const linens = await prisma.linen.findMany({
+    const linenItems = await prisma.linenItem.findMany({
       where,
       include: {
-        property: {
+        category: true,
+        _count: {
           select: {
-            id: true,
-            name: true,
+            requirements: true,
+            inventory: true,
           },
         },
-        replacements: {
-          orderBy: { replacedAt: 'desc' },
-          take: 5,
-        },
       },
-      orderBy: [{ property: { name: 'asc' } }, { type: 'asc' }],
+      orderBy: [
+        { category: { sortOrder: 'asc' } },
+        { name: 'asc' },
+      ],
     })
 
-    return NextResponse.json(linens)
+    return NextResponse.json(linenItems)
   } catch (error) {
     console.error('Linens GET error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch linens' },
+      { error: 'Failed to fetch linen items' },
       { status: 500 }
     )
   }
@@ -69,40 +62,26 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const validatedData = linenSchema.parse(body)
+    const validatedData = linenItemSchema.parse(body)
 
-    const linen = await prisma.linen.create({
+    const linenItem = await prisma.linenItem.create({
       data: validatedData,
       include: {
-        property: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        category: true,
       },
     })
 
-    await createAuditLog({
-      userId: session.user.id,
-      action: 'CREATE',
-      entityType: 'Linen',
-      entityId: linen.id,
-      newValues: linen,
-      description: generateDescription('CREATE', 'Linen', `${linen.type} at ${linen.property.name}`),
-    })
-
-    return NextResponse.json(linen, { status: 201 })
+    return NextResponse.json(linenItem, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }
-    console.error('Linens POST error:', error)
+    console.error('Linen item POST error:', error)
     return NextResponse.json(
-      { error: 'Failed to create linen' },
+      { error: 'Failed to create linen item' },
       { status: 500 }
     )
   }

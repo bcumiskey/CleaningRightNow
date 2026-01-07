@@ -11,52 +11,32 @@ import {
   Briefcase,
   Users,
   Package,
-  Shirt,
-  WashingMachine,
   FileText,
   BarChart3,
-  History,
   Settings,
   LogOut,
   Menu,
   X,
   Sparkles,
-  ChevronDown,
+  StickyNote,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Calendar', href: '/calendar', icon: Calendar },
+  { name: 'Jobs & Payments', href: '/jobs', icon: Briefcase },
   { name: 'Properties', href: '/properties', icon: Home },
-  { name: 'Jobs', href: '/jobs', icon: Briefcase },
   { name: 'Team', href: '/team', icon: Users },
-  {
-    name: 'Inventory',
-    icon: Package,
-    children: [
-      { name: 'Supplies', href: '/supplies', icon: Package },
-      { name: 'Linens', href: '/linens', icon: Shirt },
-    ],
-  },
-  { name: 'Laundry', href: '/laundry', icon: WashingMachine },
+  { name: 'Linens', href: '/linens', icon: Package },
   { name: 'Invoices', href: '/invoices', icon: FileText },
+  { name: 'Notes', href: '/notes', icon: StickyNote },
   { name: 'Reports', href: '/reports', icon: BarChart3 },
-  { name: 'Audit Log', href: '/audit-log', icon: History },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Inventory'])
-
-  const toggleExpanded = (name: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(name)
-        ? prev.filter((item) => item !== name)
-        : [...prev, name]
-    )
-  }
 
   const isActive = (href: string) => {
     if (href === '/') {
@@ -72,61 +52,12 @@ export default function Sidebar() {
     item: (typeof navigation)[0]
     mobile?: boolean
   }) => {
-    const hasChildren = 'children' in item && item.children
-    const isExpanded = expandedItems.includes(item.name)
     const Icon = item.icon
+    const active = isActive(item.href)
 
-    if (hasChildren) {
-      return (
-        <div>
-          <button
-            onClick={() => toggleExpanded(item.name)}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-              'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
-            )}
-          >
-            <Icon className="w-5 h-5 flex-shrink-0" />
-            <span className="flex-1 text-left">{item.name}</span>
-            <ChevronDown
-              className={cn(
-                'w-4 h-4 transition-transform',
-                isExpanded && 'rotate-180'
-              )}
-            />
-          </button>
-          {isExpanded && (
-            <div className="ml-4 mt-1 space-y-1">
-              {item.children.map((child) => {
-                const ChildIcon = child.icon
-                const active = isActive(child.href)
-                return (
-                  <Link
-                    key={child.href}
-                    href={child.href}
-                    onClick={() => mobile && setIsMobileMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                      active
-                        ? 'bg-indigo-100 text-indigo-700'
-                        : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
-                    )}
-                  >
-                    <ChildIcon className="w-4 h-4 flex-shrink-0" />
-                    <span>{child.name}</span>
-                  </Link>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )
-    }
-
-    const active = isActive(item.href!)
     return (
       <Link
-        href={item.href!}
+        href={item.href}
         onClick={() => mobile && setIsMobileMenuOpen(false)}
         className={cn(
           'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',

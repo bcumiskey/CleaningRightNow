@@ -3,15 +3,48 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { createAuditLog, generateDescription } from '@/lib/audit'
-import { generateInvoiceNumber } from '@/lib/utils'
 import { z } from 'zod'
 
 const invoiceSchema = z.object({
-  jobId: z.string().min(1, 'Job is required'),
+  propertyId: z.string().min(1, 'Property is required'),
+  type: z.enum(['per_job', 'monthly']),
+  billingPeriod: z.string().optional().nullable(),
+  invoiceDate: z.string().optional(),
   dueDate: z.string().optional().nullable(),
-  tax: z.number().min(0).default(0),
+  paymentTerms: z.string().default('Due upon receipt'),
   notes: z.string().optional().nullable(),
+  lineItems: z.array(z.object({
+    date: z.string().optional().nullable(),
+    description: z.string().min(1),
+    amount: z.number(),
+    jobId: z.string().optional().nullable(),
+    itemType: z.enum(['service', 'supplies', 'expense', 'misc', 'custom']).default('service'),
+  })).default([]),
 })
+
+async function generateInvoiceNumber(): Promise<string> {
+  const year = new Date().getFullYear()
+
+  // Find the last invoice number for this year
+  const lastInvoice = await prisma.invoice.findFirst({
+    where: {
+      invoiceNumber: {
+        startsWith: `INV-${year}-`,
+      },
+    },
+    orderBy: {
+      invoiceNumber: 'desc',
+    },
+  })
+
+  let sequence = 1
+  if (lastInvoice) {
+    const lastSequence = parseInt(lastInvoice.invoiceNumber.split('-')[2], 10)
+    sequence = lastSequence + 1
+  }
+
+  return `INV-${year}-${String(sequence).padStart(3, '0')}`
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,6 +55,8 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
+    const propertyId = searchParams.get('propertyId')
+    const type = searchParams.get('type')
 
     const where: Record<string, unknown> = {}
 
@@ -29,25 +64,35 @@ export async function GET(request: NextRequest) {
       where.status = status
     }
 
+    if (propertyId) {
+      where.propertyId = propertyId
+    }
+
+    if (type && type !== 'all') {
+      where.type = type
+    }
+
     const invoices = await prisma.invoice.findMany({
       where,
       include: {
-        job: {
-          include: {
-            property: {
-              include: {
-                owner: true,
-              },
-            },
-            services: {
-              include: {
-                service: true,
-              },
-            },
+        property: {
+          select: {
+            id: true,
+            name: true,
+            ownerName: true,
+            ownerEmail: true,
+          },
+        },
+        lineItems: {
+          orderBy: { sortOrder: 'asc' },
+        },
+        _count: {
+          select: {
+            lineItems: true,
           },
         },
       },
-      orderBy: { issueDate: 'desc' },
+      orderBy: { invoiceDate: 'desc' },
     })
 
     return NextResponse.json(invoices)
@@ -70,58 +115,56 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validatedData = invoiceSchema.parse(body)
 
-    // Get the job details
-    const job = await prisma.job.findUnique({
-      where: { id: validatedData.jobId },
-      include: {
-        services: true,
-      },
+    // Verify property exists
+    const property = await prisma.property.findUnique({
+      where: { id: validatedData.propertyId },
     })
 
-    if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
     }
 
-    // Check if invoice already exists for this job
-    const existingInvoice = await prisma.invoice.findUnique({
-      where: { jobId: validatedData.jobId },
-    })
+    // Calculate totals
+    const subtotal = validatedData.lineItems.reduce((sum, item) => sum + item.amount, 0)
+    const total = subtotal // No discount by default
 
-    if (existingInvoice) {
-      return NextResponse.json(
-        { error: 'Invoice already exists for this job' },
-        { status: 400 }
-      )
-    }
-
-    const subtotal = job.totalAmount
-    const tax = validatedData.tax
-    const total = subtotal + tax
+    const invoiceNumber = await generateInvoiceNumber()
 
     const invoice = await prisma.invoice.create({
       data: {
-        invoiceNumber: generateInvoiceNumber(),
-        jobId: validatedData.jobId,
+        invoiceNumber,
+        propertyId: validatedData.propertyId,
+        type: validatedData.type,
+        billingPeriod: validatedData.billingPeriod,
+        invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : new Date(),
         dueDate: validatedData.dueDate ? new Date(validatedData.dueDate) : null,
+        paymentTerms: validatedData.paymentTerms,
         subtotal,
-        tax,
+        discount: 0,
         total,
         notes: validatedData.notes,
+        lineItems: {
+          create: validatedData.lineItems.map((item, index) => ({
+            date: item.date ? new Date(item.date) : null,
+            description: item.description,
+            amount: item.amount,
+            jobId: item.jobId,
+            itemType: item.itemType,
+            sortOrder: index,
+          })),
+        },
       },
       include: {
-        job: {
-          include: {
-            property: {
-              include: {
-                owner: true,
-              },
-            },
-            services: {
-              include: {
-                service: true,
-              },
-            },
+        property: {
+          select: {
+            id: true,
+            name: true,
+            ownerName: true,
+            ownerEmail: true,
           },
+        },
+        lineItems: {
+          orderBy: { sortOrder: 'asc' },
         },
       },
     })
@@ -139,7 +182,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
-        { error: 'Validation error', details: error.errors },
+        { error: 'Validation error', details: error.issues },
         { status: 400 }
       )
     }

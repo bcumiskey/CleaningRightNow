@@ -175,24 +175,6 @@ export default function LaundryPage() {
     }
   }
 
-  const handleStatusUpdate = async (record: LaundryRecord, newStatus: string) => {
-    try {
-      const response = await fetch(`/api/laundry/${record.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      })
-
-      if (response.ok) {
-        toast.success('Status updated')
-        fetchRecords()
-      }
-    } catch (error) {
-      console.error('Failed to update status:', error)
-      toast.error('Failed to update status')
-    }
-  }
-
   const openEditModal = (record: LaundryRecord) => {
     setEditingRecord(record)
     setFormData({

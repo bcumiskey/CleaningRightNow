@@ -9,21 +9,24 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User model for authentication
+// ============================================================
+// AUTHENTICATION
+// ============================================================
+
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
-  password       String
-  name           String?
-  businessName   String?
-  businessPhone  String?
-  businessEmail  String?
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  name            String?
+  businessName    String?
+  businessPhone   String?
+  businessEmail   String?
   businessAddress String?
   expensePercentage Float   @default(12.0)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  sessions       Session[]
-  auditLogs      AuditLog[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sessions        Session[]
+  auditLogs       AuditLog[]
 }
 
 model Session {
@@ -34,308 +37,483 @@ model Session {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// Property owner information
-model PropertyOwner {
-  id         String     @id @default(cuid())
-  name       String
-  phone      String?
-  email      String?
-  properties Property[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-}
+// ============================================================
+// CORE MODELS
+// ============================================================
 
-// Property groups for organization
-model PropertyGroup {
-  id         String     @id @default(cuid())
-  name       String
-  color      String?    @default("#3B82F6")
-  properties Property[]
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-}
-
-// Properties (rentals)
 model Property {
-  id              String         @id @default(cuid())
-  name            String
-  address         String
-  squareFootage   Int?
-  baseRate        Float          @default(0)
-  notes           String?
-  ownerId         String?
-  owner           PropertyOwner? @relation(fields: [ownerId], references: [id])
-  groupId         String?
-  group           PropertyGroup? @relation(fields: [groupId], references: [id])
-  active          Boolean        @default(true)
-  jobs            Job[]
-  linens          Linen[]
-  propertySupplies PropertySupply[]
-  photos          PropertyPhoto[]
-  laundryRecords  LaundryRecord[]
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id            String   @id @default(cuid())
+  name          String   @unique
+  address       String
+
+  // Owner Info
+  ownerName     String
+  ownerEmail    String?
+  ownerPhone    String?
+
+  // Rates & Billing
+  baseRate      Float
+  billingType   String   @default("per_job") // "per_job" or "monthly"
+  monthlyBillingDay Int?  // 1, 15, or last day (null if per_job)
+  autoSendInvoice Boolean @default(false)
+
+  // Calendar Integration
+  calendarSource String?  // "turno", "google", "manual"
+  icalUrl        String?  // For Turno iCal import
+
+  // Access
+  accessCode     String?
+  accessNotes    String?
+
+  // Relations
+  jobs                Job[]
+  invoices            Invoice[]
+  linenRequirements   PropertyLinenRequirement[]
+  linenInventory      PropertyLinenInventory[]
+  notes               PropertyNote[]
+  photos              PropertyPhoto[]
+  standingInstructions PropertyInstruction[]
+  replacementLogs     ReplacementLog[]
+  laundryRecords      LaundryRecord[]
+  propertySupplies    PropertySupply[]
+  supplyUsage         SupplyUsage[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
-// Property photos
-model PropertyPhoto {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  url         String
-  description String?
-  category    String?  // e.g., "damage", "reference", "before", "after"
-  createdAt   DateTime @default(now())
-}
-
-// Team members
 model TeamMember {
-  id           String        @id @default(cuid())
-  name         String
-  phone        String?
-  email        String?
-  active       Boolean       @default(true)
+  id        String   @id @default(cuid())
+  name      String
+  email     String?  @unique
+  phone     String?
+  role      String   @default("worker") // "admin" or "worker"
+  isActive  Boolean  @default(true)
+
+  // Auth (if implementing login)
+  passwordHash String?
+
+  // Relations
   jobAssignments JobAssignment[]
-  payments     TeamPayment[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-}
+  notesAdded     PropertyNote[]  @relation("AddedBy")
+  photosAdded    PropertyPhoto[] @relation("PhotoAddedBy")
 
-// Services offered
-model Service {
-  id          String       @id @default(cuid())
-  name        String
-  description String?
-  basePrice   Float        @default(0)
-  active      Boolean      @default(true)
-  jobServices JobService[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-}
-
-// Jobs
-model Job {
-  id               String          @id @default(cuid())
-  propertyId       String
-  property         Property        @relation(fields: [propertyId], references: [id])
-  scheduledDate    DateTime
-  scheduledTime    String?         // e.g., "09:00"
-  completedAt      DateTime?
-  status           JobStatus       @default(SCHEDULED)
-  totalAmount      Float           @default(0)
-  expensePercent   Float           @default(12.0)
-  expenseAmount    Float           @default(0)
-  teamPayoutTotal  Float           @default(0)
-  notes            String?
-  clientPaid       Boolean         @default(false)
-  clientPaidAt     DateTime?
-  teamPaid         Boolean         @default(false)
-  teamPaidAt       DateTime?
-  services         JobService[]
-  teamAssignments  JobAssignment[]
-  supplyUsage      SupplyUsage[]
-  invoice          Invoice?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-}
-
-enum JobStatus {
-  SCHEDULED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
-// Job services (many-to-many with custom price)
-model JobService {
-  id        String  @id @default(cuid())
-  jobId     String
-  job       Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  serviceId String
-  service   Service @relation(fields: [serviceId], references: [id])
-  price     Float
   createdAt DateTime @default(now())
-
-  @@unique([jobId, serviceId])
+  updatedAt DateTime @updatedAt
 }
 
-// Team member assignments to jobs
+// ============================================================
+// JOBS & PAYMENTS
+// ============================================================
+
+model Job {
+  id            String   @id @default(cuid())
+  date          DateTime
+  time          String?  // "9:00 AM"
+
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  rate          Float
+  expensePercent Float   @default(12) // Business expense percentage
+
+  // Status
+  completed     Boolean  @default(false)
+  completedAt   DateTime?
+  clientPaid    Boolean  @default(false)
+  clientPaidAt  DateTime?
+  teamPaid      Boolean  @default(false)
+  teamPaidAt    DateTime?
+
+  // Source tracking
+  source        String   @default("manual") // "manual", "turno", "google"
+  externalId    String?  // ID from external calendar
+
+  // Relations
+  assignments   JobAssignment[]
+  invoiceItems  InvoiceLineItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model JobAssignment {
-  id           String     @id @default(cuid())
-  jobId        String
-  job          Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  teamMemberId String
-  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id])
-  payoutAmount Float      @default(0)
-  paid         Boolean    @default(false)
-  paidAt       DateTime?
-  createdAt    DateTime   @default(now())
+  id            String   @id @default(cuid())
+  jobId         String
+  teamMemberId  String
+
+  // Calculated when job is marked complete
+  amountEarned  Float?
+
+  job           Job        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  teamMember    TeamMember @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, teamMemberId])
 }
 
-// Team payments
-model TeamPayment {
-  id           String     @id @default(cuid())
-  teamMemberId String
-  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id])
-  amount       Float
-  paymentDate  DateTime   @default(now())
-  notes        String?
-  createdAt    DateTime   @default(now())
+// ============================================================
+// INVOICING
+// ============================================================
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique // "INV-2026-001"
+
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id])
+
+  // Billing details
+  type          String   // "per_job" or "monthly"
+  billingPeriod String?  // "January 2026" for monthly
+
+  invoiceDate   DateTime
+  dueDate       DateTime?
+  paymentTerms  String   @default("Due upon receipt")
+
+  // Totals
+  subtotal      Float
+  discount      Float    @default(0)
+  total         Float
+
+  // Status
+  status        String   @default("draft") // "draft", "sent", "paid", "overdue"
+  sentAt        DateTime?
+  paidAt        DateTime?
+
+  // Custom content
+  notes         String?  // Client-visible notes
+
+  // Relations
+  lineItems     InvoiceLineItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
-// Linens per property
-model Linen {
-  id          String      @id @default(cuid())
+model InvoiceLineItem {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  // Item details
+  date          DateTime?
+  description   String
+  amount        Float
+
+  // Link to job (if applicable)
+  jobId         String?
+  job           Job?     @relation(fields: [jobId], references: [id])
+
+  // Type for categorization
+  itemType      String   @default("service") // "service", "supplies", "expense", "misc", "custom"
+
+  sortOrder     Int      @default(0)
+
+  createdAt     DateTime @default(now())
+}
+
+// Saved custom billing items for reuse
+model CustomBillingItem {
+  id          String   @id @default(cuid())
+  name        String
+  category    String   // "service", "supplies", "expense", "other"
+  defaultAmount Float?
+
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// PROPERTY NOTES (Timeline)
+// ============================================================
+
+model PropertyNote {
+  id          String   @id @default(cuid())
   propertyId  String
-  property    Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  type        String      // e.g., "Sheet Set", "Bath Towel", "Hand Towel"
-  quantity    Int         @default(0)
-  condition   LinenCondition @default(GOOD)
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  // Note content
+  type        String   // "issue", "reminder", "owner_request", "info"
+  content     String
+
+  // Status
+  status      String   @default("active") // "active", "resolved"
+  resolvedAt  DateTime?
+
+  // Tracking
+  addedById   String
+  addedBy     TeamMember @relation("AddedBy", fields: [addedById], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Standing instructions (persistent, not timeline)
+model PropertyInstruction {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  instruction String
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+}
+
+// Reference photos
+model PropertyPhoto {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  room        String   // "Master Bedroom", "Kitchen", etc.
+  caption     String?
+  url         String   // Storage URL
+
+  addedById   String
+  addedBy     TeamMember @relation("PhotoAddedBy", fields: [addedById], references: [id])
+
+  sortOrder   Int      @default(0)
+
+  createdAt   DateTime @default(now())
+}
+
+// ============================================================
+// LINEN INVENTORY
+// ============================================================
+
+model LinenCategory {
+  id        String      @id @default(cuid())
+  name      String      @unique // "Sheets", "Bedding", "Pillows", "Towels"
+  sortOrder Int         @default(0)
+  items     LinenItem[]
+}
+
+model LinenItem {
+  id          String   @id @default(cuid())
+  name        String   // "King Top Sheet", "Bath Towel (Big)"
+  code        String   @unique // "K-Top", "Bath-Big"
+  unitCost    Float    @default(0)
+
+  categoryId  String
+  category    LinenCategory @relation(fields: [categoryId], references: [id])
+
+  // Relations
+  requirements   PropertyLinenRequirement[]
+  inventory      PropertyLinenInventory[]
+  vendorProducts VendorProduct[]
+  replacements   ReplacementLog[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Per-flip requirements per property
+model PropertyLinenRequirement {
+  id          String   @id @default(cuid())
+  propertyId  String
+  linenItemId String
+
+  perFlip     Int      @default(0) // Qty needed per turnover
+
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, linenItemId])
+}
+
+// Current inventory on-hand
+model PropertyLinenInventory {
+  id          String   @id @default(cuid())
+  propertyId  String
+  linenItemId String
+
+  onHand      Int      @default(0)
+
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
+
+  updatedAt   DateTime @updatedAt
+
+  @@unique([propertyId, linenItemId])
+}
+
+// ============================================================
+// VENDORS & PURCHASING
+// ============================================================
+
+model Vendor {
+  id        String          @id @default(cuid())
+  name      String          @unique // "Palmetto", "Costco", "Amazon"
+  website   String?
+  notes     String?
+
+  products  VendorProduct[]
+
+  createdAt DateTime @default(now())
+}
+
+model VendorProduct {
+  id          String   @id @default(cuid())
+  vendorId    String
+  linenItemId String
+
+  productName String
+  packSize    Int      @default(1)
+  costPerPack Float
+  link        String?
   notes       String?
-  replacements LinenReplacement[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+
+  vendor      Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
+
+  updatedAt   DateTime @updatedAt
+
+  @@unique([vendorId, linenItemId])
 }
 
-enum LinenCondition {
-  GOOD
-  FAIR
-  DAMAGED
-  NEEDS_REPLACEMENT
+// ============================================================
+// REPLACEMENT & DAMAGE LOG
+// ============================================================
+
+model ReplacementLog {
+  id          String    @id @default(cuid())
+  date        DateTime  @default(now())
+
+  propertyId  String
+  linenItemId String
+
+  quantity    Int
+  unitCost    Float
+  totalCost   Float
+  reason      String    // "Stained", "Torn", "Lost", "Worn out"
+
+  replaced    Boolean   @default(false)
+  replacedAt  DateTime?
+  notes       String?
+
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
 }
 
-// Linen replacement history
-model LinenReplacement {
-  id         String   @id @default(cuid())
-  linenId    String
-  linen      Linen    @relation(fields: [linenId], references: [id], onDelete: Cascade)
-  quantity   Int
-  reason     String?
-  cost       Float?
-  replacedAt DateTime @default(now())
-  createdAt  DateTime @default(now())
+// ============================================================
+// LAUNDRY TRACKING
+// ============================================================
+
+model LaundryProvider {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  contactInfo String?
+  notes       String?
+
+  records     LaundryRecord[]
+
+  createdAt   DateTime @default(now())
 }
 
-// General supplies inventory
+model LaundryRecord {
+  id            String   @id @default(cuid())
+  providerId    String?
+  propertyId    String
+
+  dropOffDate   DateTime
+  pickupDate    DateTime?
+
+  status        String   @default("DROPPED_OFF") // "DROPPED_OFF", "READY_FOR_PICKUP", "PICKED_UP", "DELIVERED"
+  cost          Float?
+  items         String?
+  notes         String?
+
+  provider      LaundryProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  property      Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================
+// SUPPLIES TRACKING
+// ============================================================
+
 model Supply {
-  id            String          @id @default(cuid())
-  name          String
-  description   String?
-  unit          String          @default("unit") // e.g., "bottle", "pack", "roll"
-  quantity      Float           @default(0)
-  costPerUnit   Float           @default(0)
-  lowStockThreshold Float       @default(5)
-  category      String?         // e.g., "Cleaning", "Paper Goods"
-  restocks      SupplyRestock[]
-  usage         SupplyUsage[]
-  propertyStocks PropertySupply[]
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String?
+  unit              String   @default("unit") // "unit", "bottle", "box", etc.
+  quantity          Float    @default(0)
+  costPerUnit       Float    @default(0)
+  lowStockThreshold Float    @default(5)
+  category          String?
+
+  restocks          SupplyRestock[]
+  usage             SupplyUsage[]
+  propertySupplies  PropertySupply[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
-// Supplies stored at specific properties
 model PropertySupply {
-  id         String   @id @default(cuid())
-  propertyId String
-  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  supplyId   String
-  supply     Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
-  quantity   Float    @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  propertyId  String
+  supplyId    String
+
+  currentStock Float   @default(0)
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  updatedAt   DateTime @updatedAt
 
   @@unique([propertyId, supplyId])
 }
 
-// Supply restock history
 model SupplyRestock {
-  id          String   @id @default(cuid())
-  supplyId    String
-  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
-  quantity    Float
-  totalCost   Float?
-  restockedAt DateTime @default(now())
-  notes       String?
-  createdAt   DateTime @default(now())
-}
-
-// Supply usage per job
-model SupplyUsage {
   id        String   @id @default(cuid())
-  jobId     String
-  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   supplyId  String
-  supply    Supply   @relation(fields: [supplyId], references: [id])
+
   quantity  Float
+  cost      Float    @default(0)
+  notes     String?
+
+  supply    Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
 }
 
-// Laundry service provider
-model LaundryProvider {
-  id            String          @id @default(cuid())
-  name          String
-  phone         String?
-  email         String?
-  address       String?
-  notes         String?
-  active        Boolean         @default(true)
-  laundryRecords LaundryRecord[]
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+model SupplyUsage {
+  id          String   @id @default(cuid())
+  propertyId  String
+  supplyId    String
+  jobId       String?
+
+  quantity    Float
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  supply      Supply   @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
 }
 
-// Laundry records
-model LaundryRecord {
-  id           String           @id @default(cuid())
-  propertyId   String
-  property     Property         @relation(fields: [propertyId], references: [id])
-  providerId   String?
-  provider     LaundryProvider? @relation(fields: [providerId], references: [id])
-  dropOffDate  DateTime
-  pickupDate   DateTime?
-  status       LaundryStatus    @default(DROPPED_OFF)
-  cost         Float?
-  items        String?          // Description of items
-  notes        String?
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+// ============================================================
+// SERVICES
+// ============================================================
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  basePrice   Float    @default(0)
+  active      Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
-enum LaundryStatus {
-  DROPPED_OFF
-  READY_FOR_PICKUP
-  PICKED_UP
-  DELIVERED
-}
-
-// Invoices
-model Invoice {
-  id            String        @id @default(cuid())
-  invoiceNumber String        @unique
-  jobId         String        @unique
-  job           Job           @relation(fields: [jobId], references: [id])
-  issueDate     DateTime      @default(now())
-  dueDate       DateTime?
-  subtotal      Float
-  tax           Float         @default(0)
-  total         Float
-  status        InvoiceStatus @default(UNPAID)
-  paidAt        DateTime?
-  notes         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-}
-
-enum InvoiceStatus {
-  DRAFT
-  SENT
-  UNPAID
-  PAID
-  OVERDUE
-  CANCELLED
-}
+// ============================================================
+// SYSTEM
+// ============================================================
 
 // Audit log for tracking all changes
 model AuditLog {

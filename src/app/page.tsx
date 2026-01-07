@@ -10,10 +10,9 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import EmptyState from '@/components/ui/EmptyState'
-import { formatCurrency, formatDate, formatTime } from '@/lib/utils'
+import { formatCurrency, formatDate, calculateJobPayment } from '@/lib/utils'
 import {
   DollarSign,
-  TrendingUp,
   Clock,
   Users,
   AlertTriangle,
@@ -22,72 +21,102 @@ import {
   ArrowRight,
   Plus,
   Home,
-  CheckCircle2,
   Loader2,
+  FileText,
+  AlertCircle,
+  Bell,
+  User,
+  Info,
+  Package,
 } from 'lucide-react'
 import Link from 'next/link'
 
 interface DashboardData {
   todayJobs: Array<{
     id: string
-    scheduledDate: string
-    scheduledTime?: string
-    status: string
-    totalAmount: number
+    date: string
+    time?: string
+    rate: number
+    expensePercent: number
+    completed: boolean
+    source: string
     property: {
+      id: string
       name: string
       address: string
+      calendarSource?: string
     }
-    teamAssignments: Array<{
+    assignments: Array<{
       teamMember: {
+        id: string
         name: string
       }
-    }>
-    services: Array<{
-      service: {
-        name: string
-      }
-      price: number
+      amountEarned?: number
     }>
   }>
   upcomingJobs: Array<{
     id: string
-    scheduledDate: string
-    scheduledTime?: string
-    status: string
+    date: string
+    time?: string
     property: {
+      id: string
       name: string
+      calendarSource?: string
     }
-    teamAssignments: Array<{
+    assignments: Array<{
       teamMember: {
+        id: string
         name: string
       }
     }>
   }>
   metrics: {
-    totalRevenue: number
-    totalExpenses: number
-    pendingPayments: number
+    monthlyRevenue: number
+    monthlyExpenses: number
+    pendingFromClients: number
     owedToTeam: number
+    draftInvoicesCount: number
+    lowStockCount: number
     todayJobsCount: number
     upcomingJobsCount: number
-    lowStockItemsCount: number
     completedJobsThisMonth: number
+    activeNotesCount: number
+    notesResolvedThisWeek: number
   }
-  lowStockItems: Array<{
+  propertyAlerts: Array<{
+    property: { id: string; name: string }
+    notes: Array<{
+      id: string
+      type: string
+      content: string
+      createdAt: string
+    }>
+  }>
+  teamBalances: Array<{
     id: string
     name: string
-    quantity: number
-    lowStockThreshold: number
-    unit: string
+    owed: number
   }>
-  recentActivity: Array<{
-    id: string
-    action: string
-    entityType: string
-    description?: string
-    createdAt: string
-  }>
+}
+
+const sourceColors: Record<string, string> = {
+  turno: 'bg-purple-100 text-purple-800',
+  google: 'bg-green-100 text-green-800',
+  manual: 'bg-gray-100 text-gray-800',
+}
+
+const noteTypeIcons: Record<string, typeof AlertCircle> = {
+  issue: AlertCircle,
+  reminder: Bell,
+  owner_request: User,
+  info: Info,
+}
+
+const noteTypeColors: Record<string, string> = {
+  issue: 'text-red-600',
+  reminder: 'text-amber-600',
+  owner_request: 'text-purple-600',
+  info: 'text-blue-600',
 }
 
 export default function DashboardPage() {
@@ -129,17 +158,11 @@ export default function DashboardPage() {
     return null
   }
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'default' | 'success' | 'warning' | 'info'> = {
-      SCHEDULED: 'info',
-      IN_PROGRESS: 'warning',
-      COMPLETED: 'success',
-      CANCELLED: 'default',
-    }
+  const getSourceBadge = (source: string) => {
     return (
-      <Badge variant={variants[status] || 'default'}>
-        {status.replace('_', ' ')}
-      </Badge>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${sourceColors[source] || sourceColors.manual}`}>
+        {source}
+      </span>
     )
   }
 
@@ -183,22 +206,16 @@ export default function DashboardPage() {
         )}
 
         {/* Stats Grid */}
-        <div className="grid-cols-stats mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
           <StatCard
-            title="Revenue This Month"
-            value={formatCurrency(data?.metrics.totalRevenue || 0)}
+            title="Monthly Revenue"
+            value={formatCurrency(data?.metrics.monthlyRevenue || 0)}
             icon={DollarSign}
             iconColor="text-green-600 bg-green-100"
           />
           <StatCard
-            title="Business Expenses"
-            value={formatCurrency(data?.metrics.totalExpenses || 0)}
-            icon={TrendingUp}
-            iconColor="text-blue-600 bg-blue-100"
-          />
-          <StatCard
-            title="Pending Payments"
-            value={formatCurrency(data?.metrics.pendingPayments || 0)}
+            title="Pending from Clients"
+            value={formatCurrency(data?.metrics.pendingFromClients || 0)}
             icon={Clock}
             iconColor="text-yellow-600 bg-yellow-100"
           />
@@ -208,11 +225,27 @@ export default function DashboardPage() {
             icon={Users}
             iconColor="text-purple-600 bg-purple-100"
           />
+          <Link href="/invoices?status=draft">
+            <StatCard
+              title="Draft Invoices"
+              value={String(data?.metrics.draftInvoicesCount || 0)}
+              icon={FileText}
+              iconColor="text-blue-600 bg-blue-100"
+            />
+          </Link>
+          <Link href="/linens">
+            <StatCard
+              title="Low Stock Items"
+              value={String(data?.metrics.lowStockCount || 0)}
+              icon={Package}
+              iconColor="text-red-600 bg-red-100"
+            />
+          </Link>
         </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Today's Jobs */}
+          {/* Today's Jobs Panel */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
@@ -229,50 +262,58 @@ export default function DashboardPage() {
                     <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
                   </div>
                 ) : data?.todayJobs && data.todayJobs.length > 0 ? (
-                  <div className="space-y-4">
-                    {data.todayJobs.map((job) => (
-                      <Link
-                        key={job.id}
-                        href={`/jobs/${job.id}`}
-                        className="block p-4 rounded-lg border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h4 className="font-medium text-gray-900 truncate">
-                                {job.property.name}
-                              </h4>
-                              {getStatusBadge(job.status)}
+                  <div className="space-y-3">
+                    {data.todayJobs.map((job) => {
+                      const payment = calculateJobPayment(job.rate, job.expensePercent, job.assignments.length)
+                      return (
+                        <Link
+                          key={job.id}
+                          href={`/jobs`}
+                          className="block p-4 rounded-lg border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-medium text-gray-900 truncate">
+                                  {job.property.name}
+                                </h4>
+                                {getSourceBadge(job.source)}
+                                {job.completed && (
+                                  <Badge variant="success">Completed</Badge>
+                                )}
+                              </div>
+                              <p className="text-sm text-gray-500 truncate">
+                                {job.property.address}
+                              </p>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                                {job.time && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="w-4 h-4" />
+                                    {job.time}
+                                  </span>
+                                )}
+                                {job.assignments.length > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Users className="w-4 h-4" />
+                                    {job.assignments.map((a) => a.teamMember.name).join(', ')}
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                            <p className="text-sm text-gray-500 truncate">
-                              {job.property.address}
-                            </p>
-                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
-                              {job.scheduledTime && (
-                                <span className="flex items-center gap-1">
-                                  <Clock className="w-4 h-4" />
-                                  {formatTime(job.scheduledTime)}
-                                </span>
-                              )}
-                              {job.teamAssignments.length > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <Users className="w-4 h-4" />
-                                  {job.teamAssignments.map((a) => a.teamMember.name).join(', ')}
-                                </span>
+                            <div className="text-right">
+                              <p className="font-semibold text-gray-900">
+                                {formatCurrency(job.rate)}
+                              </p>
+                              {job.assignments.length > 0 && (
+                                <p className="text-xs text-gray-500">
+                                  {formatCurrency(payment.perPersonPayout)}/person
+                                </p>
                               )}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-gray-900">
-                              {formatCurrency(job.totalAmount)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {job.services.map((s) => s.service.name).join(', ')}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
+                        </Link>
+                      )
+                    })}
                   </div>
                 ) : (
                   <EmptyState
@@ -291,6 +332,47 @@ export default function DashboardPage() {
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Team Balances Panel */}
+            {data?.teamBalances && data.teamBalances.length > 0 && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle>Team Balances</CardTitle>
+                  <Link href="/team">
+                    <Button variant="ghost" size="sm">
+                      Pay All
+                    </Button>
+                  </Link>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {data.teamBalances.map((member) => (
+                      <div
+                        key={member.id}
+                        className="flex items-center justify-between p-3 rounded-lg border border-gray-100"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                            <span className="text-sm font-medium text-indigo-700">
+                              {member.name.charAt(0)}
+                            </span>
+                          </div>
+                          <span className="font-medium text-gray-900">{member.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-gray-900">
+                            {formatCurrency(member.owed)}
+                          </span>
+                          <Link href={`/team`}>
+                            <Button variant="outline" size="sm">Pay</Button>
+                          </Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Quick Actions */}
             <Card>
               <CardHeader>
@@ -298,13 +380,13 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <Link href="/jobs?action=new" className="block">
+                  <Link href="/jobs" className="block">
                     <Button variant="outline" className="w-full justify-start">
                       <Plus className="w-4 h-4 mr-2" />
                       New Job
                     </Button>
                   </Link>
-                  <Link href="/properties?action=new" className="block">
+                  <Link href="/properties" className="block">
                     <Button variant="outline" className="w-full justify-start">
                       <Home className="w-4 h-4 mr-2" />
                       Add Property
@@ -332,15 +414,18 @@ export default function DashboardPage() {
                     {data.upcomingJobs.slice(0, 5).map((job) => (
                       <Link
                         key={job.id}
-                        href={`/jobs/${job.id}`}
+                        href={`/jobs`}
                         className="block p-3 rounded-lg border border-gray-100 hover:border-indigo-200 transition-colors"
                       >
-                        <p className="font-medium text-gray-900 text-sm truncate">
-                          {job.property.name}
-                        </p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-gray-900 text-sm truncate">
+                            {job.property.name}
+                          </p>
+                          {job.property.calendarSource && getSourceBadge(job.property.calendarSource)}
+                        </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          {formatDate(job.scheduledDate)}
-                          {job.scheduledTime && ` at ${formatTime(job.scheduledTime)}`}
+                          {formatDate(job.date)}
+                          {job.time && ` at ${job.time}`}
                         </p>
                       </Link>
                     ))}
@@ -352,62 +437,46 @@ export default function DashboardPage() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Low Stock Alert */}
-            {data?.lowStockItems && data.lowStockItems.length > 0 && (
-              <Card className="border-yellow-200 bg-yellow-50/50">
-                <CardHeader className="flex flex-row items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-yellow-600" />
-                  <CardTitle className="text-yellow-800">Low Stock Alert</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {data.lowStockItems.slice(0, 5).map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between text-sm"
-                      >
-                        <span className="text-gray-700">{item.name}</span>
-                        <span className="text-yellow-700 font-medium">
-                          {item.quantity} {item.unit}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <Link href="/supplies" className="block mt-4">
-                    <Button variant="outline" size="sm" className="w-full">
-                      View Inventory
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            )}
           </div>
         </div>
 
-        {/* Recent Activity */}
-        {data?.recentActivity && data.recentActivity.length > 0 && (
+        {/* Property Alerts Panel */}
+        {data?.propertyAlerts && data.propertyAlerts.length > 0 && (
           <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+                Property Alerts
+              </CardTitle>
+              <Link href="/notes">
+                <Button variant="ghost" size="sm">
+                  View All <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {data.recentActivity.map((activity) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {data.propertyAlerts.slice(0, 6).map((alert) => (
                   <div
-                    key={activity.id}
-                    className="flex items-center gap-3 text-sm"
+                    key={alert.property.id}
+                    className="p-4 rounded-lg border border-gray-100 hover:border-indigo-200 transition-colors"
                   >
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                      <CheckCircle2 className="w-4 h-4 text-indigo-600" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-gray-900">
-                        {activity.description || `${activity.action} ${activity.entityType}`}
-                      </p>
-                      <p className="text-gray-500 text-xs">
-                        {formatDate(activity.createdAt)}
-                      </p>
+                    <h4 className="font-medium text-gray-900 mb-2">{alert.property.name}</h4>
+                    <div className="space-y-2">
+                      {alert.notes.slice(0, 2).map((note) => {
+                        const IconComponent = noteTypeIcons[note.type] || Info
+                        return (
+                          <div key={note.id} className="flex items-start gap-2 text-sm">
+                            <IconComponent className={`w-4 h-4 mt-0.5 ${noteTypeColors[note.type] || 'text-gray-600'}`} />
+                            <span className="text-gray-600 line-clamp-2">{note.content}</span>
+                          </div>
+                        )
+                      })}
+                      {alert.notes.length > 2 && (
+                        <p className="text-xs text-gray-500">
+                          +{alert.notes.length - 2} more notes
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}
