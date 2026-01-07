@@ -8,12 +8,17 @@ import { z } from 'zod'
 const propertySchema = z.object({
   name: z.string().min(1, 'Name is required'),
   address: z.string().min(1, 'Address is required'),
-  squareFootage: z.number().optional().nullable(),
-  baseRate: z.number().min(0).default(0),
-  notes: z.string().optional().nullable(),
-  ownerId: z.string().optional().nullable(),
-  groupId: z.string().optional().nullable(),
-  active: z.boolean().default(true),
+  ownerName: z.string().min(1, 'Owner name is required'),
+  ownerEmail: z.string().email().optional().nullable(),
+  ownerPhone: z.string().optional().nullable(),
+  baseRate: z.number().min(0),
+  billingType: z.enum(['per_job', 'monthly']).default('per_job'),
+  monthlyBillingDay: z.number().min(1).max(31).optional().nullable(),
+  autoSendInvoice: z.boolean().default(false),
+  calendarSource: z.string().optional().nullable(),
+  icalUrl: z.string().url().optional().nullable(),
+  accessCode: z.string().optional().nullable(),
+  accessNotes: z.string().optional().nullable(),
 })
 
 export async function GET(request: NextRequest) {
@@ -25,8 +30,7 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get('search')
-    const groupId = searchParams.get('groupId')
-    const active = searchParams.get('active')
+    const billingType = searchParams.get('billingType')
 
     const where: Record<string, unknown> = {}
 
@@ -34,29 +38,30 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
         { address: { contains: search, mode: 'insensitive' } },
+        { ownerName: { contains: search, mode: 'insensitive' } },
       ]
     }
 
-    if (groupId) {
-      where.groupId = groupId
-    }
-
-    if (active !== null && active !== 'all') {
-      where.active = active === 'true'
+    if (billingType && billingType !== 'all') {
+      where.billingType = billingType
     }
 
     const properties = await prisma.property.findMany({
       where,
       include: {
-        owner: true,
-        group: true,
         _count: {
           select: {
             jobs: true,
-            linens: true,
-            propertySupplies: true,
+            invoices: true,
+            notes: { where: { status: 'active' } },
             photos: true,
+            linenRequirements: true,
           },
+        },
+        notes: {
+          where: { status: 'active' },
+          take: 3,
+          orderBy: { createdAt: 'desc' },
         },
       },
       orderBy: { name: 'asc' },
@@ -84,10 +89,6 @@ export async function POST(request: NextRequest) {
 
     const property = await prisma.property.create({
       data: validatedData,
-      include: {
-        owner: true,
-        group: true,
-      },
     })
 
     await createAuditLog({

@@ -9,7 +9,9 @@ const teamMemberSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   phone: z.string().optional().nullable(),
   email: z.string().email().optional().nullable(),
-  active: z.boolean().default(true),
+  role: z.enum(['admin', 'worker']).default('worker'),
+  isActive: z.boolean().default(true),
+  passwordHash: z.string().optional().nullable(),
 })
 
 export async function GET() {
@@ -23,32 +25,35 @@ export async function GET() {
       include: {
         jobAssignments: {
           where: {
-            paid: false,
             job: {
-              status: 'COMPLETED',
+              completed: true,
+              teamPaid: false,
             },
           },
           select: {
-            payoutAmount: true,
+            amountEarned: true,
           },
         },
         _count: {
           select: {
             jobAssignments: true,
-            payments: true,
           },
         },
       },
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { isActive: 'desc' },
+        { name: 'asc' },
+      ],
     })
 
     // Calculate owed amounts
     const membersWithOwed = teamMembers.map((member) => ({
       ...member,
       owedAmount: member.jobAssignments.reduce(
-        (sum, assignment) => sum + assignment.payoutAmount,
+        (sum, assignment) => sum + (assignment.amountEarned || 0),
         0
       ),
+      passwordHash: undefined, // Don't expose password hash
     }))
 
     return NextResponse.json(membersWithOwed)
@@ -80,11 +85,11 @@ export async function POST(request: NextRequest) {
       action: 'CREATE',
       entityType: 'TeamMember',
       entityId: teamMember.id,
-      newValues: teamMember,
+      newValues: { ...teamMember, passwordHash: undefined },
       description: generateDescription('CREATE', 'Team Member', teamMember.name),
     })
 
-    return NextResponse.json(teamMember, { status: 201 })
+    return NextResponse.json({ ...teamMember, passwordHash: undefined }, { status: 201 })
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

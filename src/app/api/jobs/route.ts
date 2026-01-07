@@ -8,18 +8,12 @@ import { z } from 'zod'
 
 const jobSchema = z.object({
   propertyId: z.string().min(1, 'Property is required'),
-  scheduledDate: z.string().min(1, 'Date is required'),
-  scheduledTime: z.string().optional().nullable(),
-  status: z.enum(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).default('SCHEDULED'),
-  totalAmount: z.number().min(0).default(0),
+  date: z.string().min(1, 'Date is required'),
+  time: z.string().optional().nullable(),
+  rate: z.number().min(0),
   expensePercent: z.number().min(0).max(100).default(12),
-  notes: z.string().optional().nullable(),
-  clientPaid: z.boolean().default(false),
-  teamPaid: z.boolean().default(false),
-  services: z.array(z.object({
-    serviceId: z.string(),
-    price: z.number(),
-  })).default([]),
+  source: z.enum(['manual', 'turno', 'google']).default('manual'),
+  externalId: z.string().optional().nullable(),
   teamMemberIds: z.array(z.string()).default([]),
 })
 
@@ -32,9 +26,13 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams
     const propertyId = searchParams.get('propertyId')
-    const status = searchParams.get('status')
+    const completed = searchParams.get('completed')
+    const clientPaid = searchParams.get('clientPaid')
+    const teamPaid = searchParams.get('teamPaid')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const month = searchParams.get('month') // Format: "2026-01"
+    const source = searchParams.get('source')
 
     const where: Record<string, unknown> = {}
 
@@ -42,17 +40,37 @@ export async function GET(request: NextRequest) {
       where.propertyId = propertyId
     }
 
-    if (status && status !== 'all') {
-      where.status = status
+    if (completed !== null && completed !== 'all') {
+      where.completed = completed === 'true'
     }
 
-    if (startDate || endDate) {
-      where.scheduledDate = {}
+    if (clientPaid !== null && clientPaid !== 'all') {
+      where.clientPaid = clientPaid === 'true'
+    }
+
+    if (teamPaid !== null && teamPaid !== 'all') {
+      where.teamPaid = teamPaid === 'true'
+    }
+
+    if (source && source !== 'all') {
+      where.source = source
+    }
+
+    if (month) {
+      const [year, monthNum] = month.split('-').map(Number)
+      const startOfMonth = new Date(year, monthNum - 1, 1)
+      const endOfMonth = new Date(year, monthNum, 0, 23, 59, 59)
+      where.date = {
+        gte: startOfMonth,
+        lte: endOfMonth,
+      }
+    } else if (startDate || endDate) {
+      where.date = {}
       if (startDate) {
-        (where.scheduledDate as Record<string, Date>).gte = new Date(startDate)
+        (where.date as Record<string, Date>).gte = new Date(startDate)
       }
       if (endDate) {
-        (where.scheduledDate as Record<string, Date>).lte = new Date(endDate)
+        (where.date as Record<string, Date>).lte = new Date(endDate)
       }
     }
 
@@ -60,22 +78,24 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         property: {
-          include: {
-            owner: true,
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            ownerName: true,
+            ownerPhone: true,
+            calendarSource: true,
           },
         },
-        services: {
+        assignments: {
           include: {
-            service: true,
-          },
-        },
-        teamAssignments: {
-          include: {
-            teamMember: true,
+            teamMember: {
+              select: { id: true, name: true, email: true },
+            },
           },
         },
       },
-      orderBy: { scheduledDate: 'desc' },
+      orderBy: { date: 'desc' },
     })
 
     return NextResponse.json(jobs)
@@ -100,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate payment breakdown
     const payment = calculateJobPayment(
-      validatedData.totalAmount,
+      validatedData.rate,
       validatedData.expensePercent,
       validatedData.teamMemberIds.length
     )
@@ -108,39 +128,32 @@ export async function POST(request: NextRequest) {
     const job = await prisma.job.create({
       data: {
         propertyId: validatedData.propertyId,
-        scheduledDate: new Date(validatedData.scheduledDate),
-        scheduledTime: validatedData.scheduledTime,
-        status: validatedData.status,
-        totalAmount: validatedData.totalAmount,
+        date: new Date(validatedData.date),
+        time: validatedData.time,
+        rate: validatedData.rate,
         expensePercent: validatedData.expensePercent,
-        expenseAmount: payment.expenseAmount,
-        teamPayoutTotal: payment.teamPayoutTotal,
-        notes: validatedData.notes,
-        clientPaid: validatedData.clientPaid,
-        teamPaid: validatedData.teamPaid,
-        services: {
-          create: validatedData.services.map((s) => ({
-            serviceId: s.serviceId,
-            price: s.price,
-          })),
-        },
-        teamAssignments: {
+        source: validatedData.source,
+        externalId: validatedData.externalId,
+        assignments: {
           create: validatedData.teamMemberIds.map((teamMemberId) => ({
             teamMemberId,
-            payoutAmount: payment.perPersonPayout,
+            amountEarned: payment.perPersonPayout,
           })),
         },
       },
       include: {
-        property: true,
-        services: {
-          include: {
-            service: true,
+        property: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
           },
         },
-        teamAssignments: {
+        assignments: {
           include: {
-            teamMember: true,
+            teamMember: {
+              select: { id: true, name: true },
+            },
           },
         },
       },

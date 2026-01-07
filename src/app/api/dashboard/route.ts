@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { startOfDay, endOfDay, startOfMonth, endOfMonth, addDays } from 'date-fns'
+import { startOfDay, endOfDay, startOfMonth, endOfMonth, addDays, startOfWeek, endOfWeek } from 'date-fns'
 
 export async function GET() {
   try {
@@ -16,63 +16,76 @@ export async function GET() {
     const endOfToday = endOfDay(today)
     const startOfThisMonth = startOfMonth(today)
     const endOfThisMonth = endOfMonth(today)
+    const startOfThisWeek = startOfWeek(today)
+    const endOfThisWeek = endOfWeek(today)
     const nextWeek = addDays(today, 7)
 
     // Get today's jobs
     const todayJobs = await prisma.job.findMany({
       where: {
-        scheduledDate: {
+        date: {
           gte: startOfToday,
           lte: endOfToday,
         },
       },
       include: {
-        property: true,
-        teamAssignments: {
-          include: {
-            teamMember: true,
+        property: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            calendarSource: true,
           },
         },
-        services: {
+        assignments: {
           include: {
-            service: true,
+            teamMember: {
+              select: { id: true, name: true },
+            },
           },
         },
       },
-      orderBy: {
-        scheduledTime: 'asc',
-      },
+      orderBy: [
+        { time: 'asc' },
+        { property: { name: 'asc' } },
+      ],
     })
 
     // Get upcoming jobs (next 7 days)
     const upcomingJobs = await prisma.job.findMany({
       where: {
-        scheduledDate: {
+        date: {
           gt: endOfToday,
           lte: nextWeek,
         },
-        status: {
-          in: ['SCHEDULED', 'IN_PROGRESS'],
-        },
+        completed: false,
       },
       include: {
-        property: true,
-        teamAssignments: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            calendarSource: true,
+          },
+        },
+        assignments: {
           include: {
-            teamMember: true,
+            teamMember: {
+              select: { id: true, name: true },
+            },
           },
         },
       },
       orderBy: {
-        scheduledDate: 'asc',
+        date: 'asc',
       },
       take: 10,
     })
 
-    // Calculate financial metrics
+    // Calculate monthly revenue (completed jobs this month)
     const completedJobsThisMonth = await prisma.job.findMany({
       where: {
-        status: 'COMPLETED',
+        completed: true,
         completedAt: {
           gte: startOfThisMonth,
           lte: endOfThisMonth,
@@ -80,72 +93,155 @@ export async function GET() {
       },
     })
 
-    const totalRevenue = completedJobsThisMonth.reduce(
-      (sum, job) => sum + job.totalAmount,
+    const monthlyRevenue = completedJobsThisMonth.reduce(
+      (sum, job) => sum + job.rate,
       0
     )
 
-    const totalExpenses = completedJobsThisMonth.reduce(
-      (sum, job) => sum + job.expenseAmount,
+    const monthlyExpenses = completedJobsThisMonth.reduce(
+      (sum, job) => sum + (job.rate * job.expensePercent / 100),
       0
     )
 
-    // Pending payments (completed but not paid by client)
-    const pendingPayments = await prisma.job.aggregate({
+    // Pending from clients (sent invoices unpaid)
+    const pendingFromClients = await prisma.invoice.aggregate({
       where: {
-        status: 'COMPLETED',
-        clientPaid: false,
+        status: 'sent',
       },
       _sum: {
-        totalAmount: true,
+        total: true,
       },
     })
 
     // Owed to team (completed but team not paid)
     const owedToTeam = await prisma.jobAssignment.aggregate({
       where: {
-        paid: false,
         job: {
-          status: 'COMPLETED',
+          completed: true,
+          teamPaid: false,
         },
       },
       _sum: {
-        payoutAmount: true,
+        amountEarned: true,
       },
     })
 
-    // Low stock supplies
-    const lowStockItems = await prisma.supply.findMany({
+    // Draft invoices count
+    const draftInvoicesCount = await prisma.invoice.count({
       where: {
-        quantity: {
-          lte: prisma.supply.fields.lowStockThreshold,
+        status: 'draft',
+      },
+    })
+
+    // Low stock items (items below 2x target)
+    const allProperties = await prisma.property.findMany({
+      include: {
+        linenRequirements: true,
+        linenInventory: true,
+      },
+    })
+
+    let lowStockCount = 0
+    for (const property of allProperties) {
+      for (const requirement of property.linenRequirements) {
+        const target = requirement.perFlip * 2
+        const inventory = property.linenInventory.find(
+          (inv) => inv.linenItemId === requirement.linenItemId
+        )
+        const onHand = inventory?.onHand || 0
+        if (onHand < target) {
+          lowStockCount++
+        }
+      }
+    }
+
+    // Active notes grouped by property
+    const activeNotes = await prisma.propertyNote.findMany({
+      where: {
+        status: 'active',
+      },
+      include: {
+        property: {
+          select: { id: true, name: true },
+        },
+        addedBy: {
+          select: { id: true, name: true },
         },
       },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     })
 
-    // Recent activity (audit logs)
-    const recentActivity = await prisma.auditLog.findMany({
-      orderBy: {
-        createdAt: 'desc',
+    // Group notes by property
+    const notesByProperty = activeNotes.reduce((acc, note) => {
+      const key = note.property.id
+      if (!acc[key]) {
+        acc[key] = {
+          property: note.property,
+          notes: [],
+        }
+      }
+      acc[key].notes.push(note)
+      return acc
+    }, {} as Record<string, { property: { id: string; name: string }; notes: typeof activeNotes }>)
+
+    // Team balances
+    const teamMembers = await prisma.teamMember.findMany({
+      where: { isActive: true },
+      include: {
+        jobAssignments: {
+          where: {
+            job: {
+              completed: true,
+              teamPaid: false,
+            },
+          },
+          select: {
+            amountEarned: true,
+          },
+        },
       },
-      take: 10,
+      orderBy: { name: 'asc' },
+    })
+
+    const teamBalances = teamMembers.map((member) => ({
+      id: member.id,
+      name: member.name,
+      owed: member.jobAssignments.reduce(
+        (sum, a) => sum + (a.amountEarned || 0),
+        0
+      ),
+    })).filter((m) => m.owed > 0)
+
+    // Notes resolved this week
+    const notesResolvedThisWeek = await prisma.propertyNote.count({
+      where: {
+        status: 'resolved',
+        resolvedAt: {
+          gte: startOfThisWeek,
+          lte: endOfThisWeek,
+        },
+      },
     })
 
     return NextResponse.json({
       todayJobs,
       upcomingJobs,
       metrics: {
-        totalRevenue,
-        totalExpenses,
-        pendingPayments: pendingPayments._sum.totalAmount || 0,
-        owedToTeam: owedToTeam._sum.payoutAmount || 0,
+        monthlyRevenue,
+        monthlyExpenses,
+        pendingFromClients: pendingFromClients._sum.total || 0,
+        owedToTeam: owedToTeam._sum.amountEarned || 0,
+        draftInvoicesCount,
+        lowStockCount,
         todayJobsCount: todayJobs.length,
         upcomingJobsCount: upcomingJobs.length,
-        lowStockItemsCount: lowStockItems.length,
         completedJobsThisMonth: completedJobsThisMonth.length,
+        activeNotesCount: activeNotes.length,
+        notesResolvedThisWeek,
       },
-      lowStockItems,
-      recentActivity,
+      propertyAlerts: Object.values(notesByProperty),
+      teamBalances,
     })
   } catch (error) {
     console.error('Dashboard API error:', error)

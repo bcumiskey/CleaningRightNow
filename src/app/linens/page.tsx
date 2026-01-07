@@ -1,45 +1,47 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
-import { Card, CardContent } from '@/components/ui/Card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
-import Modal, { ModalFooter } from '@/components/ui/Modal'
-import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
+import StatCard from '@/components/ui/StatCard'
+import { formatCurrency } from '@/lib/utils'
 import {
-  Shirt,
-  Plus,
-  Search,
-  Edit,
-  Trash2,
+  Package,
   Loader2,
   AlertTriangle,
+  CheckCircle,
+  ShoppingCart,
   Home,
+  Minus,
+  Plus,
+  Save,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-interface Linen {
+interface LinenCategory {
   id: string
-  propertyId: string
-  type: string
-  quantity: number
-  condition: string
-  notes?: string
-  property: {
-    id: string
-    name: string
-  }
-  replacements: Array<{
-    id: string
-    quantity: number
-    reason?: string
-    replacedAt: string
-  }>
+  name: string
+  sortOrder: number
+  items: LinenItem[]
+}
+
+interface LinenItem {
+  id: string
+  name: string
+  code: string
+  unitCost: number
+  perFlip: number
+  target: number
+  onHand: number
+  status: 'ok' | 'low' | 'not-required'
+  deficit: number
 }
 
 interface Property {
@@ -47,74 +49,57 @@ interface Property {
   name: string
 }
 
-interface LinenFormData {
-  propertyId: string
-  type: string
-  quantity: string
-  condition: string
-  notes: string
+interface ShoppingListItem {
+  linenItem: {
+    id: string
+    name: string
+    code: string
+    unitCost: number
+    category: string
+  }
+  totalNeeded: number
+  totalCost: number
+  properties: Array<{
+    property: { id: string; name: string }
+    needed: number
+  }>
 }
 
-const LINEN_TYPES = [
-  'Sheet Set (King)',
-  'Sheet Set (Queen)',
-  'Sheet Set (Full)',
-  'Sheet Set (Twin)',
-  'Bath Towel',
-  'Hand Towel',
-  'Washcloth',
-  'Bath Mat',
-  'Kitchen Towel',
-  'Pillow Case',
-  'Duvet Cover',
-  'Blanket',
-  'Other',
-]
-
-const CONDITIONS = [
-  { value: 'GOOD', label: 'Good' },
-  { value: 'FAIR', label: 'Fair' },
-  { value: 'DAMAGED', label: 'Damaged' },
-  { value: 'NEEDS_REPLACEMENT', label: 'Needs Replacement' },
-]
+interface ShoppingListData {
+  byItem: ShoppingListItem[]
+  grandTotal: number
+  itemCount: number
+}
 
 export default function LinensPage() {
-  const [linens, setLinens] = useState<Linen[]>([])
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState<'inventory' | 'shopping'>('inventory')
   const [properties, setProperties] = useState<Property[]>([])
+  const [selectedProperty, setSelectedProperty] = useState('')
+  const [categories, setCategories] = useState<LinenCategory[]>([])
+  const [shoppingList, setShoppingList] = useState<ShoppingListData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [propertyFilter, setPropertyFilter] = useState('all')
-  const [conditionFilter, setConditionFilter] = useState('all')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingLinen, setEditingLinen] = useState<Linen | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [formData, setFormData] = useState<LinenFormData>({
-    propertyId: '',
-    type: '',
-    quantity: '1',
-    condition: 'GOOD',
-    notes: '',
-  })
+  const [editedItems, setEditedItems] = useState<Record<string, { perFlip?: number; onHand?: number }>>({})
 
   useEffect(() => {
-    fetchLinens()
-    fetchProperties()
-  }, [])
-
-  const fetchLinens = async () => {
-    try {
-      const response = await fetch('/api/linens')
-      if (response.ok) {
-        const data = await response.json()
-        setLinens(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch linens:', error)
-      toast.error('Failed to load linens')
-    } finally {
-      setIsLoading(false)
+    if (status === 'authenticated') {
+      fetchProperties()
     }
-  }
+  }, [status])
+
+  useEffect(() => {
+    if (status === 'authenticated' && activeTab === 'shopping') {
+      fetchShoppingList()
+    }
+  }, [activeTab, status])
+
+  useEffect(() => {
+    if (selectedProperty) {
+      fetchPropertyLinens()
+    }
+  }, [selectedProperty])
 
   const fetchProperties = async () => {
     try {
@@ -122,303 +107,445 @@ export default function LinensPage() {
       if (response.ok) {
         const data = await response.json()
         setProperties(data)
+        if (data.length > 0) {
+          setSelectedProperty(data[0].id)
+        }
       }
     } catch (error) {
       console.error('Failed to fetch properties:', error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSaving(true)
+  const fetchPropertyLinens = async () => {
+    if (!selectedProperty) return
 
+    setIsLoading(true)
     try {
-      const payload = {
-        propertyId: formData.propertyId,
-        type: formData.type,
-        quantity: parseInt(formData.quantity) || 0,
-        condition: formData.condition,
-        notes: formData.notes || null,
+      const response = await fetch(`/api/properties/${selectedProperty}/linens`)
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data)
+        setEditedItems({})
+      }
+    } catch (error) {
+      console.error('Failed to fetch linens:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const fetchShoppingList = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/linens/shopping-list')
+      if (response.ok) {
+        const data = await response.json()
+        setShoppingList(data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch shopping list:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleItemChange = (itemId: string, field: 'perFlip' | 'onHand', value: number) => {
+    setEditedItems((prev) => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        [field]: value,
+      },
+    }))
+  }
+
+  const incrementValue = (itemId: string, field: 'perFlip' | 'onHand', currentValue: number) => {
+    handleItemChange(itemId, field, currentValue + 1)
+  }
+
+  const decrementValue = (itemId: string, field: 'perFlip' | 'onHand', currentValue: number) => {
+    if (currentValue > 0) {
+      handleItemChange(itemId, field, currentValue - 1)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!selectedProperty || Object.keys(editedItems).length === 0) return
+
+    setIsSaving(true)
+    try {
+      const requirements: { linenItemId: string; perFlip: number }[] = []
+      const inventory: { linenItemId: string; onHand: number }[] = []
+
+      for (const [itemId, changes] of Object.entries(editedItems)) {
+        if (changes.perFlip !== undefined) {
+          requirements.push({ linenItemId: itemId, perFlip: changes.perFlip })
+        }
+        if (changes.onHand !== undefined) {
+          inventory.push({ linenItemId: itemId, onHand: changes.onHand })
+        }
       }
 
-      const url = editingLinen ? `/api/linens/${editingLinen.id}` : '/api/linens'
-      const method = editingLinen ? 'PATCH' : 'POST'
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch(`/api/properties/${selectedProperty}/linens`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ requirements, inventory }),
       })
 
       if (response.ok) {
-        toast.success(editingLinen ? 'Linen updated' : 'Linen added')
-        setIsModalOpen(false)
-        resetForm()
-        fetchLinens()
+        toast.success('Linen inventory updated')
+        setEditedItems({})
+        fetchPropertyLinens()
       } else {
-        const error = await response.json()
-        toast.error(error.error || 'Failed to save linen')
+        toast.error('Failed to update inventory')
       }
     } catch (error) {
-      console.error('Failed to save linen:', error)
-      toast.error('Failed to save linen')
+      console.error('Failed to save:', error)
+      toast.error('Failed to update inventory')
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleDelete = async (linen: Linen) => {
-    if (!confirm(`Are you sure you want to delete this ${linen.type}?`)) return
-
-    try {
-      const response = await fetch(`/api/linens/${linen.id}`, { method: 'DELETE' })
-      if (response.ok) {
-        toast.success('Linen deleted')
-        fetchLinens()
-      } else {
-        toast.error('Failed to delete linen')
-      }
-    } catch (error) {
-      console.error('Failed to delete linen:', error)
-      toast.error('Failed to delete linen')
+  const getItemValue = (item: LinenItem, field: 'perFlip' | 'onHand') => {
+    if (editedItems[item.id]?.[field] !== undefined) {
+      return editedItems[item.id][field]!
     }
+    return item[field]
   }
 
-  const openEditModal = (linen: Linen) => {
-    setEditingLinen(linen)
-    setFormData({
-      propertyId: linen.propertyId,
-      type: linen.type,
-      quantity: linen.quantity.toString(),
-      condition: linen.condition,
-      notes: linen.notes || '',
-    })
-    setIsModalOpen(true)
-  }
+  const getTotalItems = () => categories.reduce((sum, cat) => sum + cat.items.length, 0)
+  const getLowStockCount = () => categories.reduce((sum, cat) =>
+    sum + cat.items.filter((item) => item.status === 'low').length, 0)
 
-  const resetForm = () => {
-    setEditingLinen(null)
-    setFormData({
-      propertyId: '',
-      type: '',
-      quantity: '1',
-      condition: 'GOOD',
-      notes: '',
-    })
-  }
-
-  const getConditionBadge = (condition: string) => {
-    const variants: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
-      GOOD: 'success',
-      FAIR: 'warning',
-      DAMAGED: 'danger',
-      NEEDS_REPLACEMENT: 'danger',
-    }
+  if (status === 'loading') {
     return (
-      <Badge variant={variants[condition] || 'default'}>
-        {condition.replace('_', ' ')}
-      </Badge>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
     )
   }
 
-  const filteredLinens = linens.filter((l) => {
-    const matchesSearch = l.type.toLowerCase().includes(search.toLowerCase())
-    const matchesProperty = propertyFilter === 'all' || l.propertyId === propertyFilter
-    const matchesCondition = conditionFilter === 'all' || l.condition === conditionFilter
-    return matchesSearch && matchesProperty && matchesCondition
-  })
-
-  const needsAttention = linens.filter(
-    (l) => l.condition === 'DAMAGED' || l.condition === 'NEEDS_REPLACEMENT'
-  ).length
+  if (!session) {
+    router.push('/login')
+    return null
+  }
 
   return (
     <DashboardLayout>
-      <Header title="Linens" />
+      <Header title="Linen Inventory" />
 
       <div className="page-container">
-        {/* Alert for damaged items */}
-        {needsAttention > 0 && (
-          <Card className="mb-6 border-red-200 bg-red-50">
-            <CardContent className="py-4">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-600" />
-                <span className="text-red-800">
-                  {needsAttention} item{needsAttention > 1 ? 's' : ''} need attention
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Actions Bar */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <Input
-              placeholder="Search linens..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          <Select
-            value={propertyFilter}
-            onChange={(e) => setPropertyFilter(e.target.value)}
-            options={[
-              { value: 'all', label: 'All Properties' },
-              ...properties.map((p) => ({ value: p.id, label: p.name })),
-            ]}
-            className="w-full sm:w-40"
-          />
-          <Select
-            value={conditionFilter}
-            onChange={(e) => setConditionFilter(e.target.value)}
-            options={[{ value: 'all', label: 'All Conditions' }, ...CONDITIONS]}
-            className="w-full sm:w-40"
-          />
-          <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
-            <Plus className="w-4 h-4" />
-            Add Linen
-          </Button>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            onClick={() => setActiveTab('inventory')}
+            className={`px-4 py-2 -mb-px font-medium text-sm ${
+              activeTab === 'inventory'
+                ? 'border-b-2 border-indigo-500 text-indigo-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Package className="w-4 h-4 inline mr-2" />
+            Inventory
+          </button>
+          <button
+            onClick={() => setActiveTab('shopping')}
+            className={`px-4 py-2 -mb-px font-medium text-sm ${
+              activeTab === 'shopping'
+                ? 'border-b-2 border-indigo-500 text-indigo-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4 inline mr-2" />
+            Shopping List
+          </button>
         </div>
 
-        {/* Linens List */}
-        <Card>
-          <CardContent className="p-0">
+        {activeTab === 'inventory' ? (
+          <>
+            {/* Property Selector and Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+              <Card className="lg:col-span-2">
+                <CardContent className="p-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Property
+                  </label>
+                  <Select
+                    value={selectedProperty}
+                    onChange={(e) => setSelectedProperty(e.target.value)}
+                  >
+                    {properties.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </Select>
+                </CardContent>
+              </Card>
+              <StatCard
+                title="Total Items"
+                value={String(getTotalItems())}
+                icon={Package}
+                iconColor="text-blue-600 bg-blue-100"
+              />
+              <StatCard
+                title="Low Stock"
+                value={String(getLowStockCount())}
+                icon={AlertTriangle}
+                iconColor="text-yellow-600 bg-yellow-100"
+              />
+            </div>
+
+            {/* Save Button */}
+            {Object.keys(editedItems).length > 0 && (
+              <div className="mb-4 flex justify-end">
+                <Button onClick={handleSave} isLoading={isSaving}>
+                  <Save className="w-4 h-4" />
+                  Save Changes
+                </Button>
+              </div>
+            )}
+
+            {/* Inventory Matrix */}
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
               </div>
-            ) : filteredLinens.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Property</TableHead>
-                    <TableHead align="center">Quantity</TableHead>
-                    <TableHead align="center">Condition</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead align="right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredLinens.map((linen) => (
-                    <TableRow key={linen.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                            <Shirt className="w-5 h-5 text-indigo-600" />
-                          </div>
-                          <span className="font-medium text-gray-900">{linen.type}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Home className="w-4 h-4 text-gray-400" />
-                          {linen.property.name}
-                        </div>
-                      </TableCell>
-                      <TableCell align="center">
-                        <span className="font-medium">{linen.quantity}</span>
-                      </TableCell>
-                      <TableCell align="center">{getConditionBadge(linen.condition)}</TableCell>
-                      <TableCell>
-                        <span className="text-sm text-gray-500 truncate max-w-xs block">
-                          {linen.notes || '-'}
-                        </span>
-                      </TableCell>
-                      <TableCell align="right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditModal(linen)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(linen)}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
             ) : (
-              <EmptyState
-                icon={Shirt}
-                title="No linens yet"
-                description="Add linens for each property to track inventory."
-                action={{
-                  label: 'Add Linen',
-                  onClick: () => setIsModalOpen(true),
-                }}
-              />
+              <div className="space-y-6">
+                {categories.map((category) => (
+                  <Card key={category.id}>
+                    <CardHeader>
+                      <CardTitle>{category.name}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-gray-50 border-b">
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Item</th>
+                              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Code</th>
+                              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Per Flip</th>
+                              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Target (2x)</th>
+                              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">On Hand</th>
+                              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {category.items.map((item) => {
+                              const perFlip = getItemValue(item, 'perFlip')
+                              const onHand = getItemValue(item, 'onHand')
+                              const target = perFlip * 2
+                              const currentStatus = target === 0 ? 'not-required' : (onHand >= target ? 'ok' : 'low')
+
+                              return (
+                                <tr key={item.id} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3">
+                                    <span className="font-medium text-gray-900">{item.name}</span>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="text-sm text-gray-500">{item.code}</span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => decrementValue(item.id, 'perFlip', perFlip)}
+                                        className="p-1 rounded hover:bg-gray-200"
+                                      >
+                                        <Minus className="w-4 h-4 text-gray-500" />
+                                      </button>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        value={perFlip}
+                                        onChange={(e) => handleItemChange(item.id, 'perFlip', parseInt(e.target.value) || 0)}
+                                        className="w-16 text-center"
+                                      />
+                                      <button
+                                        onClick={() => incrementValue(item.id, 'perFlip', perFlip)}
+                                        className="p-1 rounded hover:bg-gray-200"
+                                      >
+                                        <Plus className="w-4 h-4 text-gray-500" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span className="font-medium text-gray-700">{target}</span>
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button
+                                        onClick={() => decrementValue(item.id, 'onHand', onHand)}
+                                        className="p-1 rounded hover:bg-gray-200"
+                                      >
+                                        <Minus className="w-4 h-4 text-gray-500" />
+                                      </button>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        value={onHand}
+                                        onChange={(e) => handleItemChange(item.id, 'onHand', parseInt(e.target.value) || 0)}
+                                        className="w-16 text-center"
+                                      />
+                                      <button
+                                        onClick={() => incrementValue(item.id, 'onHand', onHand)}
+                                        className="p-1 rounded hover:bg-gray-200"
+                                      >
+                                        <Plus className="w-4 h-4 text-gray-500" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    {currentStatus === 'ok' && (
+                                      <Badge variant="success">
+                                        <CheckCircle className="w-3 h-3" />
+                                        OK
+                                      </Badge>
+                                    )}
+                                    {currentStatus === 'low' && (
+                                      <Badge variant="warning">
+                                        <AlertTriangle className="w-3 h-3" />
+                                        Low
+                                      </Badge>
+                                    )}
+                                    {currentStatus === 'not-required' && (
+                                      <span className="text-gray-400 text-sm">-</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {categories.length === 0 && (
+                  <div className="text-center py-12 text-gray-500">
+                    <Package className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>Select a property to view linen inventory</p>
+                  </div>
+                )}
+              </div>
             )}
-          </CardContent>
-        </Card>
+          </>
+        ) : (
+          <>
+            {/* Shopping List View */}
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+              </div>
+            ) : shoppingList ? (
+              <>
+                {/* Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <StatCard
+                    title="Items to Buy"
+                    value={String(shoppingList.itemCount)}
+                    icon={Package}
+                    iconColor="text-blue-600 bg-blue-100"
+                  />
+                  <StatCard
+                    title="Properties Affected"
+                    value={String(new Set(shoppingList.byItem.flatMap((i) => i.properties.map((p) => p.property.id))).size)}
+                    icon={Home}
+                    iconColor="text-purple-600 bg-purple-100"
+                  />
+                  <StatCard
+                    title="Estimated Cost"
+                    value={formatCurrency(shoppingList.grandTotal)}
+                    icon={ShoppingCart}
+                    iconColor="text-green-600 bg-green-100"
+                  />
+                </div>
+
+                {/* Shopping List Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Shopping List</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {shoppingList.byItem.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="bg-gray-50 border-b">
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Item</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Category</th>
+                              <th className="px-4 py-3 text-center text-sm font-medium text-gray-600">Total Needed</th>
+                              <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Unit Cost</th>
+                              <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Cost</th>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Properties</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {shoppingList.byItem.map((item) => (
+                              <tr key={item.linenItem.id} className="hover:bg-gray-50">
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <span className="font-medium text-gray-900">{item.linenItem.name}</span>
+                                    <span className="text-sm text-gray-500 ml-2">({item.linenItem.code})</span>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-sm text-gray-600">{item.linenItem.category}</span>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Badge variant="warning">{item.totalNeeded}</Badge>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className="text-sm text-gray-600">{formatCurrency(item.linenItem.unitCost)}</span>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <span className="font-medium text-gray-900">{formatCurrency(item.totalCost)}</span>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-wrap gap-1">
+                                    {item.properties.map((p) => (
+                                      <Badge key={p.property.id} variant="default" size="sm">
+                                        {p.property.name} ({p.needed})
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-gray-50 border-t-2">
+                              <td colSpan={4} className="px-4 py-3 text-right font-medium text-gray-900">
+                                Grand Total:
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-green-600">
+                                {formatCurrency(shoppingList.grandTotal)}
+                              </td>
+                              <td></td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-gray-500">
+                        <CheckCircle className="w-12 h-12 mx-auto mb-4 text-green-300" />
+                        <p>All linen inventory is fully stocked!</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                <ShoppingCart className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>Loading shopping list...</p>
+              </div>
+            )}
+          </>
+        )}
       </div>
-
-      {/* Linen Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); resetForm(); }}
-        title={editingLinen ? 'Edit Linen' : 'Add Linen'}
-        size="md"
-      >
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <Select
-              label="Property"
-              value={formData.propertyId}
-              onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })}
-              options={properties.map((p) => ({ value: p.id, label: p.name }))}
-              placeholder="Select property"
-              required
-            />
-            <Select
-              label="Type"
-              value={formData.type}
-              onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              options={LINEN_TYPES.map((t) => ({ value: t, label: t }))}
-              placeholder="Select type"
-              required
-            />
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Quantity"
-                type="number"
-                value={formData.quantity}
-                onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                required
-              />
-              <Select
-                label="Condition"
-                value={formData.condition}
-                onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
-                options={CONDITIONS}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
-              <textarea
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                rows={3}
-                placeholder="Stains, damage, etc..."
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <ModalFooter>
-            <Button type="button" variant="outline" onClick={() => { setIsModalOpen(false); resetForm(); }}>
-              Cancel
-            </Button>
-            <Button type="submit" isLoading={isSaving}>
-              {editingLinen ? 'Update' : 'Add'} Linen
-            </Button>
-          </ModalFooter>
-        </form>
-      </Modal>
     </DashboardLayout>
   )
 }

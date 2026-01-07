@@ -8,12 +8,17 @@ import { z } from 'zod'
 const propertyUpdateSchema = z.object({
   name: z.string().min(1).optional(),
   address: z.string().min(1).optional(),
-  squareFootage: z.number().optional().nullable(),
+  ownerName: z.string().min(1).optional(),
+  ownerEmail: z.string().email().optional().nullable(),
+  ownerPhone: z.string().optional().nullable(),
   baseRate: z.number().min(0).optional(),
-  notes: z.string().optional().nullable(),
-  ownerId: z.string().optional().nullable(),
-  groupId: z.string().optional().nullable(),
-  active: z.boolean().optional(),
+  billingType: z.enum(['per_job', 'monthly']).optional(),
+  monthlyBillingDay: z.number().min(1).max(31).optional().nullable(),
+  autoSendInvoice: z.boolean().optional(),
+  calendarSource: z.string().optional().nullable(),
+  icalUrl: z.string().url().optional().nullable(),
+  accessCode: z.string().optional().nullable(),
+  accessNotes: z.string().optional().nullable(),
 })
 
 export async function GET(
@@ -31,32 +36,59 @@ export async function GET(
     const property = await prisma.property.findUnique({
       where: { id },
       include: {
-        owner: true,
-        group: true,
-        linens: true,
-        propertySupplies: {
+        notes: {
+          orderBy: { createdAt: 'desc' },
           include: {
-            supply: true,
+            addedBy: {
+              select: { id: true, name: true },
+            },
           },
         },
         photos: {
-          orderBy: { createdAt: 'desc' },
-        },
-        jobs: {
-          orderBy: { scheduledDate: 'desc' },
-          take: 10,
+          orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
           include: {
-            services: {
-              include: {
-                service: true,
-              },
+            addedBy: {
+              select: { id: true, name: true },
             },
-            teamAssignments: {
+          },
+        },
+        standingInstructions: {
+          orderBy: { sortOrder: 'asc' },
+        },
+        linenRequirements: {
+          include: {
+            linenItem: {
               include: {
-                teamMember: true,
+                category: true,
               },
             },
           },
+        },
+        linenInventory: {
+          include: {
+            linenItem: {
+              include: {
+                category: true,
+              },
+            },
+          },
+        },
+        jobs: {
+          orderBy: { date: 'desc' },
+          take: 10,
+          include: {
+            assignments: {
+              include: {
+                teamMember: {
+                  select: { id: true, name: true },
+                },
+              },
+            },
+          },
+        },
+        invoices: {
+          orderBy: { invoiceDate: 'desc' },
+          take: 5,
         },
       },
     })
@@ -75,7 +107,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
+export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
@@ -100,10 +132,6 @@ export async function PATCH(
     const property = await prisma.property.update({
       where: { id },
       data: validatedData,
-      include: {
-        owner: true,
-        group: true,
-      },
     })
 
     await createAuditLog({
@@ -124,7 +152,7 @@ export async function PATCH(
         { status: 400 }
       )
     }
-    console.error('Property PATCH error:', error)
+    console.error('Property PUT error:', error)
     return NextResponse.json(
       { error: 'Failed to update property' },
       { status: 500 }

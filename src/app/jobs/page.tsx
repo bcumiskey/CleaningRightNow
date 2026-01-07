@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import Header from '@/components/layout/Header'
@@ -11,6 +12,7 @@ import Select from '@/components/ui/Select'
 import Modal, { ModalFooter } from '@/components/ui/Modal'
 import EmptyState from '@/components/ui/EmptyState'
 import Badge from '@/components/ui/Badge'
+import StatCard from '@/components/ui/StatCard'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/Table'
 import { formatCurrency, formatDate, formatTime, calculateJobPayment } from '@/lib/utils'
 import {
@@ -19,48 +21,43 @@ import {
   Search,
   Clock,
   Users,
-  Edit,
   Trash2,
   Eye,
   Loader2,
   CheckCircle,
   DollarSign,
-  Filter,
+  ChevronLeft,
+  ChevronRight,
+  TrendingUp,
+  Percent,
+  UserCheck,
 } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { format, addMonths, subMonths, startOfMonth, endOfMonth } from 'date-fns'
 
 interface Job {
   id: string
-  scheduledDate: string
-  scheduledTime?: string
-  status: string
-  totalAmount: number
+  date: string
+  time?: string
+  source: 'manual' | 'turno' | 'google'
+  completed: boolean
+  rate: number
   expensePercent: number
-  expenseAmount: number
-  teamPayoutTotal: number
-  notes?: string
   clientPaid: boolean
   teamPaid: boolean
+  notes?: string
   property: {
     id: string
     name: string
     address: string
-    baseRate: number
-    owner?: {
+  }
+  assignments: Array<{
+    id: string
+    teamMember: {
+      id: string
       name: string
     }
-  }
-  services: Array<{
-    id: string
-    service: { id: string; name: string }
-    price: number
-  }>
-  teamAssignments: Array<{
-    id: string
-    teamMember: { id: string; name: string }
-    payoutAmount: number
-    paid: boolean
   }>
 }
 
@@ -68,12 +65,6 @@ interface Property {
   id: string
   name: string
   baseRate: number
-}
-
-interface Service {
-  id: string
-  name: string
-  basePrice: number
 }
 
 interface TeamMember {
@@ -84,24 +75,29 @@ interface TeamMember {
 
 interface JobFormData {
   propertyId: string
-  scheduledDate: string
-  scheduledTime: string
-  status: string
-  totalAmount: string
+  date: string
+  time: string
+  rate: string
   expensePercent: string
   notes: string
   clientPaid: boolean
   teamPaid: boolean
-  selectedServices: Array<{ serviceId: string; price: number }>
   teamMemberIds: string[]
 }
 
+const sourceColors: Record<string, string> = {
+  turno: 'bg-purple-100 text-purple-700',
+  google: 'bg-green-100 text-green-700',
+  manual: 'bg-gray-100 text-gray-700',
+}
+
 export default function JobsPage() {
+  const { data: session, status } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const [currentMonth, setCurrentMonth] = useState(new Date())
   const [jobs, setJobs] = useState<Job[]>([])
   const [properties, setProperties] = useState<Property[]>([])
-  const [services, setServices] = useState<Service[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -111,31 +107,43 @@ export default function JobsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [formData, setFormData] = useState<JobFormData>({
     propertyId: '',
-    scheduledDate: '',
-    scheduledTime: '',
-    status: 'SCHEDULED',
-    totalAmount: '0',
+    date: '',
+    time: '',
+    rate: '0',
     expensePercent: '12',
     notes: '',
     clientPaid: false,
     teamPaid: false,
-    selectedServices: [],
     teamMemberIds: [],
   })
 
   useEffect(() => {
-    fetchJobs()
-    fetchProperties()
-    fetchServices()
-    fetchTeamMembers()
+    if (status === 'authenticated') {
+      fetchProperties()
+      fetchTeamMembers()
+    }
+  }, [status])
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchJobs()
+    }
+  }, [currentMonth, status])
+
+  useEffect(() => {
     if (searchParams.get('action') === 'new') {
       setIsModalOpen(true)
     }
   }, [searchParams])
 
   const fetchJobs = async () => {
+    setIsLoading(true)
     try {
-      const response = await fetch('/api/jobs')
+      const start = startOfMonth(currentMonth)
+      const end = endOfMonth(currentMonth)
+      const response = await fetch(
+        `/api/jobs?startDate=${start.toISOString()}&endDate=${end.toISOString()}`
+      )
       if (response.ok) {
         const data = await response.json()
         setJobs(data)
@@ -160,18 +168,6 @@ export default function JobsPage() {
     }
   }
 
-  const fetchServices = async () => {
-    try {
-      const response = await fetch('/api/services')
-      if (response.ok) {
-        const data = await response.json()
-        setServices(data)
-      }
-    } catch (error) {
-      console.error('Failed to fetch services:', error)
-    }
-  }
-
   const fetchTeamMembers = async () => {
     try {
       const response = await fetch('/api/team')
@@ -189,27 +185,7 @@ export default function JobsPage() {
     setFormData({
       ...formData,
       propertyId,
-      totalAmount: property?.baseRate?.toString() || '0',
-    })
-  }
-
-  const handleServiceToggle = (serviceId: string) => {
-    const service = services.find((s) => s.id === serviceId)
-    if (!service) return
-
-    const exists = formData.selectedServices.find((s) => s.serviceId === serviceId)
-    let newServices
-    if (exists) {
-      newServices = formData.selectedServices.filter((s) => s.serviceId !== serviceId)
-    } else {
-      newServices = [...formData.selectedServices, { serviceId, price: service.basePrice }]
-    }
-
-    const newTotal = newServices.reduce((sum, s) => sum + s.price, 0)
-    setFormData({
-      ...formData,
-      selectedServices: newServices,
-      totalAmount: newTotal.toString(),
+      rate: property?.baseRate?.toString() || '0',
     })
   }
 
@@ -223,7 +199,7 @@ export default function JobsPage() {
 
   const getPaymentBreakdown = () => {
     return calculateJobPayment(
-      parseFloat(formData.totalAmount) || 0,
+      parseFloat(formData.rate) || 0,
       parseFloat(formData.expensePercent) || 12,
       formData.teamMemberIds.length
     )
@@ -236,15 +212,13 @@ export default function JobsPage() {
     try {
       const payload = {
         propertyId: formData.propertyId,
-        scheduledDate: formData.scheduledDate,
-        scheduledTime: formData.scheduledTime || null,
-        status: formData.status,
-        totalAmount: parseFloat(formData.totalAmount) || 0,
+        date: formData.date,
+        time: formData.time || null,
+        rate: parseFloat(formData.rate) || 0,
         expensePercent: parseFloat(formData.expensePercent) || 12,
         notes: formData.notes || null,
         clientPaid: formData.clientPaid,
         teamPaid: formData.teamPaid,
-        services: formData.selectedServices,
         teamMemberIds: formData.teamMemberIds,
       }
 
@@ -291,48 +265,158 @@ export default function JobsPage() {
     }
   }
 
+  const handleMarkClientPaid = async (job: Job) => {
+    try {
+      const response = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientPaid: true }),
+      })
+      if (response.ok) {
+        toast.success('Marked as client paid')
+        fetchJobs()
+      }
+    } catch (error) {
+      toast.error('Failed to update job')
+    }
+  }
+
+  const handleMarkTeamPaid = async (job: Job) => {
+    try {
+      const response = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamPaid: true }),
+      })
+      if (response.ok) {
+        toast.success('Marked as team paid')
+        fetchJobs()
+      }
+    } catch (error) {
+      toast.error('Failed to update job')
+    }
+  }
+
   const resetForm = () => {
     setEditingJob(null)
     setFormData({
       propertyId: '',
-      scheduledDate: '',
-      scheduledTime: '',
-      status: 'SCHEDULED',
-      totalAmount: '0',
+      date: '',
+      time: '',
+      rate: '0',
       expensePercent: '12',
       notes: '',
       clientPaid: false,
       teamPaid: false,
-      selectedServices: [],
       teamMemberIds: [],
     })
   }
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'default' | 'success' | 'warning' | 'info'> = {
-      SCHEDULED: 'info',
-      IN_PROGRESS: 'warning',
-      COMPLETED: 'success',
-      CANCELLED: 'default',
-    }
-    return <Badge variant={variants[status] || 'default'}>{status.replace('_', ' ')}</Badge>
+  const editJob = (job: Job) => {
+    setEditingJob(job)
+    setFormData({
+      propertyId: job.property.id,
+      date: job.date.split('T')[0],
+      time: job.time || '',
+      rate: job.rate.toString(),
+      expensePercent: job.expensePercent.toString(),
+      notes: job.notes || '',
+      clientPaid: job.clientPaid,
+      teamPaid: job.teamPaid,
+      teamMemberIds: job.assignments.map((a) => a.teamMember.id),
+    })
+    setIsModalOpen(true)
   }
 
   const filteredJobs = jobs.filter((job) => {
     const matchesSearch =
       job.property.name.toLowerCase().includes(search.toLowerCase()) ||
       job.property.address.toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || job.status === statusFilter
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'completed' && job.completed) ||
+      (statusFilter === 'pending' && !job.completed) ||
+      (statusFilter === 'unpaid' && !job.clientPaid)
     return matchesSearch && matchesStatus
   })
 
+  // Calculate summary stats
+  const totalRevenue = filteredJobs.reduce((sum, job) => sum + job.rate, 0)
+  const totalExpenses = filteredJobs.reduce(
+    (sum, job) => sum + (job.rate * job.expensePercent) / 100,
+    0
+  )
+  const totalTeamSplit = filteredJobs.reduce(
+    (sum, job) => sum + (job.rate - (job.rate * job.expensePercent) / 100),
+    0
+  )
+
   const payment = getPaymentBreakdown()
+
+  const goToPreviousMonth = () => setCurrentMonth(subMonths(currentMonth, 1))
+  const goToNextMonth = () => setCurrentMonth(addMonths(currentMonth, 1))
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      </div>
+    )
+  }
+
+  if (!session) {
+    router.push('/login')
+    return null
+  }
 
   return (
     <DashboardLayout>
-      <Header title="Jobs" />
+      <Header title="Jobs & Payments" />
 
       <div className="page-container">
+        {/* Month Selector and Summary */}
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <h2 className="text-xl font-semibold text-gray-900 min-w-[160px] text-center">
+              {format(currentMonth, 'MMMM yyyy')}
+            </h2>
+            <Button variant="outline" size="sm" onClick={goToNextMonth}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Summary Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <StatCard
+            title="Total Revenue"
+            value={formatCurrency(totalRevenue)}
+            icon={TrendingUp}
+            iconColor="text-green-600 bg-green-100"
+          />
+          <StatCard
+            title="Job Count"
+            value={String(filteredJobs.length)}
+            icon={Briefcase}
+            iconColor="text-blue-600 bg-blue-100"
+          />
+          <StatCard
+            title={`Expenses (12%)`}
+            value={formatCurrency(totalExpenses)}
+            icon={Percent}
+            iconColor="text-orange-600 bg-orange-100"
+          />
+          <StatCard
+            title="Team Split"
+            value={formatCurrency(totalTeamSplit)}
+            icon={Users}
+            iconColor="text-purple-600 bg-purple-100"
+          />
+        </div>
+
         {/* Actions Bar */}
         <div className="flex flex-col sm:flex-row gap-4 mb-6">
           <div className="relative flex-1">
@@ -347,15 +431,13 @@ export default function JobsPage() {
           <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            options={[
-              { value: 'all', label: 'All Status' },
-              { value: 'SCHEDULED', label: 'Scheduled' },
-              { value: 'IN_PROGRESS', label: 'In Progress' },
-              { value: 'COMPLETED', label: 'Completed' },
-              { value: 'CANCELLED', label: 'Cancelled' },
-            ]}
             className="w-full sm:w-40"
-          />
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+            <option value="unpaid">Unpaid</option>
+          </Select>
           <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
             <Plus className="w-4 h-4" />
             New Job
@@ -370,84 +452,136 @@ export default function JobsPage() {
                 <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
               </div>
             ) : filteredJobs.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Property</TableHead>
-                    <TableHead>Date & Time</TableHead>
-                    <TableHead>Team</TableHead>
-                    <TableHead align="right">Amount</TableHead>
-                    <TableHead align="center">Status</TableHead>
-                    <TableHead align="center">Payment</TableHead>
-                    <TableHead align="right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredJobs.map((job) => (
-                    <TableRow key={job.id}>
-                      <TableCell>
-                        <div>
-                          <Link
-                            href={`/jobs/${job.id}`}
-                            className="font-medium text-gray-900 hover:text-indigo-600"
-                          >
-                            {job.property.name}
-                          </Link>
-                          <p className="text-sm text-gray-500">{job.property.address}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1 text-sm">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <span>{formatDate(job.scheduledDate)}</span>
-                          {job.scheduledTime && (
-                            <span className="text-gray-500">at {formatTime(job.scheduledTime)}</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {job.teamAssignments.length > 0 ? (
-                          <div className="flex items-center gap-1">
-                            <Users className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm">
-                              {job.teamAssignments.map((a) => a.teamMember.name).join(', ')}
-                            </span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">Unassigned</span>
-                        )}
-                      </TableCell>
-                      <TableCell align="right">
-                        <span className="font-medium">{formatCurrency(job.totalAmount)}</span>
-                      </TableCell>
-                      <TableCell align="center">{getStatusBadge(job.status)}</TableCell>
-                      <TableCell align="center">
-                        <div className="flex items-center justify-center gap-2">
-                          {job.clientPaid ? (
-                            <Badge variant="success" size="sm">
-                              <DollarSign className="w-3 h-3" /> Paid
-                            </Badge>
-                          ) : (
-                            <Badge variant="warning" size="sm">Unpaid</Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell align="right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Link href={`/jobs/${job.id}`}>
-                            <Button variant="ghost" size="sm">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                          </Link>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(job)}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                          </Button>
-                        </div>
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Property</TableHead>
+                      <TableHead align="right">Rate</TableHead>
+                      <TableHead>Team</TableHead>
+                      <TableHead align="right">Per Person</TableHead>
+                      <TableHead align="center">Status</TableHead>
+                      <TableHead align="center">Client Paid</TableHead>
+                      <TableHead align="center">Team Paid</TableHead>
+                      <TableHead align="right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredJobs.map((job) => {
+                      const expense = (job.rate * job.expensePercent) / 100
+                      const teamTotal = job.rate - expense
+                      const perPerson = job.assignments.length > 0 ? teamTotal / job.assignments.length : 0
+
+                      return (
+                        <TableRow key={job.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-gray-400" />
+                              <div>
+                                <span className="text-sm font-medium">{formatDate(job.date)}</span>
+                                {job.time && (
+                                  <span className="text-xs text-gray-500 ml-1">
+                                    {formatTime(job.time)}
+                                  </span>
+                                )}
+                              </div>
+                              <Badge className={`text-xs ${sourceColors[job.source]}`}>
+                                {job.source}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              href={`/jobs/${job.id}`}
+                              className="font-medium text-gray-900 hover:text-indigo-600"
+                            >
+                              {job.property.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell align="right">
+                            <span className="font-medium">{formatCurrency(job.rate)}</span>
+                          </TableCell>
+                          <TableCell>
+                            {job.assignments.length > 0 ? (
+                              <div className="flex items-center gap-1">
+                                <Users className="w-4 h-4 text-gray-400" />
+                                <span className="text-sm">
+                                  {job.assignments.map((a) => a.teamMember.name.split(' ')[0]).join(', ')}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            <span className="font-medium text-indigo-600">
+                              {job.assignments.length > 0 ? formatCurrency(perPerson) : '-'}
+                            </span>
+                          </TableCell>
+                          <TableCell align="center">
+                            {job.completed ? (
+                              <Badge variant="success">
+                                <CheckCircle className="w-3 h-3" />
+                                Done
+                              </Badge>
+                            ) : (
+                              <Badge variant="warning">Pending</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell align="center">
+                            {job.clientPaid ? (
+                              <Badge variant="success">
+                                <DollarSign className="w-3 h-3" />
+                                Paid
+                              </Badge>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleMarkClientPaid(job)}
+                              >
+                                Mark Paid
+                              </Button>
+                            )}
+                          </TableCell>
+                          <TableCell align="center">
+                            {job.teamPaid ? (
+                              <Badge variant="success">
+                                <UserCheck className="w-3 h-3" />
+                                Paid
+                              </Badge>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleMarkTeamPaid(job)}
+                              >
+                                Mark Paid
+                              </Button>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Link href={`/jobs/${job.id}`}>
+                                <Button variant="ghost" size="sm">
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              </Link>
+                              <Button variant="ghost" size="sm" onClick={() => editJob(job)}>
+                                Edit
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => handleDelete(job)}>
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             ) : (
               <EmptyState
                 icon={Briefcase}
@@ -474,53 +608,32 @@ export default function JobsPage() {
           <div className="space-y-6">
             {/* Property & Date */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select
-                label="Property"
-                value={formData.propertyId}
-                onChange={(e) => handlePropertyChange(e.target.value)}
-                options={properties.map((p) => ({ value: p.id, label: p.name }))}
-                placeholder="Select property"
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Property *</label>
+                <Select
+                  value={formData.propertyId}
+                  onChange={(e) => handlePropertyChange(e.target.value)}
+                >
+                  <option value="">Select property</option>
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </Select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <Input
-                  label="Date"
+                  label="Date *"
                   type="date"
-                  value={formData.scheduledDate}
-                  onChange={(e) => setFormData({ ...formData, scheduledDate: e.target.value })}
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   required
                 />
                 <Input
                   label="Time"
                   type="time"
-                  value={formData.scheduledTime}
-                  onChange={(e) => setFormData({ ...formData, scheduledTime: e.target.value })}
+                  value={formData.time}
+                  onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                 />
-              </div>
-            </div>
-
-            {/* Services */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Services</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {services.map((service) => {
-                  const isSelected = formData.selectedServices.some((s) => s.serviceId === service.id)
-                  return (
-                    <button
-                      key={service.id}
-                      type="button"
-                      onClick={() => handleServiceToggle(service.id)}
-                      className={`p-3 rounded-lg border text-left transition-colors ${
-                        isSelected
-                          ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <p className="font-medium text-sm">{service.name}</p>
-                      <p className="text-xs text-gray-500">{formatCurrency(service.basePrice)}</p>
-                    </button>
-                  )
-                })}
               </div>
             </div>
 
@@ -545,35 +658,27 @@ export default function JobsPage() {
                     </button>
                   )
                 })}
+                {teamMembers.length === 0 && (
+                  <p className="text-sm text-gray-500">No team members available</p>
+                )}
               </div>
             </div>
 
             {/* Pricing */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
-                label="Total Amount ($)"
+                label="Rate ($)"
                 type="number"
                 step="0.01"
-                value={formData.totalAmount}
-                onChange={(e) => setFormData({ ...formData, totalAmount: e.target.value })}
+                value={formData.rate}
+                onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
               />
               <Input
-                label="Expense % "
+                label="Expense %"
                 type="number"
                 step="0.1"
                 value={formData.expensePercent}
                 onChange={(e) => setFormData({ ...formData, expensePercent: e.target.value })}
-              />
-              <Select
-                label="Status"
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                options={[
-                  { value: 'SCHEDULED', label: 'Scheduled' },
-                  { value: 'IN_PROGRESS', label: 'In Progress' },
-                  { value: 'COMPLETED', label: 'Completed' },
-                  { value: 'CANCELLED', label: 'Cancelled' },
-                ]}
               />
             </div>
 
@@ -582,8 +687,8 @@ export default function JobsPage() {
               <h4 className="font-medium text-gray-900 mb-3">Payment Breakdown</h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <p className="text-gray-500">Total</p>
-                  <p className="font-semibold">{formatCurrency(parseFloat(formData.totalAmount) || 0)}</p>
+                  <p className="text-gray-500">Total Rate</p>
+                  <p className="font-semibold">{formatCurrency(parseFloat(formData.rate) || 0)}</p>
                 </div>
                 <div>
                   <p className="text-gray-500">Business ({formData.expensePercent}%)</p>
@@ -595,12 +700,12 @@ export default function JobsPage() {
                 </div>
                 <div>
                   <p className="text-gray-500">Per Person</p>
-                  <p className="font-semibold">{formatCurrency(payment.perPersonPayout)}</p>
+                  <p className="font-semibold text-indigo-600">{formatCurrency(payment.perPersonPayout)}</p>
                 </div>
               </div>
             </div>
 
-            {/* Notes & Status */}
+            {/* Notes */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
               <textarea
