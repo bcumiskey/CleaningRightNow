@@ -13,7 +13,6 @@ import {
   Package,
   FileText,
   BarChart3,
-  Settings,
   LogOut,
   Menu,
   X,
@@ -94,19 +93,6 @@ export default function Sidebar() {
 
       {/* Bottom section */}
       <div className="px-3 py-4 border-t border-gray-100 space-y-1">
-        <Link
-          href="/settings"
-          onClick={() => mobile && setIsMobileMenuOpen(false)}
-          className={cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-            isActive('/settings')
-              ? 'bg-indigo-100 text-indigo-700'
-              : 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50'
-          )}
-        >
-          <Settings className="w-5 h-5" />
-          <span>Settings</span>
-        </Link>
         <button
           onClick={() => signOut({ callbackUrl: '/login' })}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors"
