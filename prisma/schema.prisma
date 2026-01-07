@@ -8,6 +8,23 @@ datasource db {
 }
 
 // ============================================================
+// PROPERTY OWNERS
+// ============================================================
+
+model Owner {
+  id          String    @id @default(cuid())
+  name        String
+  email       String?   @unique
+  phone       String?
+  notes       String?   // Internal notes about this owner
+
+  properties  Property[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// ============================================================
 // PROPERTIES
 // ============================================================
 
@@ -16,7 +33,11 @@ model Property {
   name                String   @unique
   address             String
 
-  // Owner
+  // Owner (optional - can use legacy fields or Owner relation)
+  ownerId             String?
+  owner               Owner?   @relation(fields: [ownerId], references: [id])
+
+  // Legacy owner fields (for backwards compatibility)
   ownerName           String
   ownerEmail          String?
   ownerPhone          String?
@@ -51,22 +72,49 @@ model Property {
   updatedAt           DateTime @updatedAt
 }
 
-// Property Notes - Timeline of issues/reminders/requests
+// Property Notes - Timeline of issues/reminders/requests (incident documentation)
 model PropertyNote {
   id          String    @id @default(cuid())
   propertyId  String
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
-  type        String    // "issue" | "reminder" | "owner_request" | "info"
-  content     String
-  status      String    @default("active") // "active" | "resolved"
+  type        String    // "issue" | "damage" | "reminder" | "owner_request" | "info"
+  title       String?   // Brief title/summary
+  content     String    // Detailed description
+  severity    String?   // "low" | "medium" | "high" (for issues/damage)
+
+  status      String    @default("active") // "active" | "resolved" | "reported_to_owner"
   resolvedAt  DateTime?
+  resolvedById String?
+  resolvedBy   TeamMember? @relation("ResolvedNotes", fields: [resolvedById], references: [id])
+  resolution   String?   // How was it resolved?
+
+  // For damage tracking
+  estimatedCost Float?   // Estimated repair/replacement cost
+  ownerNotified Boolean  @default(false)
+  ownerNotifiedAt DateTime?
 
   addedById   String
-  addedBy     TeamMember @relation(fields: [addedById], references: [id])
+  addedBy     TeamMember @relation("AddedNotes", fields: [addedById], references: [id])
+
+  // Photo evidence
+  photos      NotePhoto[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+}
+
+// Photos attached to notes (evidence of damage, issues, etc.)
+model NotePhoto {
+  id          String    @id @default(cuid())
+  noteId      String
+  note        PropertyNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  url         String    // Vercel Blob URL
+  caption     String?   // Description of what the photo shows
+  sortOrder   Int       @default(0)
+
+  createdAt   DateTime  @default(now())
 }
 
 // Standing Instructions - Permanent property info
@@ -107,9 +155,10 @@ model TeamMember {
   isActive    Boolean   @default(true)
 
   // Relations
-  jobAssignments JobAssignment[]
-  notesAdded     PropertyNote[]
-  photosAdded    PropertyPhoto[]
+  jobAssignments  JobAssignment[]
+  notesAdded      PropertyNote[]    @relation("AddedNotes")
+  notesResolved   PropertyNote[]    @relation("ResolvedNotes")
+  photosAdded     PropertyPhoto[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

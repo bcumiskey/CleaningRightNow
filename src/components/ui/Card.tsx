@@ -25,6 +25,17 @@ const CardHeader = forwardRef<HTMLDivElement, CardProps>(
 )
 CardHeader.displayName = 'CardHeader'
 
+const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
+  ({ className, ...props }, ref) => (
+    <h3
+      ref={ref}
+      className={cn('text-lg font-semibold text-gray-900', className)}
+      {...props}
+    />
+  )
+)
+CardTitle.displayName = 'CardTitle'
+
 const CardContent = forwardRef<HTMLDivElement, CardProps>(
   ({ className, ...props }, ref) => (
     <div ref={ref} className={cn('p-6', className)} {...props} />
@@ -43,4 +54,4 @@ const CardFooter = forwardRef<HTMLDivElement, CardProps>(
 )
 CardFooter.displayName = 'CardFooter'
 
-export { Card, CardHeader, CardContent, CardFooter }
+export { Card, CardHeader, CardTitle, CardContent, CardFooter }
