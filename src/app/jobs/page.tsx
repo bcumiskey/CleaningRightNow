@@ -70,7 +70,7 @@ interface Property {
 interface TeamMember {
   id: string
   name: string
-  active: boolean
+  isActive: boolean
 }
 
 interface JobFormData {
@@ -173,7 +173,7 @@ function JobsPageContent() {
       const response = await fetch('/api/team')
       if (response.ok) {
         const data = await response.json()
-        setTeamMembers(data.filter((m: TeamMember) => m.active))
+        setTeamMembers(data.filter((m: TeamMember) => m.isActive))
       }
     } catch (error) {
       console.error('Failed to fetch team members:', error)
