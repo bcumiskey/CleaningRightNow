@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, Settings } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -19,6 +20,7 @@ interface Job {
 }
 
 export default function CalendarPage() {
+  const router = useRouter()
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -46,13 +48,21 @@ export default function CalendarPage() {
   const handleSyncCalendars = async () => {
     setIsSyncing(true)
     try {
-      const res = await fetch('/api/calendar/sync', { method: 'PUT' })
+      // Use unified calendar sync
+      const res = await fetch('/api/calendar-sources/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
       if (res.ok) {
         const data = await res.json()
-        const totalCreated = data.results.reduce((sum: number, r: { created?: number }) => sum + (r.created || 0), 0)
+        const totalCreated = data.summary?.jobsCreated || 0
+        const unmatched = data.summary?.unmatchedEvents || 0
         if (totalCreated > 0) {
           toast.success(`Synced ${totalCreated} new job(s) from calendars`)
           fetchJobs()
+        } else if (unmatched > 0) {
+          toast.error(`${unmatched} events couldn't be matched to properties`)
         } else {
           toast.success('Calendars are up to date')
         }
@@ -88,15 +98,25 @@ export default function CalendarPage() {
           <p className="text-sm text-gray-500">
             Jobs synced from Turno, Google Calendar, or added manually
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleSyncCalendars}
-            isLoading={isSyncing}
-          >
-            <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-            Sync Calendars
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/settings/calendar')}
+            >
+              <Settings size={16} />
+              Calendar Sources
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSyncCalendars}
+              isLoading={isSyncing}
+            >
+              <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
+              Sync Calendars
+            </Button>
+          </div>
         </div>
 
         <Card>

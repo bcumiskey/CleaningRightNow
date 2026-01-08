@@ -453,3 +453,27 @@ model PushSubscription {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 }
+
+// ============================================================
+// CALENDAR SOURCES (Unified Sync)
+// ============================================================
+
+model CalendarSource {
+  id            String    @id @default(cuid())
+  name          String    // "Turno Master", "Google - Beach Properties", etc.
+  type          String    // "turno" | "google" | "airbnb" | "vrbo" | "other"
+  icalUrl       String    // The iCal feed URL
+  isActive      Boolean   @default(true)
+
+  // Sync tracking
+  lastSyncAt    DateTime?
+  lastSyncStatus String?  // "success" | "error"
+  lastSyncError  String?  // Error message if failed
+  lastSyncCount  Int?     // Number of events found
+
+  // Property name patterns (optional - for filtering/matching)
+  propertyPattern String? // Regex or keyword to match property names in events
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
