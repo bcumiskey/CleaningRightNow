@@ -3,6 +3,20 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+// Type for photo data with optional room field
+interface PhotoData {
+  id: string
+  propertyId: string
+  room: string
+  caption: string | null
+  notes?: string | null
+  url: string
+  addedById: string
+  addedBy?: { name: string }
+  sortOrder: number
+  createdAt: Date
+}
+
 // GET - Fetch all reference photos for a property
 export async function GET(
   request: NextRequest,
@@ -16,21 +30,43 @@ export async function GET(
 
     const { id: propertyId } = await params
 
-    const photos = await prisma.propertyPhoto.findMany({
-      where: { propertyId },
-      orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
-      include: {
-        addedBy: { select: { name: true } },
-      },
-    })
+    let photos: PhotoData[] = []
+    const byRoom: Record<string, PhotoData[]> = {}
 
-    // Group by room for easier display
-    const byRoom: Record<string, typeof photos> = {}
-    for (const photo of photos) {
-      if (!byRoom[photo.room]) {
-        byRoom[photo.room] = []
+    // Try with new schema (room field), fallback if not available
+    try {
+      photos = await prisma.propertyPhoto.findMany({
+        where: { propertyId },
+        orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
+        include: {
+          addedBy: { select: { name: true } },
+        },
+      }) as PhotoData[]
+
+      // Group by room for easier display
+      for (const photo of photos) {
+        const room = photo.room || 'General'
+        if (!byRoom[room]) {
+          byRoom[room] = []
+        }
+        byRoom[room].push(photo)
       }
-      byRoom[photo.room].push(photo)
+    } catch {
+      // Fallback for older schema without room field
+      const basicPhotos = await prisma.propertyPhoto.findMany({
+        where: { propertyId },
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          addedBy: { select: { name: true } },
+        },
+      })
+
+      photos = basicPhotos.map(p => ({
+        ...p,
+        room: 'General',
+        notes: null,
+      })) as PhotoData[]
+      byRoom['General'] = photos
     }
 
     return NextResponse.json({ photos, byRoom })

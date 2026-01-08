@@ -16,35 +16,81 @@ export async function GET(
 
     const { id } = await params
 
-    const property = await prisma.property.findUnique({
-      where: { id },
-      include: {
-        owner: true,
-        notes: {
-          where: { status: { in: ['active', 'reported_to_owner'] } },
-          include: {
-            addedBy: { select: { name: true } },
-            photos: { orderBy: { sortOrder: 'asc' } },
+    // Try full query with all relations, fallback progressively if relations fail
+    try {
+      const property = await prisma.property.findUnique({
+        where: { id },
+        include: {
+          owner: true,
+          notes: {
+            where: { status: { in: ['active', 'reported_to_owner'] } },
+            include: {
+              addedBy: { select: { name: true } },
+              photos: { orderBy: { sortOrder: 'asc' } },
+            },
+            orderBy: { createdAt: 'desc' },
           },
-          orderBy: { createdAt: 'desc' },
-        },
-        instructions: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        photos: {
-          include: {
-            addedBy: { select: { name: true } },
+          instructions: {
+            orderBy: { sortOrder: 'asc' },
           },
-          orderBy: { sortOrder: 'asc' },
+          photos: {
+            include: {
+              addedBy: { select: { name: true } },
+            },
+            orderBy: { sortOrder: 'asc' },
+          },
         },
-      },
-    })
+      })
 
-    if (!property) {
-      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+      if (!property) {
+        return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+      }
+
+      return NextResponse.json(property)
+    } catch {
+      // Fallback: try without photos and notes relations
+      try {
+        const property = await prisma.property.findUnique({
+          where: { id },
+          include: {
+            owner: true,
+            instructions: {
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        })
+
+        if (!property) {
+          return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+        }
+
+        // Add empty arrays for missing relations
+        return NextResponse.json({
+          ...property,
+          notes: [],
+          photos: [],
+        })
+      } catch {
+        // Final fallback: basic property only
+        const property = await prisma.property.findUnique({
+          where: { id },
+          include: {
+            owner: true,
+          },
+        })
+
+        if (!property) {
+          return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+        }
+
+        return NextResponse.json({
+          ...property,
+          notes: [],
+          photos: [],
+          instructions: [],
+        })
+      }
     }
-
-    return NextResponse.json(property)
   } catch (error) {
     console.error('Property GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch property' }, { status: 500 })

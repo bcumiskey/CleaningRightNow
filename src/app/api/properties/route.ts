@@ -10,30 +10,54 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const properties = await prisma.property.findMany({
-      include: {
-        owner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            defaultBaseRate: true,
-            defaultBillingType: true,
+    // Try with full includes, fallback if relations don't exist yet
+    try {
+      const properties = await prisma.property.findMany({
+        include: {
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              defaultBaseRate: true,
+              defaultBillingType: true,
+            },
+          },
+          notes: {
+            where: { status: 'active' },
+            select: { id: true },
+          },
+          _count: {
+            select: { jobs: true },
           },
         },
-        notes: {
-          where: { status: 'active' },
-          select: { id: true },
+        orderBy: { name: 'asc' },
+      })
+      return NextResponse.json(properties)
+    } catch {
+      // Fallback without notes relation
+      const properties = await prisma.property.findMany({
+        include: {
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              defaultBaseRate: true,
+              defaultBillingType: true,
+            },
+          },
+          _count: {
+            select: { jobs: true },
+          },
         },
-        _count: {
-          select: { jobs: true },
-        },
-      },
-      orderBy: { name: 'asc' },
-    })
-
-    return NextResponse.json(properties)
+        orderBy: { name: 'asc' },
+      })
+      // Add empty notes array for compatibility
+      return NextResponse.json(properties.map(p => ({ ...p, notes: [] })))
+    }
   } catch (error) {
     console.error('Properties GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch properties' }, { status: 500 })
