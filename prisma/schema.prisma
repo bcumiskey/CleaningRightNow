@@ -275,20 +275,9 @@ model Invoice {
   discount        Float     @default(0)
   total           Float
 
-  status          String    @default("draft") // "draft" | "sent" | "paid" | "void"
+  status          String    @default("draft") // "draft" | "sent" | "paid"
   sentAt          DateTime?
   paidAt          DateTime?
-
-  // Void tracking
-  voidedAt        DateTime?
-  voidReason      String?   // Reason for voiding
-
-  // For voided invoices: reference to the replacement invoice
-  replacedByInvoiceId String?   @unique
-  replacedByInvoice   Invoice?  @relation("InvoiceReplacement", fields: [replacedByInvoiceId], references: [id])
-
-  // For replacement invoices: reference to the original voided invoice
-  replacesInvoice     Invoice?  @relation("InvoiceReplacement")
 
   notes           String?   // Client-visible notes
 

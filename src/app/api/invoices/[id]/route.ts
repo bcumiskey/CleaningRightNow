@@ -71,17 +71,11 @@ export async function PUT(
 
     // Allow status changes (marking as sent/paid) but block content editing for non-draft
     const isStatusChangeOnly = Object.keys(data).length === 1 && 'status' in data
-    const isLocked = ['sent', 'paid', 'void'].includes(existingInvoice.status)
+    const isLocked = ['sent', 'paid'].includes(existingInvoice.status)
 
     if (isLocked && !isStatusChangeOnly) {
       return NextResponse.json({
-        error: `Cannot edit a ${existingInvoice.status} invoice. Void it first to create a new version.`
-      }, { status: 400 })
-    }
-
-    if (existingInvoice.status === 'void') {
-      return NextResponse.json({
-        error: 'Cannot modify a voided invoice'
+        error: `Cannot edit a ${existingInvoice.status} invoice. Delete it and create a new one instead.`
       }, { status: 400 })
     }
 
