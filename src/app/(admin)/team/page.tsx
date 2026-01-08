@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -108,6 +108,26 @@ export default function TeamPage() {
       }
     } catch (error) {
       toast.error('Failed to set password')
+    }
+  }
+
+  const handleDelete = async (member: TeamMember, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`Remove ${member.name} from the team?`)) return
+
+    try {
+      const response = await fetch(`/api/team/${member.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        toast.success(`${member.name} removed from team`)
+        fetchTeamMembers()
+      } else {
+        toast.error('Failed to remove team member')
+      }
+    } catch (error) {
+      toast.error('Failed to remove team member')
     }
   }
 
@@ -225,6 +245,30 @@ export default function TeamPage() {
                           View Pay History
                         </Button>
                       )}
+
+                      {/* Action Buttons */}
+                      <div className="mt-3 pt-3 border-t flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(member)
+                          }}
+                        >
+                          <Pencil size={14} />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={(e) => handleDelete(member, e)}
+                        >
+                          <Trash2 size={14} />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

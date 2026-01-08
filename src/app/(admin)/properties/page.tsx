@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building, MapPin, Plus, User, Phone, Mail, RefreshCw, Calendar, FileText, Camera } from 'lucide-react'
+import { Building, MapPin, Plus, User, Phone, Mail, RefreshCw, Calendar, FileText, Camera, Pencil, Trash2 } from 'lucide-react'
 import Image from 'next/image'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -159,6 +159,26 @@ export default function PropertiesPage() {
     }
   }
 
+  const handleDelete = async (property: Property, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`Delete "${property.name}"? This will also delete all associated jobs and invoices.`)) return
+
+    try {
+      const response = await fetch(`/api/properties/${property.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        toast.success(`${property.name} deleted`)
+        fetchProperties()
+      } else {
+        toast.error('Failed to delete property')
+      }
+    } catch (error) {
+      toast.error('Failed to delete property')
+    }
+  }
+
   const getSourceBadge = (source: string | null) => {
     if (!source) return null
     const variants: Record<string, 'purple' | 'success' | 'default'> = {
@@ -299,6 +319,30 @@ export default function PropertiesPage() {
                       {property.notes.length} active note{property.notes.length !== 1 && 's'}
                     </div>
                   )}
+
+                  {/* Action Buttons */}
+                  <div className="mt-3 pt-3 border-t flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleEdit(property)
+                      }}
+                    >
+                      <Pencil size={14} />
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:bg-red-50"
+                      onClick={(e) => handleDelete(property, e)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
