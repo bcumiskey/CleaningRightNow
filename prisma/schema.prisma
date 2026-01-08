@@ -18,6 +18,11 @@ model Owner {
   phone       String?
   notes       String?   // Internal notes about this owner
 
+  // Default preferences (can be overridden per property)
+  defaultBaseRate     Float?
+  defaultBillingType  String?   // "per_job" | "monthly"
+  preferredContactMethod String? // "email" | "phone" | "text"
+
   properties  Property[]
 
   createdAt   DateTime  @default(now())
@@ -59,6 +64,9 @@ model Property {
   // Bed Configuration (for linen reference)
   bedConfig           String?  // e.g., "3 King, 2 Queen, 1 Twin"
 
+  // Main property image
+  imageUrl            String?
+
   // Relations
   jobs                Job[]
   invoices            Invoice[]
@@ -67,6 +75,7 @@ model Property {
   notes               PropertyNote[]
   photos              PropertyPhoto[]
   instructions        PropertyInstruction[]
+  recurringSchedules  RecurringSchedule[]
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -211,6 +220,38 @@ model JobAssignment {
   teamMember    TeamMember  @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
 
   @@unique([jobId, teamMemberId])
+}
+
+// Recurring job schedules - auto-create jobs based on pattern
+model RecurringSchedule {
+  id              String    @id @default(cuid())
+  propertyId      String
+  property        Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name            String    // "Weekly Deep Clean", "Bi-weekly Turnover"
+  isActive        Boolean   @default(true)
+
+  // Schedule pattern
+  frequency       String    // "daily" | "weekly" | "biweekly" | "monthly"
+  dayOfWeek       Int?      // 0-6 for weekly (0=Sunday)
+  dayOfMonth      Int?      // 1-31 for monthly
+  time            String?   // "9:00 AM"
+
+  // Job details
+  rate            Float?    // Override property base rate if set
+  expensePercent  Float     @default(12)
+
+  // Auto-assign team
+  autoAssignTeam  Boolean   @default(false)
+
+  // How far ahead to generate jobs
+  generateAheadDays Int     @default(30)
+
+  // Track last generation
+  lastGeneratedDate DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 // ============================================================

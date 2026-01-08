@@ -88,6 +88,7 @@ export async function PATCH(
       accessCode?: string | null
       accessNotes?: string | null
       bedConfig?: string | null
+      imageUrl?: string | null
     }
     const updateData: UpdateData = {}
 
@@ -108,6 +109,7 @@ export async function PATCH(
     if (data.accessCode !== undefined) updateData.accessCode = data.accessCode || null
     if (data.accessNotes !== undefined) updateData.accessNotes = data.accessNotes || null
     if (data.bedConfig !== undefined) updateData.bedConfig = data.bedConfig || null
+    if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl || null
 
     const property = await prisma.property.update({
       where: { id },

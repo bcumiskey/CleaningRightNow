@@ -12,6 +12,16 @@ export async function GET() {
 
     const properties = await prisma.property.findMany({
       include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            defaultBaseRate: true,
+            defaultBillingType: true,
+          },
+        },
         notes: {
           where: { status: 'active' },
           select: { id: true },
@@ -46,6 +56,7 @@ export async function POST(request: NextRequest) {
         ownerName: data.ownerName,
         ownerEmail: data.ownerEmail || null,
         ownerPhone: data.ownerPhone || null,
+        ownerId: data.ownerId || null,
         baseRate: parseFloat(data.baseRate),
         billingType: data.billingType || 'per_job',
         monthlyBillingDay: data.monthlyBillingDay ? parseInt(data.monthlyBillingDay) : null,
@@ -55,6 +66,7 @@ export async function POST(request: NextRequest) {
         accessCode: data.accessCode || null,
         accessNotes: data.accessNotes || null,
         bedConfig: data.bedConfig || null,
+        imageUrl: data.imageUrl || null,
       },
     })
 
