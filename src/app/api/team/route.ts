@@ -3,16 +3,19 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const includeInactive = searchParams.get('includeInactive') === 'true'
+
     const teamMembers = await prisma.teamMember.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
+      where: includeInactive ? {} : { isActive: true },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     })
 
     // Add hasPassword indicator without exposing password
@@ -43,10 +46,27 @@ export async function POST(request: NextRequest) {
     // Only admins can create team members
     const userRole = (session.user as { role?: string })?.role
     if (userRole !== 'admin') {
-      return NextResponse.json({ error: 'Only administrators can add team members' }, { status: 403 })
+      return NextResponse.json({ error: `Only administrators can add team members. Your role: ${userRole || 'none'}` }, { status: 403 })
     }
 
     const data = await request.json()
+
+    // Check for duplicate email if email is provided
+    if (data.email) {
+      const existing = await prisma.teamMember.findUnique({
+        where: { email: data.email },
+      })
+      if (existing) {
+        if (!existing.isActive) {
+          return NextResponse.json({
+            error: `An inactive team member "${existing.name}" already has this email. You can reactivate them from the team management page.`,
+            existingMemberId: existing.id,
+            canReactivate: true
+          }, { status: 400 })
+        }
+        return NextResponse.json({ error: 'A team member with this email already exists' }, { status: 400 })
+      }
+    }
 
     const teamMember = await prisma.teamMember.create({
       data: {
@@ -60,6 +80,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(teamMember)
   } catch (error) {
     console.error('Team POST error:', error)
-    return NextResponse.json({ error: 'Failed to create team member' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Failed to create team member'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

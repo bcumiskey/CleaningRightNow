@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import Image from 'next/image'
 import {
   ArrowLeft,
@@ -69,9 +69,10 @@ const ROOM_OPTIONS = [
   'Other',
 ]
 
-export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function PropertyDetailPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
 
   const [property, setProperty] = useState<Property | null>(null)
   const [instructions, setInstructions] = useState<Instruction[]>([])
@@ -93,15 +94,17 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   const [isSavingPhoto, setIsSavingPhoto] = useState(false)
 
   useEffect(() => {
-    loadData()
-  }, [resolvedParams.id])
+    if (id) {
+      loadData()
+    }
+  }, [id])
 
   const loadData = async () => {
     try {
       const [propRes, instRes, photoRes] = await Promise.all([
-        fetch(`/api/properties/${resolvedParams.id}`),
-        fetch(`/api/properties/${resolvedParams.id}/instructions`),
-        fetch(`/api/properties/${resolvedParams.id}/photos`),
+        fetch(`/api/properties/${id}`),
+        fetch(`/api/properties/${id}/instructions`),
+        fetch(`/api/properties/${id}/photos`),
       ])
 
       if (propRes.ok) {
@@ -129,7 +132,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
     setIsSavingInstruction(true)
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/instructions`, {
+      const res = await fetch(`/api/properties/${id}/instructions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: newInstruction }),
@@ -152,7 +155,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     if (!editingInstruction) return
 
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/instructions`, {
+      const res = await fetch(`/api/properties/${id}/instructions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -173,14 +176,14 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  const handleDeleteInstruction = async (id: string) => {
+  const handleDeleteInstruction = async (instructionId: string) => {
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/instructions?instructionId=${id}`, {
+      const res = await fetch(`/api/properties/${id}/instructions?instructionId=${instructionId}`, {
         method: 'DELETE',
       })
 
       if (res.ok) {
-        setInstructions(instructions.filter(i => i.id !== id))
+        setInstructions(instructions.filter(i => i.id !== instructionId))
         toast.success('Instruction removed')
       }
     } catch (error) {
@@ -197,7 +200,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
     setIsSavingPhoto(true)
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/photos`, {
+      const res = await fetch(`/api/properties/${id}/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -214,7 +217,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         setNewPhotoRoom('')
         setNewPhotoCaption('')
         // Refresh photos
-        const photoRes = await fetch(`/api/properties/${resolvedParams.id}/photos`)
+        const photoRes = await fetch(`/api/properties/${id}/photos`)
         if (photoRes.ok) {
           const data = await photoRes.json()
           setPhotos(data.photos)
@@ -230,7 +233,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
 
   const handleDeletePhoto = async (photoId: string) => {
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/photos?photoId=${photoId}`, {
+      const res = await fetch(`/api/properties/${id}/photos?photoId=${photoId}`, {
         method: 'DELETE',
       })
 
@@ -545,7 +548,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
             value={newPhotoUrl}
             onChange={setNewPhotoUrl}
             onRemove={() => setNewPhotoUrl('')}
-            folder={`properties/${resolvedParams.id}/reference`}
+            folder={`properties/${id}/reference`}
             label="Upload photo"
           />
           <Select

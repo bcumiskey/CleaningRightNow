@@ -59,6 +59,26 @@ export async function PUT(
     const { id } = await params
     const data = await request.json()
 
+    // Check if invoice is locked (sent, paid, or void)
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { id },
+      select: { status: true },
+    })
+
+    if (!existingInvoice) {
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+    }
+
+    // Allow status changes (marking as sent/paid) but block content editing for non-draft
+    const isStatusChangeOnly = Object.keys(data).length === 1 && 'status' in data
+    const isLocked = ['sent', 'paid'].includes(existingInvoice.status)
+
+    if (isLocked && !isStatusChangeOnly) {
+      return NextResponse.json({
+        error: `Cannot edit a ${existingInvoice.status} invoice. Delete it and create a new one instead.`
+      }, { status: 400 })
+    }
+
     // If line items are provided, update them in a transaction
     if (Array.isArray(data.lineItems)) {
       const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

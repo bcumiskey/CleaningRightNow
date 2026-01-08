@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Printer, Calendar, DollarSign, CheckCircle } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
@@ -52,9 +52,10 @@ interface CompanySettings {
   logoUrl?: string | null
 }
 
-export default function WorkerPayPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function WorkerPayPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
   const [earningsData, setEarningsData] = useState<EarningsData | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -63,8 +64,10 @@ export default function WorkerPayPage({ params }: { params: Promise<{ id: string
   const [isMarkingPaid, setIsMarkingPaid] = useState(false)
 
   useEffect(() => {
-    loadData()
-  }, [resolvedParams.id, currentMonth])
+    if (id) {
+      loadData()
+    }
+  }, [id, currentMonth])
 
   const loadData = async () => {
     setIsLoading(true)
@@ -74,7 +77,7 @@ export default function WorkerPayPage({ params }: { params: Promise<{ id: string
 
       const [earningsRes, settingsRes] = await Promise.all([
         fetch(
-          `/api/worker/earnings?workerId=${resolvedParams.id}&startDate=${start.toISOString()}&endDate=${end.toISOString()}`
+          `/api/worker/earnings?workerId=${id}&startDate=${start.toISOString()}&endDate=${end.toISOString()}`
         ),
         fetch('/api/settings'),
       ])

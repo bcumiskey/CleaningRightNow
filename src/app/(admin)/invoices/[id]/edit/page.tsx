@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import {
   ArrowLeft,
   Save,
@@ -75,9 +75,11 @@ interface UnbilledJob {
   rate: number
 }
 
-export default function InvoiceEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function InvoiceEditPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
+
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -99,13 +101,15 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
   const [showAddItemModal, setShowAddItemModal] = useState(false)
 
   useEffect(() => {
-    loadData()
-  }, [resolvedParams.id])
+    if (id) {
+      loadData()
+    }
+  }, [id])
 
   const loadData = async () => {
     try {
       const [invoiceRes, settingsRes] = await Promise.all([
-        fetch(`/api/invoices/${resolvedParams.id}`),
+        fetch(`/api/invoices/${id}`),
         fetch('/api/settings'),
       ])
 
