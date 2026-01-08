@@ -128,28 +128,35 @@ model NotePhoto {
   createdAt   DateTime  @default(now())
 }
 
-// Standing Instructions - Permanent property info
+// Standing Instructions - Permanent property info (organized by room)
 model PropertyInstruction {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  instruction String
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room          String   @default("General") // "General", "Kitchen", "Master Bedroom", etc.
+  instruction   String
+  linkedPhotoId String?  // Optional link to a PropertyPhoto
+  linkedPhoto   PropertyPhoto? @relation(fields: [linkedPhotoId], references: [id], onDelete: SetNull)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
 }
 
-// Reference Photos - How things should look
+// Reference Photos - How things should look (with detailed notes)
 model PropertyPhoto {
   id          String   @id @default(cuid())
   propertyId  String
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   room        String   // "Master Bedroom", "Kitchen", etc.
-  caption     String?
+  caption     String?  // Brief caption shown in gallery
+  notes       String?  // Detailed notes shown when photo is clicked
   url         String
   addedById   String
   addedBy     TeamMember @relation(fields: [addedById], references: [id])
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
+
+  // Instructions that link to this photo
+  linkedInstructions PropertyInstruction[]
 }
 
 // ============================================================

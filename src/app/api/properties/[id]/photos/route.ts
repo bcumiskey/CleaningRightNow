@@ -95,6 +95,7 @@ export async function POST(
         propertyId,
         room: data.room,
         caption: data.caption || null,
+        notes: data.notes || null,
         url: data.url,
         addedById,
         sortOrder: (maxSort?.sortOrder || 0) + 1,
@@ -128,13 +129,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Photo ID is required' }, { status: 400 })
     }
 
+    const updateData: Record<string, unknown> = {}
+    if (data.room !== undefined) updateData.room = data.room
+    if (data.caption !== undefined) updateData.caption = data.caption
+    if (data.notes !== undefined) updateData.notes = data.notes
+    if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+
     const photo = await prisma.propertyPhoto.update({
       where: { id: data.id },
-      data: {
-        room: data.room,
-        caption: data.caption,
-        sortOrder: data.sortOrder,
-      },
+      data: updateData,
       include: {
         addedBy: { select: { name: true } },
       },

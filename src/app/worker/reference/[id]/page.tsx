@@ -19,10 +19,16 @@ import {
   Trash2,
   Package,
   BedDouble,
+  ListChecks,
+  ChevronDown,
+  ChevronRight,
+  Image as ImageIcon,
 } from 'lucide-react'
+import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
+import Modal from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 
@@ -62,6 +68,22 @@ interface LinenRequirement {
   onHand: number
 }
 
+interface PropertyPhoto {
+  id: string
+  room: string
+  caption: string | null
+  notes: string | null
+  url: string
+}
+
+interface PropertyInstruction {
+  id: string
+  room: string
+  instruction: string
+  linkedPhotoId: string | null
+  linkedPhoto: PropertyPhoto | null
+}
+
 const NOTE_TYPES = [
   { value: 'damage', label: 'Damage', icon: AlertTriangle, color: 'red' },
   { value: 'issue', label: 'Issue', icon: AlertCircle, color: 'orange' },
@@ -84,9 +106,20 @@ export default function WorkerPropertyDetailPage() {
   const [property, setProperty] = useState<PropertyDetail | null>(null)
   const [notes, setNotes] = useState<PropertyNote[]>([])
   const [linenRequirements, setLinenRequirements] = useState<LinenRequirement[]>([])
+  const [instructions, setInstructions] = useState<PropertyInstruction[]>([])
+  const [instructionsByRoom, setInstructionsByRoom] = useState<Record<string, PropertyInstruction[]>>({})
+  const [photos, setPhotos] = useState<PropertyPhoto[]>([])
+  const [photosByRoom, setPhotosByRoom] = useState<Record<string, PropertyPhoto[]>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [showAddNote, setShowAddNote] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Photo detail modal
+  const [selectedPhoto, setSelectedPhoto] = useState<PropertyPhoto | null>(null)
+
+  // Collapsible sections
+  const [showInstructions, setShowInstructions] = useState(true)
+  const [showPhotos, setShowPhotos] = useState(true)
 
   // New note form state
   const [noteType, setNoteType] = useState('issue')
@@ -98,10 +131,12 @@ export default function WorkerPropertyDetailPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [propRes, notesRes, linensRes] = await Promise.all([
+      const [propRes, notesRes, linensRes, instructionsRes, photosRes] = await Promise.all([
         fetch(`/api/properties/${propertyId}`),
         fetch(`/api/notes?propertyId=${propertyId}&includeResolved=true`),
         fetch(`/api/linens/property/${propertyId}`),
+        fetch(`/api/properties/${propertyId}/instructions`),
+        fetch(`/api/properties/${propertyId}/photos`),
       ])
 
       if (propRes.ok) {
@@ -116,6 +151,16 @@ export default function WorkerPropertyDetailPage() {
         setLinenRequirements(
           (data.linens || []).filter((l: LinenRequirement) => l.perFlip > 0)
         )
+      }
+      if (instructionsRes.ok) {
+        const data = await instructionsRes.json()
+        setInstructions(data.instructions || data)
+        setInstructionsByRoom(data.byRoom || {})
+      }
+      if (photosRes.ok) {
+        const data = await photosRes.json()
+        setPhotos(data.photos || [])
+        setPhotosByRoom(data.byRoom || {})
       }
     } catch (error) {
       console.error('Failed to fetch data:', error)
@@ -265,6 +310,111 @@ export default function WorkerPropertyDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Cleaning Instructions */}
+      {instructions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <button
+              onClick={() => setShowInstructions(!showInstructions)}
+              className="w-full flex items-center justify-between"
+            >
+              <CardTitle className="flex items-center gap-2">
+                <ListChecks size={20} className="text-emerald-600" />
+                Cleaning Instructions ({instructions.length})
+              </CardTitle>
+              {showInstructions ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            </button>
+          </CardHeader>
+          {showInstructions && (
+            <CardContent className="space-y-4">
+              {Object.entries(instructionsByRoom).map(([room, roomInstructions]) => (
+                <div key={room} className="bg-gray-50 rounded-lg p-3">
+                  <h4 className="font-semibold text-gray-800 mb-2">{room}</h4>
+                  <ul className="space-y-2">
+                    {roomInstructions.map((inst, idx) => (
+                      <li key={inst.id} className="flex items-start gap-2">
+                        <span className="text-emerald-600 font-medium">{idx + 1}.</span>
+                        <div className="flex-1">
+                          <p className="text-gray-700">{inst.instruction}</p>
+                          {inst.linkedPhoto && (
+                            <button
+                              onClick={() => setSelectedPhoto(inst.linkedPhoto)}
+                              className="mt-1 text-sm text-blue-600 flex items-center gap-1 hover:underline"
+                            >
+                              <Camera size={14} />
+                              View photo
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      {/* Reference Photos */}
+      {photos.length > 0 && (
+        <Card>
+          <CardHeader>
+            <button
+              onClick={() => setShowPhotos(!showPhotos)}
+              className="w-full flex items-center justify-between"
+            >
+              <CardTitle className="flex items-center gap-2">
+                <Camera size={20} className="text-blue-600" />
+                Reference Photos ({photos.length})
+              </CardTitle>
+              {showPhotos ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+            </button>
+          </CardHeader>
+          {showPhotos && (
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-500">
+                Tap a photo to see detailed instructions
+              </p>
+              {Object.entries(photosByRoom).map(([room, roomPhotos]) => (
+                <div key={room}>
+                  <h4 className="font-semibold text-gray-800 mb-2">{room}</h4>
+                  <div className="grid grid-cols-3 gap-2">
+                    {roomPhotos.map((photo) => (
+                      <button
+                        key={photo.id}
+                        onClick={() => setSelectedPhoto(photo)}
+                        className={cn(
+                          'relative rounded-lg overflow-hidden border-2 transition-all',
+                          photo.notes
+                            ? 'border-blue-400 hover:border-blue-600'
+                            : 'border-transparent hover:border-gray-300'
+                        )}
+                      >
+                        <div className="relative h-24 w-full">
+                          <Image
+                            src={photo.url}
+                            alt={photo.caption || room}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                        {photo.notes && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-0.5 text-center">
+                            <Info size={10} className="inline mr-1" />
+                            Notes
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Linens & Supplies Required */}
       {linenRequirements.length > 0 && (
@@ -572,6 +722,51 @@ export default function WorkerPropertyDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Photo Detail Modal */}
+      <Modal
+        isOpen={!!selectedPhoto}
+        onClose={() => setSelectedPhoto(null)}
+        title={selectedPhoto ? `${selectedPhoto.room}${selectedPhoto.caption ? ` - ${selectedPhoto.caption}` : ''}` : 'Photo'}
+      >
+        {selectedPhoto && (
+          <div className="space-y-4">
+            <div className="relative w-full h-64 rounded-lg overflow-hidden bg-gray-100">
+              <Image
+                src={selectedPhoto.url}
+                alt={selectedPhoto.caption || selectedPhoto.room}
+                fill
+                className="object-contain"
+              />
+            </div>
+            {selectedPhoto.caption && (
+              <p className="text-center text-gray-600 font-medium">
+                {selectedPhoto.caption}
+              </p>
+            )}
+            {selectedPhoto.notes ? (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                  <ListChecks size={16} />
+                  Instructions for this photo
+                </h4>
+                <p className="text-blue-900 whitespace-pre-wrap">{selectedPhoto.notes}</p>
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 text-sm">
+                No additional notes for this photo
+              </p>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setSelectedPhoto(null)}
+              className="w-full"
+            >
+              Close
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

@@ -18,10 +18,25 @@ export async function GET(
 
     const instructions = await prisma.propertyInstruction.findMany({
       where: { propertyId },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
+      include: {
+        linkedPhoto: {
+          select: { id: true, url: true, caption: true, notes: true, room: true },
+        },
+      },
     })
 
-    return NextResponse.json(instructions)
+    // Group by room for easier display
+    const byRoom: Record<string, typeof instructions> = {}
+    for (const instruction of instructions) {
+      const room = instruction.room || 'General'
+      if (!byRoom[room]) {
+        byRoom[room] = []
+      }
+      byRoom[room].push(instruction)
+    }
+
+    return NextResponse.json({ instructions, byRoom })
   } catch (error) {
     console.error('Property instructions GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch instructions' }, { status: 500 })
@@ -46,9 +61,11 @@ export async function POST(
       return NextResponse.json({ error: 'Instruction text is required' }, { status: 400 })
     }
 
-    // Get max sort order
+    const room = data.room || 'General'
+
+    // Get max sort order for this room
     const maxSort = await prisma.propertyInstruction.findFirst({
-      where: { propertyId },
+      where: { propertyId, room },
       orderBy: { sortOrder: 'desc' },
       select: { sortOrder: true },
     })
@@ -56,8 +73,15 @@ export async function POST(
     const instruction = await prisma.propertyInstruction.create({
       data: {
         propertyId,
+        room,
         instruction: data.instruction,
+        linkedPhotoId: data.linkedPhotoId || null,
         sortOrder: (maxSort?.sortOrder || 0) + 1,
+      },
+      include: {
+        linkedPhoto: {
+          select: { id: true, url: true, caption: true, notes: true, room: true },
+        },
       },
     })
 
@@ -83,10 +107,21 @@ export async function PUT(
     const data = await request.json()
 
     // Single update
-    if (data.id && data.instruction !== undefined) {
+    if (data.id) {
+      const updateData: Record<string, unknown> = {}
+      if (data.instruction !== undefined) updateData.instruction = data.instruction
+      if (data.room !== undefined) updateData.room = data.room
+      if (data.linkedPhotoId !== undefined) updateData.linkedPhotoId = data.linkedPhotoId || null
+      if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+
       const instruction = await prisma.propertyInstruction.update({
         where: { id: data.id },
-        data: { instruction: data.instruction },
+        data: updateData,
+        include: {
+          linkedPhoto: {
+            select: { id: true, url: true, caption: true, notes: true, room: true },
+          },
+        },
       })
       return NextResponse.json(instruction)
     }

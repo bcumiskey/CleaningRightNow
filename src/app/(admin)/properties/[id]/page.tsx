@@ -23,16 +23,28 @@ import Modal from '@/components/ui/Modal'
 import ImageUpload from '@/components/ui/ImageUpload'
 import toast from 'react-hot-toast'
 
+interface LinkedPhoto {
+  id: string
+  url: string
+  caption: string | null
+  notes: string | null
+  room: string
+}
+
 interface Instruction {
   id: string
   instruction: string
+  room: string
   sortOrder: number
+  linkedPhotoId: string | null
+  linkedPhoto: LinkedPhoto | null
 }
 
 interface Photo {
   id: string
   room: string
   caption: string | null
+  notes: string | null
   url: string
   addedBy?: { name: string }
 }
@@ -76,6 +88,7 @@ export default function PropertyDetailPage() {
 
   const [property, setProperty] = useState<Property | null>(null)
   const [instructions, setInstructions] = useState<Instruction[]>([])
+  const [instructionsByRoom, setInstructionsByRoom] = useState<Record<string, Instruction[]>>({})
   const [photos, setPhotos] = useState<Photo[]>([])
   const [photosByRoom, setPhotosByRoom] = useState<Record<string, Photo[]>>({})
   const [isLoading, setIsLoading] = useState(true)
@@ -83,6 +96,8 @@ export default function PropertyDetailPage() {
 
   // Instructions form
   const [newInstruction, setNewInstruction] = useState('')
+  const [newInstructionRoom, setNewInstructionRoom] = useState('General')
+  const [newInstructionLinkedPhoto, setNewInstructionLinkedPhoto] = useState('')
   const [editingInstruction, setEditingInstruction] = useState<Instruction | null>(null)
   const [isSavingInstruction, setIsSavingInstruction] = useState(false)
 
@@ -90,8 +105,14 @@ export default function PropertyDetailPage() {
   const [showPhotoModal, setShowPhotoModal] = useState(false)
   const [newPhotoRoom, setNewPhotoRoom] = useState('')
   const [newPhotoCaption, setNewPhotoCaption] = useState('')
+  const [newPhotoNotes, setNewPhotoNotes] = useState('')
   const [newPhotoUrl, setNewPhotoUrl] = useState('')
   const [isSavingPhoto, setIsSavingPhoto] = useState(false)
+
+  // Photo detail modal
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null)
+  const [editingPhotoNotes, setEditingPhotoNotes] = useState('')
+  const [isSavingPhotoNotes, setIsSavingPhotoNotes] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -111,7 +132,9 @@ export default function PropertyDetailPage() {
         setProperty(await propRes.json())
       }
       if (instRes.ok) {
-        setInstructions(await instRes.json())
+        const data = await instRes.json()
+        setInstructions(data.instructions || data)
+        setInstructionsByRoom(data.byRoom || {})
       }
       if (photoRes.ok) {
         const data = await photoRes.json()
@@ -135,13 +158,24 @@ export default function PropertyDetailPage() {
       const res = await fetch(`/api/properties/${id}/instructions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction: newInstruction }),
+        body: JSON.stringify({
+          instruction: newInstruction,
+          room: newInstructionRoom,
+          linkedPhotoId: newInstructionLinkedPhoto || null,
+        }),
       })
 
       if (res.ok) {
         const added = await res.json()
         setInstructions([...instructions, added])
+        // Update byRoom
+        const updatedByRoom = { ...instructionsByRoom }
+        const room = added.room || 'General'
+        if (!updatedByRoom[room]) updatedByRoom[room] = []
+        updatedByRoom[room].push(added)
+        setInstructionsByRoom(updatedByRoom)
         setNewInstruction('')
+        setNewInstructionLinkedPhoto('')
         toast.success('Instruction added')
       }
     } catch (error) {
@@ -161,13 +195,27 @@ export default function PropertyDetailPage() {
         body: JSON.stringify({
           id: editingInstruction.id,
           instruction: editingInstruction.instruction,
+          room: editingInstruction.room,
+          linkedPhotoId: editingInstruction.linkedPhotoId,
         }),
       })
 
       if (res.ok) {
+        const updated = await res.json()
         setInstructions(instructions.map(i =>
-          i.id === editingInstruction.id ? editingInstruction : i
+          i.id === editingInstruction.id ? updated : i
         ))
+        // Rebuild byRoom
+        const updatedInstructions = instructions.map(i =>
+          i.id === editingInstruction.id ? updated : i
+        )
+        const byRoom: Record<string, Instruction[]> = {}
+        for (const inst of updatedInstructions) {
+          const room = inst.room || 'General'
+          if (!byRoom[room]) byRoom[room] = []
+          byRoom[room].push(inst)
+        }
+        setInstructionsByRoom(byRoom)
         setEditingInstruction(null)
         toast.success('Instruction updated')
       }
@@ -183,7 +231,16 @@ export default function PropertyDetailPage() {
       })
 
       if (res.ok) {
-        setInstructions(instructions.filter(i => i.id !== instructionId))
+        const filtered = instructions.filter(i => i.id !== instructionId)
+        setInstructions(filtered)
+        // Rebuild byRoom
+        const byRoom: Record<string, Instruction[]> = {}
+        for (const inst of filtered) {
+          const room = inst.room || 'General'
+          if (!byRoom[room]) byRoom[room] = []
+          byRoom[room].push(inst)
+        }
+        setInstructionsByRoom(byRoom)
         toast.success('Instruction removed')
       }
     } catch (error) {
@@ -207,6 +264,7 @@ export default function PropertyDetailPage() {
           url: newPhotoUrl,
           room: newPhotoRoom,
           caption: newPhotoCaption,
+          notes: newPhotoNotes,
         }),
       })
 
@@ -216,6 +274,7 @@ export default function PropertyDetailPage() {
         setNewPhotoUrl('')
         setNewPhotoRoom('')
         setNewPhotoCaption('')
+        setNewPhotoNotes('')
         // Refresh photos
         const photoRes = await fetch(`/api/properties/${id}/photos`)
         if (photoRes.ok) {
@@ -228,6 +287,43 @@ export default function PropertyDetailPage() {
       toast.error('Failed to add photo')
     } finally {
       setIsSavingPhoto(false)
+    }
+  }
+
+  const handleSavePhotoNotes = async () => {
+    if (!selectedPhoto) return
+
+    setIsSavingPhotoNotes(true)
+    try {
+      const res = await fetch(`/api/properties/${id}/photos`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: selectedPhoto.id,
+          notes: editingPhotoNotes,
+        }),
+      })
+
+      if (res.ok) {
+        // Update local state
+        const updated = photos.map(p =>
+          p.id === selectedPhoto.id ? { ...p, notes: editingPhotoNotes } : p
+        )
+        setPhotos(updated)
+        // Rebuild byRoom
+        const byRoom: Record<string, Photo[]> = {}
+        for (const photo of updated) {
+          if (!byRoom[photo.room]) byRoom[photo.room] = []
+          byRoom[photo.room].push(photo)
+        }
+        setPhotosByRoom(byRoom)
+        setSelectedPhoto({ ...selectedPhoto, notes: editingPhotoNotes })
+        toast.success('Photo notes saved')
+      }
+    } catch (error) {
+      toast.error('Failed to save notes')
+    } finally {
+      setIsSavingPhotoNotes(false)
     }
   }
 
@@ -384,85 +480,171 @@ export default function PropertyDetailPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500 mb-4">
-                Add specific cleaning instructions for this property. These will be visible to cleaning staff.
+                Add specific cleaning instructions organized by room. Link to photos for visual reference.
               </p>
 
               {/* Add new instruction */}
-              <div className="flex gap-2 mb-6">
-                <Input
-                  className="flex-1"
-                  value={newInstruction}
-                  onChange={(e) => setNewInstruction(e.target.value)}
-                  placeholder="Enter a cleaning instruction..."
-                  onKeyDown={(e) => e.key === 'Enter' && handleAddInstruction()}
-                />
-                <Button
-                  onClick={handleAddInstruction}
-                  isLoading={isSavingInstruction}
-                  disabled={!newInstruction.trim()}
-                >
-                  <Plus size={16} />
-                  Add
-                </Button>
+              <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <Select
+                    label="Room"
+                    value={newInstructionRoom}
+                    onChange={(e) => setNewInstructionRoom(e.target.value)}
+                    options={[
+                      { value: 'General', label: 'General' },
+                      ...ROOM_OPTIONS.map(room => ({ value: room, label: room })),
+                    ]}
+                  />
+                  <Select
+                    label="Link to Photo (optional)"
+                    value={newInstructionLinkedPhoto}
+                    onChange={(e) => setNewInstructionLinkedPhoto(e.target.value)}
+                    options={[
+                      { value: '', label: 'No photo linked' },
+                      ...photos.map(photo => ({
+                        value: photo.id,
+                        label: `${photo.room}${photo.caption ? ` - ${photo.caption}` : ''}`,
+                      })),
+                    ]}
+                  />
+                  <div></div>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    className="flex-1"
+                    value={newInstruction}
+                    onChange={(e) => setNewInstruction(e.target.value)}
+                    placeholder="Enter a cleaning instruction..."
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddInstruction()}
+                  />
+                  <Button
+                    onClick={handleAddInstruction}
+                    isLoading={isSavingInstruction}
+                    disabled={!newInstruction.trim()}
+                  >
+                    <Plus size={16} />
+                    Add
+                  </Button>
+                </div>
               </div>
 
-              {/* Instructions list */}
+              {/* Instructions list by room */}
               {instructions.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   No instructions yet. Add your first instruction above.
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {instructions.map((inst, index) => (
-                    <div
-                      key={inst.id}
-                      className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg group"
-                    >
-                      <span className="text-gray-400 font-mono text-sm mt-1">
-                        {index + 1}.
-                      </span>
-                      {editingInstruction?.id === inst.id ? (
-                        <>
-                          <Input
-                            className="flex-1"
-                            value={editingInstruction.instruction}
-                            onChange={(e) =>
-                              setEditingInstruction({
-                                ...editingInstruction,
-                                instruction: e.target.value,
-                              })
-                            }
-                            autoFocus
-                          />
-                          <Button size="sm" onClick={handleUpdateInstruction}>
-                            <Save size={14} />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditingInstruction(null)}
+                <div className="space-y-6">
+                  {Object.entries(instructionsByRoom).map(([room, roomInstructions]) => (
+                    <div key={room}>
+                      <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                        <ListChecks size={16} />
+                        {room}
+                      </h4>
+                      <div className="space-y-2 pl-6">
+                        {roomInstructions.map((inst, index) => (
+                          <div
+                            key={inst.id}
+                            className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg group"
                           >
-                            <X size={14} />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <p
-                            className="flex-1 cursor-pointer"
-                            onClick={() => setEditingInstruction(inst)}
-                          >
-                            {inst.instruction}
-                          </p>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="opacity-0 group-hover:opacity-100"
-                            onClick={() => handleDeleteInstruction(inst.id)}
-                          >
-                            <Trash2 size={14} className="text-red-500" />
-                          </Button>
-                        </>
-                      )}
+                            <span className="text-gray-400 font-mono text-sm mt-1">
+                              {index + 1}.
+                            </span>
+                            {editingInstruction?.id === inst.id ? (
+                              <div className="flex-1 space-y-2">
+                                <Input
+                                  value={editingInstruction.instruction}
+                                  onChange={(e) =>
+                                    setEditingInstruction({
+                                      ...editingInstruction,
+                                      instruction: e.target.value,
+                                    })
+                                  }
+                                  autoFocus
+                                />
+                                <div className="flex gap-2">
+                                  <Select
+                                    value={editingInstruction.room}
+                                    onChange={(e) =>
+                                      setEditingInstruction({
+                                        ...editingInstruction,
+                                        room: e.target.value,
+                                      })
+                                    }
+                                    options={[
+                                      { value: 'General', label: 'General' },
+                                      ...ROOM_OPTIONS.map(r => ({ value: r, label: r })),
+                                    ]}
+                                  />
+                                  <Select
+                                    value={editingInstruction.linkedPhotoId || ''}
+                                    onChange={(e) =>
+                                      setEditingInstruction({
+                                        ...editingInstruction,
+                                        linkedPhotoId: e.target.value || null,
+                                        linkedPhoto: e.target.value
+                                          ? photos.find(p => p.id === e.target.value) as LinkedPhoto || null
+                                          : null,
+                                      })
+                                    }
+                                    options={[
+                                      { value: '', label: 'No photo linked' },
+                                      ...photos.map(photo => ({
+                                        value: photo.id,
+                                        label: `${photo.room}${photo.caption ? ` - ${photo.caption}` : ''}`,
+                                      })),
+                                    ]}
+                                  />
+                                  <Button size="sm" onClick={handleUpdateInstruction}>
+                                    <Save size={14} />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingInstruction(null)}
+                                  >
+                                    <X size={14} />
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex-1">
+                                  <p
+                                    className="cursor-pointer hover:text-blue-600"
+                                    onClick={() => setEditingInstruction(inst)}
+                                  >
+                                    {inst.instruction}
+                                  </p>
+                                  {inst.linkedPhoto && (
+                                    <button
+                                      onClick={() => {
+                                        const photo = photos.find(p => p.id === inst.linkedPhotoId)
+                                        if (photo) {
+                                          setSelectedPhoto(photo)
+                                          setEditingPhotoNotes(photo.notes || '')
+                                        }
+                                      }}
+                                      className="mt-1 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                                    >
+                                      <Camera size={12} />
+                                      View linked photo
+                                    </button>
+                                  )}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="opacity-0 group-hover:opacity-100"
+                                  onClick={() => handleDeleteInstruction(inst.id)}
+                                >
+                                  <Trash2 size={14} className="text-red-500" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -494,12 +676,19 @@ export default function PropertyDetailPage() {
                 <div className="space-y-6">
                   {Object.entries(photosByRoom).map(([room, roomPhotos]) => (
                     <div key={room}>
-                      <h4 className="font-medium text-gray-900 mb-3">{room}</h4>
+                      <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                        <Camera size={16} />
+                        {room}
+                      </h4>
                       <div className="grid grid-cols-4 gap-4">
                         {roomPhotos.map((photo) => (
                           <div
                             key={photo.id}
-                            className="relative group rounded-lg overflow-hidden"
+                            className="relative group rounded-lg overflow-hidden bg-gray-100 cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all"
+                            onClick={() => {
+                              setSelectedPhoto(photo)
+                              setEditingPhotoNotes(photo.notes || '')
+                            }}
                           >
                             <div className="relative h-32 w-full">
                               <Image
@@ -509,13 +698,24 @@ export default function PropertyDetailPage() {
                                 className="object-cover"
                               />
                             </div>
-                            {photo.caption && (
-                              <div className="p-2 text-xs text-gray-600">
-                                {photo.caption}
-                              </div>
-                            )}
+                            <div className="p-2">
+                              {photo.caption && (
+                                <div className="text-xs text-gray-600 font-medium">
+                                  {photo.caption}
+                                </div>
+                              )}
+                              {photo.notes && (
+                                <div className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                                  <ListChecks size={10} />
+                                  Has notes
+                                </div>
+                              )}
+                            </div>
                             <button
-                              onClick={() => handleDeletePhoto(photo.id)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeletePhoto(photo.id)
+                              }}
                               className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <Trash2 size={14} />
@@ -540,6 +740,7 @@ export default function PropertyDetailPage() {
           setNewPhotoUrl('')
           setNewPhotoRoom('')
           setNewPhotoCaption('')
+          setNewPhotoNotes('')
         }}
         title="Add Reference Photo"
       >
@@ -564,8 +765,20 @@ export default function PropertyDetailPage() {
             label="Caption (optional)"
             value={newPhotoCaption}
             onChange={(e) => setNewPhotoCaption(e.target.value)}
-            placeholder="Description of how this should look"
+            placeholder="Brief description for gallery view"
           />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Detailed Notes (optional)
+            </label>
+            <textarea
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={4}
+              value={newPhotoNotes}
+              onChange={(e) => setNewPhotoNotes(e.target.value)}
+              placeholder="Detailed instructions shown when worker clicks on this photo"
+            />
+          </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button variant="outline" onClick={() => setShowPhotoModal(false)}>
               Cancel
@@ -579,6 +792,50 @@ export default function PropertyDetailPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Photo Detail Modal */}
+      <Modal
+        isOpen={!!selectedPhoto}
+        onClose={() => setSelectedPhoto(null)}
+        title={selectedPhoto ? `${selectedPhoto.room}${selectedPhoto.caption ? ` - ${selectedPhoto.caption}` : ''}` : 'Photo Details'}
+      >
+        {selectedPhoto && (
+          <div className="space-y-4">
+            <div className="relative w-full h-64 rounded-lg overflow-hidden">
+              <Image
+                src={selectedPhoto.url}
+                alt={selectedPhoto.caption || selectedPhoto.room}
+                fill
+                className="object-contain bg-gray-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Photo Notes
+              </label>
+              <textarea
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={4}
+                value={editingPhotoNotes}
+                onChange={(e) => setEditingPhotoNotes(e.target.value)}
+                placeholder="Detailed instructions for this photo (visible to workers)"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setSelectedPhoto(null)}>
+                Close
+              </Button>
+              <Button
+                onClick={handleSavePhotoNotes}
+                isLoading={isSavingPhotoNotes}
+              >
+                <Save size={16} />
+                Save Notes
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
