@@ -181,8 +181,12 @@ export default function CalendarPage() {
                       {dayJobs.slice(0, 3).map((job) => (
                         <div
                           key={job.id}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/jobs?highlight=${job.id}`)
+                          }}
                           className={cn(
-                            'text-xs p-1 rounded truncate',
+                            'text-xs p-1 rounded truncate cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all',
                             job.completed
                               ? 'bg-green-100 text-green-700'
                               : 'bg-blue-100 text-blue-700'

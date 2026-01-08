@@ -44,7 +44,7 @@ export async function PATCH(
   }
 }
 
-// DELETE - Delete category
+// DELETE - Delete category (with all its items)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -62,18 +62,12 @@ export async function DELETE(
 
     const { id } = await params
 
-    // Check if category has items
-    const itemCount = await prisma.linenItem.count({
+    // Delete all items in this category first (cascading delete)
+    await prisma.linenItem.deleteMany({
       where: { categoryId: id },
     })
 
-    if (itemCount > 0) {
-      return NextResponse.json(
-        { error: 'Cannot delete category with items. Remove items first.' },
-        { status: 400 }
-      )
-    }
-
+    // Then delete the category
     await prisma.linenCategory.delete({
       where: { id },
     })
