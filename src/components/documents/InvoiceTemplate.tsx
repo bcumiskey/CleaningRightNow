@@ -68,6 +68,7 @@ export default function InvoiceTemplate({
     draft: 'bg-gray-100 text-gray-800',
     sent: 'bg-blue-100 text-blue-800',
     paid: 'bg-green-100 text-green-800',
+    void: 'bg-red-100 text-red-800',
   }
 
   return (
@@ -128,8 +129,16 @@ export default function InvoiceTemplate({
             {/* Only show status badge on screen, not when printing - and hide "draft" status */}
             {invoice.status !== 'draft' && (
               <span className={`inline-block mt-2 px-3 py-1 text-xs font-semibold uppercase rounded-full print:hidden ${statusColors[invoice.status] || statusColors.draft}`}>
-                {invoice.status === 'paid' ? 'PAID' : invoice.status}
+                {invoice.status === 'paid' ? 'PAID' : invoice.status === 'void' ? 'VOID' : invoice.status}
               </span>
+            )}
+            {/* Show VOID watermark across the invoice for voided invoices */}
+            {invoice.status === 'void' && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                <span className="text-red-200 text-9xl font-bold transform -rotate-45 opacity-30">
+                  VOID
+                </span>
+              </div>
             )}
           </div>
         </div>
