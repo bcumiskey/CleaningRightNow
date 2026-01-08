@@ -3,6 +3,24 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+// Type for instruction with optional room field (for backward compatibility)
+interface InstructionData {
+  id: string
+  propertyId: string
+  instruction: string
+  sortOrder: number
+  room?: string
+  linkedPhotoId?: string | null
+  linkedPhoto?: {
+    id: string
+    url: string
+    caption: string | null
+    notes: string | null
+    room: string
+  } | null
+  createdAt: Date
+}
+
 // GET - Fetch all instructions for a property
 export async function GET(
   request: NextRequest,
@@ -17,8 +35,8 @@ export async function GET(
     const { id: propertyId } = await params
 
     // Try with new schema fields, fallback to basic query if fields don't exist yet
-    let instructions: unknown[] = []
-    const byRoom: Record<string, unknown[]> = {}
+    let instructions: InstructionData[] = []
+    const byRoom: Record<string, InstructionData[]> = {}
 
     try {
       instructions = await prisma.propertyInstruction.findMany({
@@ -29,7 +47,7 @@ export async function GET(
             select: { id: true, url: true, caption: true, notes: true, room: true },
           },
         },
-      })
+      }) as InstructionData[]
 
       // Group by room for easier display
       for (const instruction of instructions) {
@@ -51,7 +69,7 @@ export async function GET(
         room: 'General',
         linkedPhotoId: null,
         linkedPhoto: null,
-      }))
+      })) as InstructionData[]
       byRoom['General'] = instructions
     }
 
