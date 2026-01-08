@@ -17,8 +17,10 @@ export async function GET(
     const { id: propertyId } = await params
 
     // Try with new schema fields, fallback to basic query if fields don't exist yet
-    let instructions
-    let byRoom: Record<string, typeof instructions> = {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let instructions: any[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const byRoom: Record<string, any[]> = {}
 
     try {
       instructions = await prisma.propertyInstruction.findMany({
@@ -41,19 +43,18 @@ export async function GET(
       }
     } catch {
       // Fallback for older schema without room/linkedPhoto fields
-      instructions = await prisma.propertyInstruction.findMany({
+      const basicInstructions = await prisma.propertyInstruction.findMany({
         where: { propertyId },
         orderBy: { sortOrder: 'asc' },
       })
       // Add default room for backward compatibility
-      const extendedInstructions = instructions.map(inst => ({
+      instructions = basicInstructions.map(inst => ({
         ...inst,
         room: 'General',
         linkedPhotoId: null,
         linkedPhoto: null,
       }))
-      byRoom['General'] = extendedInstructions
-      instructions = extendedInstructions
+      byRoom['General'] = instructions
     }
 
     return NextResponse.json({ instructions, byRoom })
