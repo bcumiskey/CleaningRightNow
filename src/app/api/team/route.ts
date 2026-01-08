@@ -3,16 +3,19 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const includeInactive = searchParams.get('includeInactive') === 'true'
+
     const teamMembers = await prisma.teamMember.findMany({
-      where: { isActive: true },
-      orderBy: { name: 'asc' },
+      where: includeInactive ? {} : { isActive: true },
+      orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     })
 
     // Add hasPassword indicator without exposing password
@@ -54,6 +57,13 @@ export async function POST(request: NextRequest) {
         where: { email: data.email },
       })
       if (existing) {
+        if (!existing.isActive) {
+          return NextResponse.json({
+            error: `An inactive team member "${existing.name}" already has this email. You can reactivate them from the team management page.`,
+            existingMemberId: existing.id,
+            canReactivate: true
+          }, { status: 400 })
+        }
         return NextResponse.json({ error: 'A team member with this email already exists' }, { status: 400 })
       }
     }

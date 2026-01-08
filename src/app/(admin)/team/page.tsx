@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -29,14 +29,16 @@ export default function TeamPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
   const [passwordMember, setPasswordMember] = useState<TeamMember | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
     fetchTeamMembers()
-  }, [])
+  }, [showInactive])
 
   const fetchTeamMembers = async () => {
     try {
-      const response = await fetch('/api/team')
+      const url = showInactive ? '/api/team?includeInactive=true' : '/api/team'
+      const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
         setTeamMembers(data)
@@ -132,15 +134,50 @@ export default function TeamPage() {
     }
   }
 
+  const handleReactivate = async (member: TeamMember, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`Reactivate ${member.name}?`)) return
+
+    try {
+      const response = await fetch(`/api/team/${member.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...member, isActive: true }),
+      })
+
+      if (response.ok) {
+        toast.success(`${member.name} has been reactivated`)
+        fetchTeamMembers()
+      } else {
+        toast.error('Failed to reactivate team member')
+      }
+    } catch (error) {
+      toast.error('Failed to reactivate team member')
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <AdminHeader title="Team" />
 
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {teamMembers.length} Team Member{teamMembers.length !== 1 && 's'}
-          </h3>
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {teamMembers.filter(m => m.isActive).length} Active Team Member{teamMembers.filter(m => m.isActive).length !== 1 && 's'}
+            </h3>
+            <button
+              onClick={() => setShowInactive(!showInactive)}
+              className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${
+                showInactive
+                  ? 'bg-gray-200 text-gray-700'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+            >
+              {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+            </button>
+          </div>
           <Button onClick={handleAdd}>
             <Plus size={16} />
             Add Team Member
@@ -166,17 +203,26 @@ export default function TeamPage() {
             {teamMembers.map((member) => (
               <Card
                 key={member.id}
-                className="hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => handleEdit(member)}
+                className={`hover:shadow-md transition-shadow cursor-pointer ${
+                  !member.isActive ? 'opacity-60 bg-gray-50' : ''
+                }`}
+                onClick={() => member.isActive && handleEdit(member)}
               >
                 <CardContent>
                   <div className="flex items-start gap-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <User className="text-blue-600" size={24} />
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                      member.isActive ? 'bg-blue-100' : 'bg-gray-200'
+                    }`}>
+                      <User className={member.isActive ? 'text-blue-600' : 'text-gray-400'} size={24} />
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-gray-900">{member.name}</h4>
+                        <h4 className={`font-semibold ${member.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                          {member.name}
+                        </h4>
+                        {!member.isActive && (
+                          <Badge variant="default">Inactive</Badge>
+                        )}
                         <Badge variant={member.role === 'admin' ? 'purple' : 'info'}>
                           {member.role}
                         </Badge>
@@ -194,8 +240,8 @@ export default function TeamPage() {
                         </div>
                       )}
 
-                      {/* Login Status */}
-                      {member.email && (
+                      {/* Login Status - only for active members */}
+                      {member.isActive && member.email && (
                         <div className="mt-3 pt-3 border-t">
                           {member.hasPassword ? (
                             <div className="flex items-center justify-between">
@@ -225,14 +271,14 @@ export default function TeamPage() {
                           )}
                         </div>
                       )}
-                      {!member.email && (
+                      {member.isActive && !member.email && (
                         <p className="mt-3 pt-3 border-t text-xs text-gray-400">
                           Add email to enable login
                         </p>
                       )}
 
-                      {/* View Pay Button for Workers */}
-                      {member.role === 'worker' && (
+                      {/* View Pay Button for Workers - only for active */}
+                      {member.isActive && member.role === 'worker' && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -249,26 +295,40 @@ export default function TeamPage() {
 
                       {/* Action Buttons */}
                       <div className="mt-3 pt-3 border-t flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleEdit(member)
-                          }}
-                        >
-                          <Pencil size={14} />
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-600 hover:bg-red-50"
-                          onClick={(e) => handleDelete(member, e)}
-                        >
-                          <Trash2 size={14} />
-                        </Button>
+                        {member.isActive ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEdit(member)
+                              }}
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={(e) => handleDelete(member, e)}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 text-green-600 hover:bg-green-50"
+                            onClick={(e) => handleReactivate(member, e)}
+                          >
+                            <RefreshCw size={14} />
+                            Reactivate
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
