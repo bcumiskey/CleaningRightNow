@@ -2,24 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { calculateJobPayment } from '@/lib/utils'
-import { z } from 'zod'
 
-const jobUpdateSchema = z.object({
-  date: z.string().optional(),
-  time: z.string().optional().nullable(),
-  rate: z.number().min(0).optional(),
-  expensePercent: z.number().min(0).max(100).optional(),
-  completed: z.boolean().optional(),
-  clientPaid: z.boolean().optional(),
-  teamPaid: z.boolean().optional(),
-  source: z.enum(['manual', 'turno', 'google']).optional(),
-  teamMemberIds: z.array(z.string()).optional(),
-})
-
+// GET single job
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -27,32 +14,15 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
-
     const job = await prisma.job.findUnique({
-      where: { id },
+      where: { id: params.id },
       include: {
         property: {
-          include: {
-            notes: {
-              where: { status: 'active' },
-              orderBy: { createdAt: 'desc' },
-            },
-            standingInstructions: {
-              orderBy: { sortOrder: 'asc' },
-            },
-          },
+          select: { id: true, name: true, address: true },
         },
         assignments: {
           include: {
-            teamMember: {
-              select: { id: true, name: true, email: true, phone: true },
-            },
-          },
-        },
-        invoiceItems: {
-          include: {
-            invoice: true,
+            teamMember: { select: { id: true, name: true } },
           },
         },
       },
@@ -65,16 +35,14 @@ export async function GET(
     return NextResponse.json(job)
   } catch (error) {
     console.error('Job GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch job' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch job' }, { status: 500 })
   }
 }
 
-export async function PUT(
+// UPDATE job
+export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -82,115 +50,85 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
-    const body = await request.json()
-    const validatedData = jobUpdateSchema.parse(body)
+    const data = await request.json()
 
-    const existingJob = await prisma.job.findUnique({
-      where: { id },
-      include: { assignments: true },
-    })
-
-    if (!existingJob) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
-    }
-
-    // Prepare update data
+    // Build update object dynamically
     const updateData: Record<string, unknown> = {}
 
-    if (validatedData.date) {
-      updateData.date = new Date(validatedData.date)
+    // Status fields
+    if (typeof data.completed === 'boolean') {
+      updateData.completed = data.completed
+      updateData.completedAt = data.completed ? new Date() : null
     }
-    if (validatedData.time !== undefined) {
-      updateData.time = validatedData.time
+    if (typeof data.clientPaid === 'boolean') {
+      updateData.clientPaid = data.clientPaid
+      updateData.clientPaidAt = data.clientPaid ? new Date() : null
     }
-    if (validatedData.rate !== undefined) {
-      updateData.rate = validatedData.rate
-    }
-    if (validatedData.expensePercent !== undefined) {
-      updateData.expensePercent = validatedData.expensePercent
-    }
-    if (validatedData.source !== undefined) {
-      updateData.source = validatedData.source
-    }
-    if (validatedData.completed !== undefined) {
-      updateData.completed = validatedData.completed
-      if (validatedData.completed) {
-        updateData.completedAt = new Date()
-      }
-    }
-    if (validatedData.clientPaid !== undefined) {
-      updateData.clientPaid = validatedData.clientPaid
-      if (validatedData.clientPaid) {
-        updateData.clientPaidAt = new Date()
-      }
-    }
-    if (validatedData.teamPaid !== undefined) {
-      updateData.teamPaid = validatedData.teamPaid
-      if (validatedData.teamPaid) {
-        updateData.teamPaidAt = new Date()
-      }
+    if (typeof data.teamPaid === 'boolean') {
+      updateData.teamPaid = data.teamPaid
+      updateData.teamPaidAt = data.teamPaid ? new Date() : null
     }
 
-    // Handle team member updates
-    if (validatedData.teamMemberIds) {
-      const rate = validatedData.rate ?? existingJob.rate
-      const expensePercent = validatedData.expensePercent ?? existingJob.expensePercent
-      const payment = calculateJobPayment(rate, expensePercent, validatedData.teamMemberIds.length)
-
-      // Delete existing assignments and create new ones
-      await prisma.jobAssignment.deleteMany({
-        where: { jobId: id },
-      })
-
-      updateData.assignments = {
-        create: validatedData.teamMemberIds.map((teamMemberId) => ({
-          teamMemberId,
-          amountEarned: payment.perPersonPayout,
-        })),
-      }
-    }
+    // Other fields
+    if (data.date) updateData.date = new Date(data.date)
+    if (data.time !== undefined) updateData.time = data.time || null
+    if (data.rate !== undefined) updateData.rate = parseFloat(data.rate)
+    if (data.expensePercent !== undefined) updateData.expensePercent = parseFloat(data.expensePercent)
+    if (data.propertyId) updateData.propertyId = data.propertyId
 
     const job = await prisma.job.update({
-      where: { id },
+      where: { id: params.id },
       data: updateData,
       include: {
-        property: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
-          },
-        },
+        property: { select: { name: true } },
         assignments: {
-          include: {
-            teamMember: {
-              select: { id: true, name: true },
-            },
-          },
+          include: { teamMember: { select: { name: true } } },
         },
       },
     })
 
+    // Handle team assignments if provided
+    if (data.teamMemberIds !== undefined) {
+      // Remove existing assignments
+      await prisma.jobAssignment.deleteMany({
+        where: { jobId: params.id },
+      })
+
+      // Add new assignments
+      if (data.teamMemberIds.length > 0) {
+        await prisma.jobAssignment.createMany({
+          data: data.teamMemberIds.map((teamMemberId: string) => ({
+            jobId: params.id,
+            teamMemberId,
+          })),
+        })
+      }
+
+      // Fetch updated job with assignments
+      const updatedJob = await prisma.job.findUnique({
+        where: { id: params.id },
+        include: {
+          property: { select: { name: true } },
+          assignments: {
+            include: { teamMember: { select: { id: true, name: true } } },
+          },
+        },
+      })
+
+      return NextResponse.json(updatedJob)
+    }
+
     return NextResponse.json(job)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      )
-    }
-    console.error('Job PUT error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update job' },
-      { status: 500 }
-    )
+    console.error('Job PATCH error:', error)
+    return NextResponse.json({ error: 'Failed to update job' }, { status: 500 })
   }
 }
 
+// DELETE job
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -198,26 +136,19 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
-
-    const existingJob = await prisma.job.findUnique({
-      where: { id },
-    })
-
-    if (!existingJob) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 })
+    // Only admins can delete jobs
+    const userRole = (session.user as { role?: string })?.role
+    if (userRole !== 'admin') {
+      return NextResponse.json({ error: 'Only administrators can delete jobs' }, { status: 403 })
     }
 
     await prisma.job.delete({
-      where: { id },
+      where: { id: params.id },
     })
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Job DELETE error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete job' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete job' }, { status: 500 })
   }
 }

@@ -2,23 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { z } from 'zod'
-
-const invoiceUpdateSchema = z.object({
-  invoiceDate: z.string().optional(),
-  dueDate: z.string().optional().nullable(),
-  paymentTerms: z.string().optional(),
-  discount: z.number().min(0).optional(),
-  notes: z.string().optional().nullable(),
-  lineItems: z.array(z.object({
-    id: z.string().optional(),
-    date: z.string().optional().nullable(),
-    description: z.string().min(1),
-    amount: z.number(),
-    jobId: z.string().optional().nullable(),
-    itemType: z.enum(['service', 'supplies', 'expense', 'misc', 'custom']).default('service'),
-  })).optional(),
-})
+import { Prisma } from '@prisma/client'
 
 export async function GET(
   request: NextRequest,
@@ -47,15 +31,6 @@ export async function GET(
         },
         lineItems: {
           orderBy: { sortOrder: 'asc' },
-          include: {
-            job: {
-              select: {
-                id: true,
-                date: true,
-                rate: true,
-              },
-            },
-          },
         },
       },
     })
@@ -67,10 +42,7 @@ export async function GET(
     return NextResponse.json(invoice)
   } catch (error) {
     console.error('Invoice GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch invoice' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch invoice' }, { status: 500 })
   }
 }
 
@@ -85,71 +57,102 @@ export async function PUT(
     }
 
     const { id } = await params
-    const body = await request.json()
-    const validatedData = invoiceUpdateSchema.parse(body)
+    const data = await request.json()
 
-    const existingInvoice = await prisma.invoice.findUnique({
-      where: { id },
-      include: { lineItems: true },
-    })
+    // If line items are provided, update them in a transaction
+    if (Array.isArray(data.lineItems)) {
+      const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        // Delete existing line items
+        await tx.invoiceLineItem.deleteMany({
+          where: { invoiceId: id },
+        })
 
-    if (!existingInvoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
-    }
+        // Calculate new subtotal from line items
+        const subtotal = data.lineItems.reduce(
+          (sum: number, item: { amount: number }) => sum + (item.amount || 0),
+          0
+        )
+        const discount = data.discount || 0
+        const total = subtotal - discount
 
-    // Can only edit draft invoices
-    if (existingInvoice.status !== 'draft') {
-      return NextResponse.json(
-        { error: 'Can only edit draft invoices' },
-        { status: 400 }
-      )
-    }
+        // Create new line items
+        for (let i = 0; i < data.lineItems.length; i++) {
+          const item = data.lineItems[i]
+          await tx.invoiceLineItem.create({
+            data: {
+              invoiceId: id,
+              description: item.description,
+              amount: item.amount || 0,
+              itemType: item.itemType || 'service',
+              date: item.date ? new Date(item.date) : null,
+              jobId: item.jobId || null,
+              sortOrder: i,
+            },
+          })
+        }
 
-    // Handle line items update
-    if (validatedData.lineItems) {
-      // Delete existing line items
-      await prisma.invoiceLineItem.deleteMany({
-        where: { invoiceId: id },
+        // Update the invoice
+        const invoice = await tx.invoice.update({
+          where: { id },
+          data: {
+            invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : undefined,
+            paymentTerms: data.paymentTerms,
+            billingPeriod: data.billingPeriod,
+            subtotal,
+            discount,
+            total,
+            status: data.status,
+            notes: data.notes,
+            sentAt: data.status === 'sent' ? new Date() : undefined,
+            paidAt: data.status === 'paid' ? new Date() : undefined,
+          },
+          include: {
+            property: {
+              select: {
+                id: true,
+                name: true,
+                address: true,
+                ownerName: true,
+                ownerEmail: true,
+                ownerPhone: true,
+              },
+            },
+            lineItems: {
+              orderBy: { sortOrder: 'asc' },
+            },
+          },
+        })
+
+        return invoice
       })
 
-      // Create new line items
-      await prisma.invoiceLineItem.createMany({
-        data: validatedData.lineItems.map((item, index) => ({
-          invoiceId: id,
-          date: item.date ? new Date(item.date) : null,
-          description: item.description,
-          amount: item.amount,
-          jobId: item.jobId,
-          itemType: item.itemType,
-          sortOrder: index,
-        })),
-      })
+      return NextResponse.json(result)
     }
 
-    // Calculate new totals
-    const lineItems = validatedData.lineItems || existingInvoice.lineItems
-    const subtotal = lineItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0)
-    const discount = validatedData.discount ?? existingInvoice.discount
-    const total = subtotal - discount
-
+    // Simple update without line items
     const invoice = await prisma.invoice.update({
       where: { id },
       data: {
-        invoiceDate: validatedData.invoiceDate ? new Date(validatedData.invoiceDate) : undefined,
-        dueDate: validatedData.dueDate ? new Date(validatedData.dueDate) : validatedData.dueDate === null ? null : undefined,
-        paymentTerms: validatedData.paymentTerms,
-        discount,
-        subtotal,
-        total,
-        notes: validatedData.notes,
+        invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : undefined,
+        paymentTerms: data.paymentTerms,
+        billingPeriod: data.billingPeriod,
+        subtotal: data.subtotal,
+        discount: data.discount,
+        total: data.total,
+        status: data.status,
+        notes: data.notes,
+        sentAt: data.status === 'sent' ? new Date() : undefined,
+        paidAt: data.status === 'paid' ? new Date() : undefined,
       },
       include: {
         property: {
           select: {
             id: true,
             name: true,
+            address: true,
             ownerName: true,
             ownerEmail: true,
+            ownerPhone: true,
           },
         },
         lineItems: {
@@ -160,17 +163,8 @@ export async function PUT(
 
     return NextResponse.json(invoice)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      )
-    }
     console.error('Invoice PUT error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update invoice' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update invoice' }, { status: 500 })
   }
 }
 
@@ -184,23 +178,12 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { id } = await params
-
-    const existingInvoice = await prisma.invoice.findUnique({
-      where: { id },
-    })
-
-    if (!existingInvoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
-    }
-
-    // Can only delete draft invoices
-    if (existingInvoice.status !== 'draft') {
-      return NextResponse.json(
-        { error: 'Can only delete draft invoices' },
-        { status: 400 }
-      )
-    }
 
     await prisma.invoice.delete({
       where: { id },
@@ -209,9 +192,6 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Invoice DELETE error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete invoice' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete invoice' }, { status: 500 })
   }
 }

@@ -1,104 +1,145 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-export async function GET() {
+interface ShoppingListItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  properties: {
+    propertyId: string
+    propertyName: string
+    perFlip: number
+    onHand: number
+    needed: number
+    unitCost: number // Property-specific cost
+    flipsRemaining: number
+  }[]
+  totalNeeded: number
+  totalCost: number
+}
+
+// GET - Generate shopping list based on inventory levels
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const targetFlips = parseInt(searchParams.get('targetFlips') || '5')
+    const propertyId = searchParams.get('propertyId') // Optional filter
+
     // Get all properties with their linen requirements and inventory
     const properties = await prisma.property.findMany({
-      include: {
+      where: propertyId ? { id: propertyId } : undefined,
+      select: {
+        id: true,
+        name: true,
         linenRequirements: {
           include: {
             linenItem: {
-              include: {
-                category: true,
-              },
+              include: { category: { select: { name: true } } },
             },
           },
         },
         linenInventory: true,
       },
-      orderBy: { name: 'asc' },
     })
 
-    // Calculate shopping list
-    const shoppingList: Array<{
-      property: { id: string; name: string };
-      linenItem: { id: string; name: string; code: string; unitCost: number; category: string };
-      target: number;
-      onHand: number;
-      needed: number;
-      totalCost: number;
-    }> = []
+    // Build shopping list by item
+    const itemMap = new Map<string, ShoppingListItem>()
 
     for (const property of properties) {
-      for (const requirement of property.linenRequirements) {
-        const target = requirement.perFlip * 2 // 2x target
-        const inventory = property.linenInventory.find(
-          (inv: { linenItemId: string; onHand: number }) => inv.linenItemId === requirement.linenItemId
-        )
-        const onHand = inventory?.onHand || 0
-        const needed = Math.max(0, target - onHand)
+      for (const req of property.linenRequirements) {
+        if (req.perFlip <= 0) continue // Skip items with no requirement
 
-        if (needed > 0) {
-          shoppingList.push({
-            property: { id: property.id, name: property.name },
-            linenItem: {
-              id: requirement.linenItem.id,
-              name: requirement.linenItem.name,
-              code: requirement.linenItem.code,
-              unitCost: requirement.linenItem.unitCost,
-              category: requirement.linenItem.category.name,
-            },
-            target,
+        const inv = property.linenInventory.find((i: { linenItemId: string; onHand: number }) => i.linenItemId === req.linenItemId)
+        const onHand = inv?.onHand || 0
+        const neededForTarget = req.perFlip * targetFlips
+        const shortage = Math.max(0, neededForTarget - onHand)
+        const flipsRemaining = req.perFlip > 0 ? Math.floor(onHand / req.perFlip) : 0
+
+        if (shortage > 0 || flipsRemaining < 3) {
+          // Add to shopping list
+          let item = itemMap.get(req.linenItemId)
+
+          if (!item) {
+            item = {
+              itemId: req.linenItemId,
+              itemName: req.linenItem.name,
+              itemCode: req.linenItem.code,
+              category: req.linenItem.category.name,
+              properties: [],
+              totalNeeded: 0,
+              totalCost: 0,
+            }
+            itemMap.set(req.linenItemId, item)
+          }
+
+          // Use property-specific cost if set, otherwise fall back to master catalog cost
+          const unitCost = req.unitCost ?? req.linenItem.unitCost
+
+          item.properties.push({
+            propertyId: property.id,
+            propertyName: property.name,
+            perFlip: req.perFlip,
             onHand,
-            needed,
-            totalCost: needed * requirement.linenItem.unitCost,
+            needed: shortage,
+            unitCost,
+            flipsRemaining,
           })
+          item.totalNeeded += shortage
+          // Recalculate total cost based on property-specific costs
+          item.totalCost = item.properties.reduce(
+            (sum, p) => sum + (p.needed * p.unitCost),
+            0
+          )
         }
       }
     }
 
-    // Group by item for summary
-    const byItem = shoppingList.reduce((acc, item) => {
-      const key = item.linenItem.id
-      if (!acc[key]) {
-        acc[key] = {
-          linenItem: item.linenItem,
-          totalNeeded: 0,
-          totalCost: 0,
-          properties: [],
+    // Convert to array and sort by category, then name
+    const shoppingList = Array.from(itemMap.values())
+      .sort((a, b) => {
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category)
         }
-      }
-      acc[key].totalNeeded += item.needed
-      acc[key].totalCost += item.totalCost
-      acc[key].properties.push({
-        property: item.property,
-        needed: item.needed,
+        return a.itemName.localeCompare(b.itemName)
       })
-      return acc
-    }, {} as Record<string, { linenItem: typeof shoppingList[0]['linenItem']; totalNeeded: number; totalCost: number; properties: Array<{ property: { id: string; name: string }; needed: number }> }>)
 
-    // Calculate grand total
-    const grandTotal = shoppingList.reduce((sum, item) => sum + item.totalCost, 0)
+    // Calculate totals
+    const totalItems = shoppingList.reduce((sum, item) => sum + item.totalNeeded, 0)
+    const totalCost = shoppingList.reduce((sum, item) => sum + item.totalCost, 0)
+
+    // Group by category for easier display
+    const byCategory: Record<string, ShoppingListItem[]> = {}
+    for (const item of shoppingList) {
+      if (!byCategory[item.category]) {
+        byCategory[item.category] = []
+      }
+      byCategory[item.category].push(item)
+    }
 
     return NextResponse.json({
-      byProperty: shoppingList,
-      byItem: Object.values(byItem),
-      grandTotal,
-      itemCount: Object.keys(byItem).length,
+      targetFlips,
+      propertyFilter: propertyId || 'all',
+      items: shoppingList,
+      byCategory,
+      summary: {
+        totalItems,
+        totalCost,
+        uniqueItems: shoppingList.length,
+        propertiesWithNeeds: new Set(
+          shoppingList.flatMap(i => i.properties.map(p => p.propertyId))
+        ).size,
+      },
     })
   } catch (error) {
     console.error('Shopping list GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to generate shopping list' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate shopping list' }, { status: 500 })
   }
 }

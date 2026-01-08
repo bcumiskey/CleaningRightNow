@@ -2,16 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { z } from 'zod'
-
-const teamMemberSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  phone: z.string().optional().nullable(),
-  email: z.string().email().optional().nullable(),
-  role: z.enum(['admin', 'worker']).default('worker'),
-  isActive: z.boolean().default(true),
-  passwordHash: z.string().optional().nullable(),
-})
 
 export async function GET() {
   try {
@@ -21,47 +11,25 @@ export async function GET() {
     }
 
     const teamMembers = await prisma.teamMember.findMany({
-      include: {
-        jobAssignments: {
-          where: {
-            job: {
-              completed: true,
-              teamPaid: false,
-            },
-          },
-          select: {
-            amountEarned: true,
-          },
-        },
-        _count: {
-          select: {
-            jobAssignments: true,
-          },
-        },
-      },
-      orderBy: [
-        { isActive: 'desc' },
-        { name: 'asc' },
-      ],
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
     })
 
-    // Calculate owed amounts
-    const membersWithOwed = teamMembers.map((member: (typeof teamMembers)[number]) => ({
-      ...member,
-      owedAmount: member.jobAssignments.reduce(
-        (sum: number, assignment: { amountEarned: number | null }) => sum + (assignment.amountEarned || 0),
-        0
-      ),
-      passwordHash: undefined, // Don't expose password hash
+    // Add hasPassword indicator without exposing password
+    const membersWithPasswordStatus = teamMembers.map((member: { id: string; name: string; email: string | null; phone: string | null; role: string; isActive: boolean; password: string | null }) => ({
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      role: member.role,
+      isActive: member.isActive,
+      hasPassword: !!member.password,
     }))
 
-    return NextResponse.json(membersWithOwed)
+    return NextResponse.json(membersWithPasswordStatus)
   } catch (error) {
     console.error('Team GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch team members' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch team' }, { status: 500 })
   }
 }
 
@@ -72,25 +40,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const validatedData = teamMemberSchema.parse(body)
+    // Only admins can create team members
+    const userRole = (session.user as { role?: string })?.role
+    if (userRole !== 'admin') {
+      return NextResponse.json({ error: 'Only administrators can add team members' }, { status: 403 })
+    }
+
+    const data = await request.json()
 
     const teamMember = await prisma.teamMember.create({
-      data: validatedData,
+      data: {
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        role: data.role || 'worker',
+      },
     })
 
-    return NextResponse.json({ ...teamMember, passwordHash: undefined }, { status: 201 })
+    return NextResponse.json(teamMember)
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      )
-    }
     console.error('Team POST error:', error)
-    return NextResponse.json(
-      { error: 'Failed to create team member' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create team member' }, { status: 500 })
   }
 }

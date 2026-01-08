@@ -2,15 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { z } from 'zod'
-
-const teamMemberUpdateSchema = z.object({
-  name: z.string().min(1).optional(),
-  phone: z.string().optional().nullable(),
-  email: z.string().email().optional().nullable(),
-  role: z.enum(['admin', 'worker']).optional(),
-  isActive: z.boolean().optional(),
-})
 
 export async function GET(
   request: NextRequest,
@@ -26,59 +17,24 @@ export async function GET(
 
     const teamMember = await prisma.teamMember.findUnique({
       where: { id },
-      include: {
-        jobAssignments: {
-          include: {
-            job: {
-              include: {
-                property: {
-                  select: { id: true, name: true },
-                },
-              },
-            },
-          },
-          orderBy: {
-            job: { date: 'desc' },
-          },
-          take: 50,
-        },
-      },
     })
 
     if (!teamMember) {
       return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
     }
 
-    // Calculate owed amount
-    const unpaidAssignments = await prisma.jobAssignment.findMany({
-      where: {
-        teamMemberId: id,
-        job: {
-          completed: true,
-          teamPaid: false,
-        },
-      },
-      select: {
-        amountEarned: true,
-      },
-    })
-
-    const owedAmount = unpaidAssignments.reduce(
-      (sum: number, a: { amountEarned: number | null }) => sum + (a.amountEarned || 0),
-      0
-    )
-
     return NextResponse.json({
-      ...teamMember,
-      owedAmount,
-      passwordHash: undefined,
+      id: teamMember.id,
+      name: teamMember.name,
+      email: teamMember.email,
+      phone: teamMember.phone,
+      role: teamMember.role,
+      isActive: teamMember.isActive,
+      hasPassword: !!teamMember.password,
     })
   } catch (error) {
     console.error('Team member GET error:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch team member' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch team member' }, { status: 500 })
   }
 }
 
@@ -93,43 +49,32 @@ export async function PUT(
     }
 
     const { id } = await params
-    const body = await request.json()
-    const validatedData = teamMemberUpdateSchema.parse(body)
-
-    const existingMember = await prisma.teamMember.findUnique({
-      where: { id },
-    })
-
-    if (!existingMember) {
-      return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
-    }
+    const data = await request.json()
 
     const teamMember = await prisma.teamMember.update({
       where: { id },
-      data: validatedData,
+      data: {
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        role: data.role,
+        isActive: data.isActive ?? true,
+      },
     })
 
-    return NextResponse.json({ ...teamMember, passwordHash: undefined })
+    return NextResponse.json({
+      id: teamMember.id,
+      name: teamMember.name,
+      email: teamMember.email,
+      phone: teamMember.phone,
+      role: teamMember.role,
+      isActive: teamMember.isActive,
+      hasPassword: !!teamMember.password,
+    })
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: 'Validation error', details: error.issues },
-        { status: 400 }
-      )
-    }
     console.error('Team member PUT error:', error)
-    return NextResponse.json(
-      { error: 'Failed to update team member' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to update team member' }, { status: 500 })
   }
-}
-
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  return PUT(request, { params })
 }
 
 export async function DELETE(
@@ -142,26 +87,22 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
-
-    const existingMember = await prisma.teamMember.findUnique({
-      where: { id },
-    })
-
-    if (!existingMember) {
-      return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await prisma.teamMember.delete({
+    const { id } = await params
+
+    // Soft delete - just mark as inactive
+    await prisma.teamMember.update({
       where: { id },
+      data: { isActive: false },
     })
 
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Team member DELETE error:', error)
-    return NextResponse.json(
-      { error: 'Failed to delete team member' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to delete team member' }, { status: 500 })
   }
 }

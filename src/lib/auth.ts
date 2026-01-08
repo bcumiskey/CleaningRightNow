@@ -1,66 +1,83 @@
 import { NextAuthOptions } from 'next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import bcrypt from 'bcryptjs'
+import { compare } from 'bcryptjs'
 import prisma from './prisma'
 
 export const authOptions: NextAuthOptions = {
+  session: {
+    strategy: 'jwt',
+  },
+  pages: {
+    signIn: '/login',
+  },
   providers: [
     CredentialsProvider({
       name: 'credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' }
+        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Invalid credentials')
+          return null
         }
 
+        // First try to find admin user
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email },
         })
 
-        if (!user || !user.password) {
-          throw new Error('Invalid credentials')
+        if (user) {
+          const isValid = await compare(credentials.password, user.password)
+          if (!isValid) {
+            return null
+          }
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: 'admin',
+          }
         }
 
-        const isPasswordValid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        )
+        // If not admin, try to find worker (team member)
+        const worker = await prisma.teamMember.findUnique({
+          where: { email: credentials.email },
+        })
 
-        if (!isPasswordValid) {
-          throw new Error('Invalid credentials')
+        if (!worker || !worker.password || !worker.isActive) {
+          return null
+        }
+
+        const isValidWorker = await compare(credentials.password, worker.password)
+        if (!isValidWorker) {
+          return null
         }
 
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
+          id: worker.id,
+          email: worker.email,
+          name: worker.name,
+          role: 'worker',
         }
-      }
-    })
+      },
+    }),
   ],
-  session: {
-    strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-  pages: {
-    signIn: '/login',
-  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
+        token.role = (user as { role?: string }).role
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string
+        const tokenData = token as { id?: string; role?: string }
+        ;(session.user as { id?: string }).id = tokenData.id
+        ;(session.user as { role?: string }).role = tokenData.role
       }
       return session
-    }
+    },
   },
-  secret: process.env.NEXTAUTH_SECRET,
 }

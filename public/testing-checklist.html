@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cleaning Right Now - Testing Checklist</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    h1 {
+      color: #1e40af;
+      border-bottom: 3px solid #3b82f6;
+      padding-bottom: 10px;
+      margin-bottom: 30px;
+    }
+    h2 {
+      color: #1e40af;
+      margin-top: 30px;
+      margin-bottom: 15px;
+      font-size: 1.3em;
+    }
+    h3 {
+      color: #374151;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      font-size: 1.1em;
+    }
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+    .checklist li {
+      padding: 8px 0 8px 35px;
+      position: relative;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .checklist li:before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 18px;
+      height: 18px;
+      border: 2px solid #9ca3af;
+      border-radius: 3px;
+    }
+    .section {
+      background: #f9fafb;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .quick-test {
+      background: #ecfdf5;
+      border: 1px solid #10b981;
+    }
+    .config-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+    .config-table th, .config-table td {
+      border: 1px solid #d1d5db;
+      padding: 10px;
+      text-align: left;
+    }
+    .config-table th {
+      background: #f3f4f6;
+    }
+    code {
+      background: #e5e7eb;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    .header-info {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      color: #6b7280;
+    }
+    .pass-fail {
+      display: inline-block;
+      width: 60px;
+      height: 20px;
+      border: 1px solid #9ca3af;
+      border-radius: 3px;
+      margin-left: 10px;
+    }
+    @media print {
+      body { padding: 20px; }
+      .section { break-inside: avoid; }
+      h2 { break-after: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Cleaning Right Now - Testing Checklist</h1>
+
+  <div class="header-info">
+    <span>Tester: _______________________</span>
+    <span>Date: _______________________</span>
+  </div>
+
+  <div class="section quick-test">
+    <h2>Quick Smoke Test (5 minutes)</h2>
+    <ul class="checklist">
+      <li>Register admin account</li>
+      <li>Add 1 property with photo</li>
+      <li>Create 1 job for the property</li>
+      <li>Add 1 team member</li>
+      <li>Log in as worker, view job</li>
+      <li>Create 1 incident note with photo</li>
+      <li>Log back in as admin, view the note</li>
+    </ul>
+  </div>
+
+  <h2>1. Authentication</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Go to <code>/register</code> - Create admin account</li>
+      <li>Log out and log back in at <code>/login</code></li>
+      <li>Verify redirect to dashboard after login</li>
+      <li>Test invalid login (wrong password)</li>
+    </ul>
+  </div>
+
+  <h2>2. Dashboard</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Stats cards display correctly</li>
+      <li>Today's jobs section loads</li>
+      <li>Recent activity shows (if any)</li>
+    </ul>
+  </div>
+
+  <h2>3. Properties</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Add a new property with all fields</li>
+      <li>Upload a property photo (tests Vercel Blob)</li>
+      <li>Edit an existing property</li>
+      <li>Delete a property</li>
+      <li>Search/filter properties</li>
+    </ul>
+  </div>
+
+  <h2>4. Jobs</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Create a new job (assign to property)</li>
+      <li>Assign team member to job</li>
+      <li>Edit job details</li>
+      <li>Mark job as completed</li>
+      <li>Verify job appears on calendar</li>
+    </ul>
+  </div>
+
+  <h2>5. Team/Workers</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Add a team member with email/password</li>
+      <li>Set their hourly rate</li>
+      <li>View team member details</li>
+      <li>Log out, then log in as worker at <code>/worker</code></li>
+      <li>Verify worker can see assigned jobs</li>
+      <li>Verify worker can see pay statements</li>
+    </ul>
+  </div>
+
+  <h2>6. Notes/Incidents</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>As worker: Go to property reference page</li>
+      <li>Create note with description and severity</li>
+      <li>Upload photo(s) to the note</li>
+      <li>As admin: View notes at <code>/notes</code></li>
+      <li>Filter notes by property</li>
+      <li>Filter notes by severity</li>
+      <li>View note details with photos</li>
+      <li>Download incident PDF report</li>
+    </ul>
+  </div>
+
+  <h2>7. Invoices</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Create an invoice for a property</li>
+      <li>Add line items to invoice</li>
+      <li>Preview invoice PDF</li>
+      <li>Download invoice PDF</li>
+      <li>Send invoice via email (tests Resend)</li>
+      <li>Mark invoice as paid</li>
+    </ul>
+  </div>
+
+  <h2>8. Push Notifications</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Go to Settings page</li>
+      <li>Click enable push notifications</li>
+      <li>Browser permission prompt appears</li>
+      <li>Toggle shows "Enabled" state after allowing</li>
+      <li>Can disable notifications</li>
+    </ul>
+  </div>
+
+  <h2>9. Calendar</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>View calendar page</li>
+      <li>Jobs appear on correct dates</li>
+      <li>Can navigate between months</li>
+      <li>Export calendar (ICS sync)</li>
+    </ul>
+  </div>
+
+  <h2>10. Settings</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>Update company name</li>
+      <li>Upload company logo</li>
+      <li>Update contact information</li>
+      <li>Save and verify changes persist</li>
+    </ul>
+  </div>
+
+  <h2>11. Linens Management</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>View linen inventory</li>
+      <li>Filter by category</li>
+      <li>Update linen quantities</li>
+    </ul>
+  </div>
+
+  <h2>12. Reports</h2>
+  <div class="section">
+    <ul class="checklist">
+      <li>View reports page</li>
+      <li>Generate revenue report</li>
+      <li>Filter by date range</li>
+    </ul>
+  </div>
+
+  <h2>Environment Configuration</h2>
+  <table class="config-table">
+    <tr>
+      <th>Variable</th>
+      <th>Configured</th>
+    </tr>
+    <tr>
+      <td>DATABASE_URL (Neon)</td>
+      <td class="pass-fail"></td>
+    </tr>
+    <tr>
+      <td>NEXTAUTH_SECRET</td>
+      <td class="pass-fail"></td>
+    </tr>
+    <tr>
+      <td>BLOB_READ_WRITE_TOKEN (Vercel Blob)</td>
+      <td class="pass-fail"></td>
+    </tr>
+    <tr>
+      <td>RESEND_API_KEY</td>
+      <td class="pass-fail"></td>
+    </tr>
+    <tr>
+      <td>NEXT_PUBLIC_VAPID_PUBLIC_KEY</td>
+      <td class="pass-fail"></td>
+    </tr>
+    <tr>
+      <td>VAPID_PRIVATE_KEY</td>
+      <td class="pass-fail"></td>
+    </tr>
+    <tr>
+      <td>VAPID_SUBJECT</td>
+      <td class="pass-fail"></td>
+    </tr>
+  </table>
+
+  <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e7eb;">
+    <h3>Notes / Issues Found</h3>
+    <div style="min-height: 150px; border: 1px solid #d1d5db; border-radius: 8px; margin-top: 10px; padding: 15px;">
+      &nbsp;
+    </div>
+  </div>
+
+  <div style="margin-top: 30px; text-align: center; color: #6b7280; font-size: 0.9em;">
+    <p>Cleaning Right Now v1.0 | Testing Checklist</p>
+    <p style="margin-top: 10px;"><strong>To save as PDF:</strong> Press Ctrl+P (or Cmd+P on Mac) and select "Save as PDF"</p>
+  </div>
+</body>
+</html>
