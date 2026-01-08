@@ -125,9 +125,12 @@ export default function InvoiceTemplate({
             <p className="text-lg font-semibold text-gray-700 mt-1">
               {invoice.invoiceNumber}
             </p>
-            <span className={`inline-block mt-2 px-3 py-1 text-xs font-semibold uppercase rounded-full ${statusColors[invoice.status] || statusColors.draft}`}>
-              {invoice.status}
-            </span>
+            {/* Only show status badge on screen, not when printing - and hide "draft" status */}
+            {invoice.status !== 'draft' && (
+              <span className={`inline-block mt-2 px-3 py-1 text-xs font-semibold uppercase rounded-full print:hidden ${statusColors[invoice.status] || statusColors.draft}`}>
+                {invoice.status === 'paid' ? 'PAID' : invoice.status}
+              </span>
+            )}
           </div>
         </div>
 

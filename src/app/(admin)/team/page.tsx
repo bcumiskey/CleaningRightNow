@@ -80,7 +80,8 @@ export default function TeamPage() {
         setShowModal(false)
         fetchTeamMembers()
       } else {
-        toast.error('Failed to save team member')
+        const errorData = await response.json()
+        toast.error(errorData.error || 'Failed to save team member')
       }
     } catch (error) {
       toast.error('Failed to save team member')
