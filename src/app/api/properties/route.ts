@@ -3,26 +3,35 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const debugInfo: string[] = []
+  const { searchParams } = new URL(request.url)
+  const debug = searchParams.get('debug') === 'true'
+
   try {
     const session = await getServerSession(authOptions)
+    debugInfo.push(`Session: ${session ? 'authenticated' : 'none'}`)
+
     if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized', debug: debug ? debugInfo : undefined }, { status: 401 })
     }
 
     // Try standard Prisma query first
     try {
+      debugInfo.push('Trying Prisma findMany...')
       const properties = await prisma.property.findMany({
         orderBy: { name: 'asc' },
       })
+      debugInfo.push(`Prisma OK: ${properties.length} properties`)
 
       // Try to fetch owners separately
       let owners: Record<string, { id: string; name: string; email: string | null; phone: string | null; defaultBaseRate: number | null; defaultBillingType: string | null }> = {}
       try {
         const ownerList = await prisma.owner.findMany()
         owners = Object.fromEntries(ownerList.map(o => [o.id, o]))
-      } catch {
-        // Owner table might not exist - continue without
+        debugInfo.push(`Owners: ${ownerList.length}`)
+      } catch (e) {
+        debugInfo.push(`Owners failed: ${e}`)
       }
 
       // Try to fetch notes counts separately
@@ -34,8 +43,9 @@ export async function GET() {
           _count: { id: true },
         })
         noteCounts = Object.fromEntries(notes.map(n => [n.propertyId, n._count.id]))
-      } catch {
-        // PropertyNote table might not exist - continue without
+        debugInfo.push(`Notes count groups: ${notes.length}`)
+      } catch (e) {
+        debugInfo.push(`Notes failed: ${e}`)
       }
 
       // Try to fetch job counts separately
@@ -46,8 +56,9 @@ export async function GET() {
           _count: { id: true },
         })
         jobCounts = Object.fromEntries(jobs.map(j => [j.propertyId, j._count.id]))
-      } catch {
-        // Job table might not exist - continue without
+        debugInfo.push(`Jobs count groups: ${jobs.length}`)
+      } catch (e) {
+        debugInfo.push(`Jobs failed: ${e}`)
       }
 
       // Combine results
@@ -58,10 +69,15 @@ export async function GET() {
         _count: { jobs: jobCounts[property.id] || 0 },
       }))
 
-      return NextResponse.json(result)
+      // If debug mode, include debug info in response headers
+      const response = NextResponse.json(result)
+      if (debug) {
+        response.headers.set('X-Debug-Info', JSON.stringify(debugInfo))
+      }
+      return response
     } catch (prismaError) {
-      // Prisma query failed - try raw SQL as fallback
-      console.error('Prisma query failed, trying raw SQL:', prismaError)
+      debugInfo.push(`Prisma failed: ${prismaError}`)
+      debugInfo.push('Trying raw SQL...')
 
       try {
         const properties = await prisma.$queryRaw`
@@ -90,7 +106,8 @@ export async function GET() {
           updatedAt: Date
         }>
 
-        // Return with empty relations
+        debugInfo.push(`Raw SQL OK: ${properties.length} properties`)
+
         const result = properties.map(property => ({
           ...property,
           owner: null,
@@ -98,15 +115,24 @@ export async function GET() {
           _count: { jobs: 0 },
         }))
 
-        return NextResponse.json(result)
+        const response = NextResponse.json(result)
+        if (debug) {
+          response.headers.set('X-Debug-Info', JSON.stringify(debugInfo))
+        }
+        return response
       } catch (rawError) {
-        console.error('Raw SQL also failed:', rawError)
+        debugInfo.push(`Raw SQL failed: ${rawError}`)
         throw rawError
       }
     }
   } catch (error) {
     console.error('Properties GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch properties', details: String(error) }, { status: 500 })
+    debugInfo.push(`Final error: ${error}`)
+    return NextResponse.json({
+      error: 'Failed to fetch properties',
+      details: String(error),
+      debug: debug ? debugInfo : undefined,
+    }, { status: 500 })
   }
 }
 
@@ -145,6 +171,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(property)
   } catch (error) {
     console.error('Properties POST error:', error)
-    return NextResponse.json({ error: 'Failed to create property' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create property', details: String(error) }, { status: 500 })
   }
 }
