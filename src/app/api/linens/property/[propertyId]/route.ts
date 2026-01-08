@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 
 // GET - Get linen requirements and inventory for a property
 export async function GET(
@@ -104,7 +105,7 @@ export async function PUT(
     }
 
     // Update requirements and inventory in a transaction
-    await prisma.$transaction(async (tx: typeof prisma) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const item of data.linens) {
         // Update or create requirement
         if (item.perFlip !== undefined) {
