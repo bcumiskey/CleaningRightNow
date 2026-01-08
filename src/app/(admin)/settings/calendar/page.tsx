@@ -484,7 +484,7 @@ export default function CalendarSettingsPage() {
             <div>
               <h4 className="font-semibold text-gray-900 mb-1">4. Sync Regularly</h4>
               <p>
-                Click "Sync All" to pull the latest reservations. Duplicate events (same UID) are
+                Click &quot;Sync All&quot; to pull the latest reservations. Duplicate events (same UID) are
                 automatically skipped.
               </p>
             </div>
