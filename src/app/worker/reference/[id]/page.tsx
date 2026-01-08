@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Upload,
   Trash2,
+  Package,
+  BedDouble,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -51,6 +53,15 @@ interface PropertyDetail {
   bedConfig?: string
 }
 
+interface LinenRequirement {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  perFlip: number
+  onHand: number
+}
+
 const NOTE_TYPES = [
   { value: 'damage', label: 'Damage', icon: AlertTriangle, color: 'red' },
   { value: 'issue', label: 'Issue', icon: AlertCircle, color: 'orange' },
@@ -72,6 +83,7 @@ export default function WorkerPropertyDetailPage() {
 
   const [property, setProperty] = useState<PropertyDetail | null>(null)
   const [notes, setNotes] = useState<PropertyNote[]>([])
+  const [linenRequirements, setLinenRequirements] = useState<LinenRequirement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddNote, setShowAddNote] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -86,9 +98,10 @@ export default function WorkerPropertyDetailPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [propRes, notesRes] = await Promise.all([
+      const [propRes, notesRes, linensRes] = await Promise.all([
         fetch(`/api/properties/${propertyId}`),
         fetch(`/api/notes?propertyId=${propertyId}&includeResolved=true`),
+        fetch(`/api/linens/property/${propertyId}`),
       ])
 
       if (propRes.ok) {
@@ -96,6 +109,13 @@ export default function WorkerPropertyDetailPage() {
       }
       if (notesRes.ok) {
         setNotes(await notesRes.json())
+      }
+      if (linensRes.ok) {
+        const data = await linensRes.json()
+        // Only show items with perFlip > 0 (items needed for this property)
+        setLinenRequirements(
+          (data.linens || []).filter((l: LinenRequirement) => l.perFlip > 0)
+        )
       }
     } catch (error) {
       console.error('Failed to fetch data:', error)
@@ -245,6 +265,48 @@ export default function WorkerPropertyDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Linens & Supplies Required */}
+      {linenRequirements.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package size={20} className="text-emerald-600" />
+              Linens & Supplies Needed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-3">
+              Items needed to fully stock this property per turnover:
+            </p>
+            <div className="space-y-2">
+              {/* Group by category */}
+              {Object.entries(
+                linenRequirements.reduce((acc, item) => {
+                  if (!acc[item.category]) acc[item.category] = []
+                  acc[item.category].push(item)
+                  return acc
+                }, {} as Record<string, LinenRequirement[]>)
+              ).map(([category, items]) => (
+                <div key={category} className="bg-gray-50 rounded-lg p-3">
+                  <h4 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {items.map((item) => (
+                      <div
+                        key={item.itemId}
+                        className="flex items-center justify-between bg-white p-2 rounded border"
+                      >
+                        <span className="text-sm text-gray-700">{item.itemName}</span>
+                        <span className="font-bold text-emerald-700 text-lg">{item.perFlip}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add Note Button */}
       {!showAddNote && (

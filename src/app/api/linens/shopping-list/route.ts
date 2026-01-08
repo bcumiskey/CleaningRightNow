@@ -8,13 +8,13 @@ interface ShoppingListItem {
   itemName: string
   itemCode: string
   category: string
-  unitCost: number
   properties: {
     propertyId: string
     propertyName: string
     perFlip: number
     onHand: number
     needed: number
+    unitCost: number // Property-specific cost
     flipsRemaining: number
   }[]
   totalNeeded: number
@@ -73,7 +73,6 @@ export async function GET(request: NextRequest) {
               itemName: req.linenItem.name,
               itemCode: req.linenItem.code,
               category: req.linenItem.category.name,
-              unitCost: req.linenItem.unitCost,
               properties: [],
               totalNeeded: 0,
               totalCost: 0,
@@ -81,16 +80,24 @@ export async function GET(request: NextRequest) {
             itemMap.set(req.linenItemId, item)
           }
 
+          // Use property-specific cost if set, otherwise fall back to master catalog cost
+          const unitCost = req.unitCost ?? req.linenItem.unitCost
+
           item.properties.push({
             propertyId: property.id,
             propertyName: property.name,
             perFlip: req.perFlip,
             onHand,
             needed: shortage,
+            unitCost,
             flipsRemaining,
           })
           item.totalNeeded += shortage
-          item.totalCost = item.totalNeeded * item.unitCost
+          // Recalculate total cost based on property-specific costs
+          item.totalCost = item.properties.reduce(
+            (sum, p) => sum + (p.needed * p.unitCost),
+            0
+          )
         }
       }
     }

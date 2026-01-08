@@ -93,10 +93,16 @@ export default function JobsPage() {
 
   const handleSave = async (data: any) => {
     try {
+      // Ensure rate is a number
+      const payload = {
+        ...data,
+        rate: parseFloat(data.rate) || 0,
+      }
+
       const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       })
 
       if (response.ok) {
@@ -104,7 +110,8 @@ export default function JobsPage() {
         setShowModal(false)
         fetchJobs()
       } else {
-        toast.error('Failed to create job')
+        const error = await response.json()
+        toast.error(error.error || 'Failed to create job')
       }
     } catch (error) {
       toast.error('Failed to create job')
@@ -295,13 +302,28 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers }: JobModal
   })
   const [isSaving, setIsSaving] = useState(false)
 
-  const selectedProperty = properties.find((p) => p.id === formData.propertyId)
-
+  // Reset form when modal opens
   useEffect(() => {
-    if (selectedProperty && !formData.rate) {
-      setFormData((prev) => ({ ...prev, rate: selectedProperty.baseRate.toString() }))
+    if (isOpen) {
+      setFormData({
+        propertyId: '',
+        date: format(new Date(), 'yyyy-MM-dd'),
+        time: '',
+        rate: '',
+        teamMemberIds: [],
+      })
     }
-  }, [selectedProperty])
+  }, [isOpen])
+
+  // Update rate when property changes
+  const handlePropertyChange = (propertyId: string) => {
+    const property = properties.find((p) => p.id === propertyId)
+    setFormData((prev) => ({
+      ...prev,
+      propertyId,
+      rate: property ? property.baseRate.toString() : '',
+    }))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -325,7 +347,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers }: JobModal
         <Select
           label="Property"
           value={formData.propertyId}
-          onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })}
+          onChange={(e) => handlePropertyChange(e.target.value)}
           options={[
             { value: '', label: 'Select a property' },
             ...properties.map((p) => ({ value: p.id, label: p.name })),
