@@ -16,81 +16,113 @@ export async function GET(
 
     const { id } = await params
 
-    // Try full query with all relations, fallback progressively if relations fail
+    // Query property WITHOUT includes first - this must work
+    const property = await prisma.property.findUnique({
+      where: { id },
+    })
+
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+
+    // Build result object starting with basic property
+    const result: Record<string, unknown> = { ...property }
+
+    // Try to fetch owner separately
+    if (property.ownerId) {
+      try {
+        const owner = await prisma.owner.findUnique({
+          where: { id: property.ownerId },
+        })
+        result.owner = owner
+      } catch {
+        result.owner = null
+      }
+    } else {
+      result.owner = null
+    }
+
+    // Try to fetch notes separately
     try {
-      const property = await prisma.property.findUnique({
-        where: { id },
-        include: {
-          owner: true,
-          notes: {
-            where: { status: { in: ['active', 'reported_to_owner'] } },
-            include: {
-              addedBy: { select: { name: true } },
-              photos: { orderBy: { sortOrder: 'asc' } },
-            },
-            orderBy: { createdAt: 'desc' },
-          },
-          instructions: {
-            orderBy: { sortOrder: 'asc' },
-          },
-          photos: {
-            include: {
-              addedBy: { select: { name: true } },
-            },
-            orderBy: { sortOrder: 'asc' },
-          },
+      const notes = await prisma.propertyNote.findMany({
+        where: {
+          propertyId: id,
+          status: { in: ['active', 'reported_to_owner'] },
         },
+        orderBy: { createdAt: 'desc' },
       })
 
-      if (!property) {
-        return NextResponse.json({ error: 'Property not found' }, { status: 404 })
-      }
+      // Try to get addedBy and photos for each note
+      const notesWithDetails = await Promise.all(notes.map(async (note) => {
+        let addedBy = null
+        let photos: unknown[] = []
 
-      return NextResponse.json(property)
+        try {
+          const teamMember = await prisma.teamMember.findUnique({
+            where: { id: note.addedById },
+            select: { name: true },
+          })
+          addedBy = teamMember
+        } catch {
+          // Continue without addedBy
+        }
+
+        try {
+          photos = await prisma.notePhoto.findMany({
+            where: { noteId: note.id },
+            orderBy: { sortOrder: 'asc' },
+          })
+        } catch {
+          // Continue without photos
+        }
+
+        return { ...note, addedBy, photos }
+      }))
+
+      result.notes = notesWithDetails
     } catch {
-      // Fallback: try without photos and notes relations
-      try {
-        const property = await prisma.property.findUnique({
-          where: { id },
-          include: {
-            owner: true,
-            instructions: {
-              orderBy: { sortOrder: 'asc' },
-            },
-          },
-        })
-
-        if (!property) {
-          return NextResponse.json({ error: 'Property not found' }, { status: 404 })
-        }
-
-        // Add empty arrays for missing relations
-        return NextResponse.json({
-          ...property,
-          notes: [],
-          photos: [],
-        })
-      } catch {
-        // Final fallback: basic property only
-        const property = await prisma.property.findUnique({
-          where: { id },
-          include: {
-            owner: true,
-          },
-        })
-
-        if (!property) {
-          return NextResponse.json({ error: 'Property not found' }, { status: 404 })
-        }
-
-        return NextResponse.json({
-          ...property,
-          notes: [],
-          photos: [],
-          instructions: [],
-        })
-      }
+      result.notes = []
     }
+
+    // Try to fetch instructions separately
+    try {
+      const instructions = await prisma.propertyInstruction.findMany({
+        where: { propertyId: id },
+        orderBy: { sortOrder: 'asc' },
+      })
+      result.instructions = instructions
+    } catch {
+      result.instructions = []
+    }
+
+    // Try to fetch photos separately
+    try {
+      const photos = await prisma.propertyPhoto.findMany({
+        where: { propertyId: id },
+        orderBy: { sortOrder: 'asc' },
+      })
+
+      // Try to get addedBy for each photo
+      const photosWithDetails = await Promise.all(photos.map(async (photo) => {
+        let addedBy = null
+        try {
+          const teamMember = await prisma.teamMember.findUnique({
+            where: { id: photo.addedById },
+            select: { name: true },
+          })
+          addedBy = teamMember
+        } catch {
+          // Continue without addedBy
+        }
+        return { ...photo, addedBy }
+      }))
+
+      result.photos = photosWithDetails
+    } catch {
+      result.photos = []
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Property GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch property' }, { status: 500 })

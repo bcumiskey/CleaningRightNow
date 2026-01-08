@@ -3,24 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-// Type for instruction with optional room field (for backward compatibility)
-interface InstructionData {
-  id: string
-  propertyId: string
-  instruction: string
-  sortOrder: number
-  room?: string
-  linkedPhotoId?: string | null
-  linkedPhoto?: {
-    id: string
-    url: string
-    caption: string | null
-    notes: string | null
-    room: string
-  } | null
-  createdAt: Date
-}
-
 // GET - Fetch all instructions for a property
 export async function GET(
   request: NextRequest,
@@ -34,43 +16,66 @@ export async function GET(
 
     const { id: propertyId } = await params
 
-    // Try with new schema fields, fallback to basic query if fields don't exist yet
-    let instructions: InstructionData[] = []
-    const byRoom: Record<string, InstructionData[]> = {}
+    // Query instructions without includes
+    let instructions: Array<{
+      id: string
+      propertyId: string
+      instruction: string
+      sortOrder: number
+      room: string
+      linkedPhotoId: string | null
+      linkedPhoto: {
+        id: string
+        url: string
+        caption: string | null
+        notes: string | null
+        room: string
+      } | null
+      createdAt: Date
+    }> = []
 
     try {
-      instructions = await prisma.propertyInstruction.findMany({
-        where: { propertyId },
-        orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
-        include: {
-          linkedPhoto: {
-            select: { id: true, url: true, caption: true, notes: true, room: true },
-          },
-        },
-      }) as InstructionData[]
-
-      // Group by room for easier display
-      for (const instruction of instructions) {
-        const room = instruction.room || 'General'
-        if (!byRoom[room]) {
-          byRoom[room] = []
-        }
-        byRoom[room].push(instruction)
-      }
-    } catch {
-      // Fallback for older schema without room/linkedPhoto fields
-      const basicInstructions = await prisma.propertyInstruction.findMany({
+      const rawInstructions = await prisma.propertyInstruction.findMany({
         where: { propertyId },
         orderBy: { sortOrder: 'asc' },
       })
-      // Add default room for backward compatibility
-      instructions = basicInstructions.map(inst => ({
-        ...inst,
-        room: 'General',
-        linkedPhotoId: null,
-        linkedPhoto: null,
-      })) as InstructionData[]
-      byRoom['General'] = instructions
+
+      // Fetch linkedPhoto separately for each instruction
+      instructions = await Promise.all(rawInstructions.map(async (inst) => {
+        let linkedPhoto = null
+
+        if (inst.linkedPhotoId) {
+          try {
+            const photo = await prisma.propertyPhoto.findUnique({
+              where: { id: inst.linkedPhotoId },
+              select: { id: true, url: true, caption: true, notes: true, room: true },
+            })
+            linkedPhoto = photo
+          } catch {
+            // Continue without linkedPhoto
+          }
+        }
+
+        return {
+          ...inst,
+          room: inst.room || 'General',
+          linkedPhotoId: inst.linkedPhotoId || null,
+          linkedPhoto,
+        }
+      }))
+    } catch {
+      // PropertyInstruction table might not exist - return empty
+      return NextResponse.json({ instructions: [], byRoom: {} })
+    }
+
+    // Group by room for easier display
+    const byRoom: Record<string, typeof instructions> = {}
+    for (const instruction of instructions) {
+      const room = instruction.room || 'General'
+      if (!byRoom[room]) {
+        byRoom[room] = []
+      }
+      byRoom[room].push(instruction)
     }
 
     return NextResponse.json({ instructions, byRoom })
@@ -99,45 +104,43 @@ export async function POST(
     }
 
     // Get max sort order
-    const maxSort = await prisma.propertyInstruction.findFirst({
-      where: { propertyId },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
+    let maxSortOrder = 0
+    try {
+      const maxSort = await prisma.propertyInstruction.findFirst({
+        where: { propertyId },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      })
+      maxSortOrder = maxSort?.sortOrder || 0
+    } catch {
+      // Continue with default sort order
+    }
+
+    const instruction = await prisma.propertyInstruction.create({
+      data: {
+        propertyId,
+        room: data.room || 'General',
+        instruction: data.instruction,
+        linkedPhotoId: data.linkedPhotoId || null,
+        sortOrder: maxSortOrder + 1,
+      },
     })
 
-    // Try with new schema fields, fallback if not available
-    try {
-      const instruction = await prisma.propertyInstruction.create({
-        data: {
-          propertyId,
-          room: data.room || 'General',
-          instruction: data.instruction,
-          linkedPhotoId: data.linkedPhotoId || null,
-          sortOrder: (maxSort?.sortOrder || 0) + 1,
-        },
-        include: {
-          linkedPhoto: {
-            select: { id: true, url: true, caption: true, notes: true, room: true },
-          },
-        },
-      })
-      return NextResponse.json(instruction)
-    } catch {
-      // Fallback for older schema
-      const instruction = await prisma.propertyInstruction.create({
-        data: {
-          propertyId,
-          instruction: data.instruction,
-          sortOrder: (maxSort?.sortOrder || 0) + 1,
-        },
-      })
-      return NextResponse.json({
-        ...instruction,
-        room: 'General',
-        linkedPhotoId: null,
-        linkedPhoto: null,
-      })
+    // Fetch linkedPhoto separately if exists
+    let linkedPhoto = null
+    if (instruction.linkedPhotoId) {
+      try {
+        const photo = await prisma.propertyPhoto.findUnique({
+          where: { id: instruction.linkedPhotoId },
+          select: { id: true, url: true, caption: true, notes: true, room: true },
+        })
+        linkedPhoto = photo
+      } catch {
+        // Continue without linkedPhoto
+      }
     }
+
+    return NextResponse.json({ ...instruction, linkedPhoto })
   } catch (error) {
     console.error('Property instructions POST error:', error)
     return NextResponse.json({ error: 'Failed to add instruction' }, { status: 500 })
@@ -160,41 +163,32 @@ export async function PUT(
 
     // Single update
     if (data.id) {
-      // Try with new schema fields
-      try {
-        const updateData: Record<string, unknown> = {}
-        if (data.instruction !== undefined) updateData.instruction = data.instruction
-        if (data.room !== undefined) updateData.room = data.room
-        if (data.linkedPhotoId !== undefined) updateData.linkedPhotoId = data.linkedPhotoId || null
-        if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+      const updateData: Record<string, unknown> = {}
+      if (data.instruction !== undefined) updateData.instruction = data.instruction
+      if (data.room !== undefined) updateData.room = data.room
+      if (data.linkedPhotoId !== undefined) updateData.linkedPhotoId = data.linkedPhotoId || null
+      if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
 
-        const instruction = await prisma.propertyInstruction.update({
-          where: { id: data.id },
-          data: updateData,
-          include: {
-            linkedPhoto: {
-              select: { id: true, url: true, caption: true, notes: true, room: true },
-            },
-          },
-        })
-        return NextResponse.json(instruction)
-      } catch {
-        // Fallback for older schema
-        const updateData: Record<string, unknown> = {}
-        if (data.instruction !== undefined) updateData.instruction = data.instruction
-        if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+      const instruction = await prisma.propertyInstruction.update({
+        where: { id: data.id },
+        data: updateData,
+      })
 
-        const instruction = await prisma.propertyInstruction.update({
-          where: { id: data.id },
-          data: updateData,
-        })
-        return NextResponse.json({
-          ...instruction,
-          room: 'General',
-          linkedPhotoId: null,
-          linkedPhoto: null,
-        })
+      // Fetch linkedPhoto separately if exists
+      let linkedPhoto = null
+      if (instruction.linkedPhotoId) {
+        try {
+          const photo = await prisma.propertyPhoto.findUnique({
+            where: { id: instruction.linkedPhotoId },
+            select: { id: true, url: true, caption: true, notes: true, room: true },
+          })
+          linkedPhoto = photo
+        } catch {
+          // Continue without linkedPhoto
+        }
       }
+
+      return NextResponse.json({ ...instruction, linkedPhoto })
     }
 
     // Bulk reorder

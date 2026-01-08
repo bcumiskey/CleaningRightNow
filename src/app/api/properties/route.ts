@@ -10,54 +10,54 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Try with full includes, fallback if relations don't exist yet
+    // Query properties WITHOUT any includes first - this must work
+    const properties = await prisma.property.findMany({
+      orderBy: { name: 'asc' },
+    })
+
+    // Try to fetch owners separately
+    let owners: Record<string, { id: string; name: string; email: string | null; phone: string | null; defaultBaseRate: number | null; defaultBillingType: string | null }> = {}
     try {
-      const properties = await prisma.property.findMany({
-        include: {
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-              defaultBaseRate: true,
-              defaultBillingType: true,
-            },
-          },
-          notes: {
-            where: { status: 'active' },
-            select: { id: true },
-          },
-          _count: {
-            select: { jobs: true },
-          },
-        },
-        orderBy: { name: 'asc' },
-      })
-      return NextResponse.json(properties)
+      const ownerList = await prisma.owner.findMany()
+      owners = Object.fromEntries(ownerList.map(o => [o.id, o]))
     } catch {
-      // Fallback without notes relation
-      const properties = await prisma.property.findMany({
-        include: {
-          owner: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-              defaultBaseRate: true,
-              defaultBillingType: true,
-            },
-          },
-          _count: {
-            select: { jobs: true },
-          },
-        },
-        orderBy: { name: 'asc' },
-      })
-      // Add empty notes array for compatibility
-      return NextResponse.json(properties.map(p => ({ ...p, notes: [] })))
+      // Owner table might not exist or query failed - continue without
     }
+
+    // Try to fetch notes counts separately
+    let noteCounts: Record<string, number> = {}
+    try {
+      const notes = await prisma.propertyNote.groupBy({
+        by: ['propertyId'],
+        where: { status: 'active' },
+        _count: { id: true },
+      })
+      noteCounts = Object.fromEntries(notes.map(n => [n.propertyId, n._count.id]))
+    } catch {
+      // PropertyNote table might not exist - continue without
+    }
+
+    // Try to fetch job counts separately
+    let jobCounts: Record<string, number> = {}
+    try {
+      const jobs = await prisma.job.groupBy({
+        by: ['propertyId'],
+        _count: { id: true },
+      })
+      jobCounts = Object.fromEntries(jobs.map(j => [j.propertyId, j._count.id]))
+    } catch {
+      // Job table might not exist - continue without
+    }
+
+    // Combine results
+    const result = properties.map(property => ({
+      ...property,
+      owner: property.ownerId ? owners[property.ownerId] || null : null,
+      notes: Array(noteCounts[property.id] || 0).fill({ id: 'placeholder' }).slice(0, noteCounts[property.id] || 0),
+      _count: { jobs: jobCounts[property.id] || 0 },
+    }))
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Properties GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch properties' }, { status: 500 })
