@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import {
@@ -69,7 +69,16 @@ const ROOM_OPTIONS = [
   'Other',
 ]
 
-export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+function PropertyDetailLoading() {
+  return (
+    <div className="min-h-screen">
+      <AdminHeader title="Property Details" />
+      <div className="p-6 text-center text-gray-500">Loading...</div>
+    </div>
+  )
+}
+
+function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
 
@@ -578,5 +587,13 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
         </div>
       </Modal>
     </div>
+  )
+}
+
+export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<PropertyDetailLoading />}>
+      <PropertyDetailContent params={params} />
+    </Suspense>
   )
 }

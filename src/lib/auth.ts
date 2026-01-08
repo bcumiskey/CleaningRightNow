@@ -58,7 +58,7 @@ export const authOptions: NextAuthOptions = {
           id: worker.id,
           email: worker.email,
           name: worker.name,
-          role: 'worker',
+          role: worker.role, // Use actual role from database (admin or worker)
         }
       },
     }),

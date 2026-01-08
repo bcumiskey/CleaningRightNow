@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
@@ -75,7 +75,18 @@ interface UnbilledJob {
   rate: number
 }
 
-export default function InvoiceEditPage({ params }: { params: Promise<{ id: string }> }) {
+function InvoiceEditLoading() {
+  return (
+    <div className="min-h-screen">
+      <AdminHeader title="Edit Invoice" />
+      <div className="p-6 flex justify-center">
+        <div className="animate-pulse text-gray-500">Loading invoice...</div>
+      </div>
+    </div>
+  )
+}
+
+function InvoiceEditContent({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
@@ -756,5 +767,13 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
         }
       `}</style>
     </div>
+  )
+}
+
+export default function InvoiceEditPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<InvoiceEditLoading />}>
+      <InvoiceEditContent params={params} />
+    </Suspense>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState, use, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Printer, Calendar, DollarSign, CheckCircle } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
@@ -52,7 +52,16 @@ interface CompanySettings {
   logoUrl?: string | null
 }
 
-export default function WorkerPayPage({ params }: { params: Promise<{ id: string }> }) {
+function WorkerPayLoading() {
+  return (
+    <div className="min-h-screen">
+      <AdminHeader title="Worker Pay" />
+      <div className="p-6 text-center text-gray-500">Loading...</div>
+    </div>
+  )
+}
+
+function WorkerPayContent({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = use(params)
   const router = useRouter()
   const [earningsData, setEarningsData] = useState<EarningsData | null>(null)
@@ -370,5 +379,13 @@ export default function WorkerPayPage({ params }: { params: Promise<{ id: string
         )}
       </div>
     </div>
+  )
+}
+
+export default function WorkerPayPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={<WorkerPayLoading />}>
+      <WorkerPayContent params={params} />
+    </Suspense>
   )
 }
