@@ -10,57 +10,103 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Query properties WITHOUT any includes first - this must work
-    const properties = await prisma.property.findMany({
-      orderBy: { name: 'asc' },
-    })
-
-    // Try to fetch owners separately
-    let owners: Record<string, { id: string; name: string; email: string | null; phone: string | null; defaultBaseRate: number | null; defaultBillingType: string | null }> = {}
+    // Try standard Prisma query first
     try {
-      const ownerList = await prisma.owner.findMany()
-      owners = Object.fromEntries(ownerList.map(o => [o.id, o]))
-    } catch {
-      // Owner table might not exist or query failed - continue without
-    }
-
-    // Try to fetch notes counts separately
-    let noteCounts: Record<string, number> = {}
-    try {
-      const notes = await prisma.propertyNote.groupBy({
-        by: ['propertyId'],
-        where: { status: 'active' },
-        _count: { id: true },
+      const properties = await prisma.property.findMany({
+        orderBy: { name: 'asc' },
       })
-      noteCounts = Object.fromEntries(notes.map(n => [n.propertyId, n._count.id]))
-    } catch {
-      // PropertyNote table might not exist - continue without
+
+      // Try to fetch owners separately
+      let owners: Record<string, { id: string; name: string; email: string | null; phone: string | null; defaultBaseRate: number | null; defaultBillingType: string | null }> = {}
+      try {
+        const ownerList = await prisma.owner.findMany()
+        owners = Object.fromEntries(ownerList.map(o => [o.id, o]))
+      } catch {
+        // Owner table might not exist - continue without
+      }
+
+      // Try to fetch notes counts separately
+      let noteCounts: Record<string, number> = {}
+      try {
+        const notes = await prisma.propertyNote.groupBy({
+          by: ['propertyId'],
+          where: { status: 'active' },
+          _count: { id: true },
+        })
+        noteCounts = Object.fromEntries(notes.map(n => [n.propertyId, n._count.id]))
+      } catch {
+        // PropertyNote table might not exist - continue without
+      }
+
+      // Try to fetch job counts separately
+      let jobCounts: Record<string, number> = {}
+      try {
+        const jobs = await prisma.job.groupBy({
+          by: ['propertyId'],
+          _count: { id: true },
+        })
+        jobCounts = Object.fromEntries(jobs.map(j => [j.propertyId, j._count.id]))
+      } catch {
+        // Job table might not exist - continue without
+      }
+
+      // Combine results
+      const result = properties.map(property => ({
+        ...property,
+        owner: property.ownerId ? owners[property.ownerId] || null : null,
+        notes: Array(noteCounts[property.id] || 0).fill({ id: 'placeholder' }).slice(0, noteCounts[property.id] || 0),
+        _count: { jobs: jobCounts[property.id] || 0 },
+      }))
+
+      return NextResponse.json(result)
+    } catch (prismaError) {
+      // Prisma query failed - try raw SQL as fallback
+      console.error('Prisma query failed, trying raw SQL:', prismaError)
+
+      try {
+        const properties = await prisma.$queryRaw`
+          SELECT * FROM "Property" ORDER BY name ASC
+        ` as Array<{
+          id: string
+          name: string
+          address: string
+          ownerId: string | null
+          ownerName: string
+          ownerEmail: string | null
+          ownerPhone: string | null
+          baseRate: number
+          expensePercent: number
+          billingType: string
+          billingFrequency: string
+          monthlyBillingDay: number | null
+          autoSendInvoice: boolean
+          calendarSource: string | null
+          icalUrl: string | null
+          accessCode: string | null
+          accessNotes: string | null
+          bedConfig: string | null
+          imageUrl: string | null
+          createdAt: Date
+          updatedAt: Date
+        }>
+
+        // Return with empty relations
+        const result = properties.map(property => ({
+          ...property,
+          owner: null,
+          notes: [],
+          _count: { jobs: 0 },
+        }))
+
+        return NextResponse.json(result)
+      } catch (rawError) {
+        console.error('Raw SQL also failed:', rawError)
+        throw rawError
+      }
     }
-
-    // Try to fetch job counts separately
-    let jobCounts: Record<string, number> = {}
-    try {
-      const jobs = await prisma.job.groupBy({
-        by: ['propertyId'],
-        _count: { id: true },
-      })
-      jobCounts = Object.fromEntries(jobs.map(j => [j.propertyId, j._count.id]))
-    } catch {
-      // Job table might not exist - continue without
-    }
-
-    // Combine results
-    const result = properties.map(property => ({
-      ...property,
-      owner: property.ownerId ? owners[property.ownerId] || null : null,
-      notes: Array(noteCounts[property.id] || 0).fill({ id: 'placeholder' }).slice(0, noteCounts[property.id] || 0),
-      _count: { jobs: jobCounts[property.id] || 0 },
-    }))
-
-    return NextResponse.json(result)
   } catch (error) {
     console.error('Properties GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch properties' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch properties', details: String(error) }, { status: 500 })
   }
 }
 
