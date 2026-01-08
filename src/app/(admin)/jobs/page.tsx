@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import {
@@ -54,6 +54,25 @@ interface TeamMember {
 }
 
 export default function JobsPage() {
+  return (
+    <Suspense fallback={<JobsPageLoading />}>
+      <JobsPageContent />
+    </Suspense>
+  )
+}
+
+function JobsPageLoading() {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <AdminHeader title="Jobs & Payments" />
+      <div className="p-6">
+        <div className="text-center py-12 text-gray-500">Loading...</div>
+      </div>
+    </div>
+  )
+}
+
+function JobsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const highlightId = searchParams.get('highlight')
