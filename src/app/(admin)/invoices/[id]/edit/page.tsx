@@ -120,7 +120,9 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
         setLineItems(data.lineItems)
 
         // Fetch unbilled jobs for this property
-        fetchUnbilledJobs(data.property.id)
+        if (data.property?.id) {
+          fetchUnbilledJobs(data.property.id)
+        }
       }
 
       if (settingsRes.ok) {
