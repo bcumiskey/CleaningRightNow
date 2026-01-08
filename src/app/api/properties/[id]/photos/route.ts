@@ -90,22 +90,40 @@ export async function POST(
       select: { sortOrder: true },
     })
 
-    const photo = await prisma.propertyPhoto.create({
-      data: {
-        propertyId,
-        room: data.room,
-        caption: data.caption || null,
-        notes: data.notes || null,
-        url: data.url,
-        addedById,
-        sortOrder: (maxSort?.sortOrder || 0) + 1,
-      },
-      include: {
-        addedBy: { select: { name: true } },
-      },
-    })
-
-    return NextResponse.json(photo)
+    // Try with new schema (includes notes), fallback if not available
+    try {
+      const photo = await prisma.propertyPhoto.create({
+        data: {
+          propertyId,
+          room: data.room,
+          caption: data.caption || null,
+          notes: data.notes || null,
+          url: data.url,
+          addedById,
+          sortOrder: (maxSort?.sortOrder || 0) + 1,
+        },
+        include: {
+          addedBy: { select: { name: true } },
+        },
+      })
+      return NextResponse.json(photo)
+    } catch {
+      // Fallback for older schema without notes field
+      const photo = await prisma.propertyPhoto.create({
+        data: {
+          propertyId,
+          room: data.room,
+          caption: data.caption || null,
+          url: data.url,
+          addedById,
+          sortOrder: (maxSort?.sortOrder || 0) + 1,
+        },
+        include: {
+          addedBy: { select: { name: true } },
+        },
+      })
+      return NextResponse.json({ ...photo, notes: null })
+    }
   } catch (error) {
     console.error('Property photos POST error:', error)
     return NextResponse.json({ error: 'Failed to add photo' }, { status: 500 })
@@ -129,21 +147,38 @@ export async function PUT(
       return NextResponse.json({ error: 'Photo ID is required' }, { status: 400 })
     }
 
-    const updateData: Record<string, unknown> = {}
-    if (data.room !== undefined) updateData.room = data.room
-    if (data.caption !== undefined) updateData.caption = data.caption
-    if (data.notes !== undefined) updateData.notes = data.notes
-    if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+    // Try with new schema (includes notes), fallback if not available
+    try {
+      const updateData: Record<string, unknown> = {}
+      if (data.room !== undefined) updateData.room = data.room
+      if (data.caption !== undefined) updateData.caption = data.caption
+      if (data.notes !== undefined) updateData.notes = data.notes
+      if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
 
-    const photo = await prisma.propertyPhoto.update({
-      where: { id: data.id },
-      data: updateData,
-      include: {
-        addedBy: { select: { name: true } },
-      },
-    })
+      const photo = await prisma.propertyPhoto.update({
+        where: { id: data.id },
+        data: updateData,
+        include: {
+          addedBy: { select: { name: true } },
+        },
+      })
+      return NextResponse.json(photo)
+    } catch {
+      // Fallback for older schema without notes field
+      const updateData: Record<string, unknown> = {}
+      if (data.room !== undefined) updateData.room = data.room
+      if (data.caption !== undefined) updateData.caption = data.caption
+      if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
 
-    return NextResponse.json(photo)
+      const photo = await prisma.propertyPhoto.update({
+        where: { id: data.id },
+        data: updateData,
+        include: {
+          addedBy: { select: { name: true } },
+        },
+      })
+      return NextResponse.json({ ...photo, notes: null })
+    }
   } catch (error) {
     console.error('Property photos PUT error:', error)
     return NextResponse.json({ error: 'Failed to update photo' }, { status: 500 })

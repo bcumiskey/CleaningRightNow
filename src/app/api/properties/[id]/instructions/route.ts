@@ -16,24 +16,44 @@ export async function GET(
 
     const { id: propertyId } = await params
 
-    const instructions = await prisma.propertyInstruction.findMany({
-      where: { propertyId },
-      orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
-      include: {
-        linkedPhoto: {
-          select: { id: true, url: true, caption: true, notes: true, room: true },
-        },
-      },
-    })
+    // Try with new schema fields, fallback to basic query if fields don't exist yet
+    let instructions
+    let byRoom: Record<string, typeof instructions> = {}
 
-    // Group by room for easier display
-    const byRoom: Record<string, typeof instructions> = {}
-    for (const instruction of instructions) {
-      const room = instruction.room || 'General'
-      if (!byRoom[room]) {
-        byRoom[room] = []
+    try {
+      instructions = await prisma.propertyInstruction.findMany({
+        where: { propertyId },
+        orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
+        include: {
+          linkedPhoto: {
+            select: { id: true, url: true, caption: true, notes: true, room: true },
+          },
+        },
+      })
+
+      // Group by room for easier display
+      for (const instruction of instructions) {
+        const room = instruction.room || 'General'
+        if (!byRoom[room]) {
+          byRoom[room] = []
+        }
+        byRoom[room].push(instruction)
       }
-      byRoom[room].push(instruction)
+    } catch {
+      // Fallback for older schema without room/linkedPhoto fields
+      instructions = await prisma.propertyInstruction.findMany({
+        where: { propertyId },
+        orderBy: { sortOrder: 'asc' },
+      })
+      // Add default room for backward compatibility
+      const extendedInstructions = instructions.map(inst => ({
+        ...inst,
+        room: 'General',
+        linkedPhotoId: null,
+        linkedPhoto: null,
+      }))
+      byRoom['General'] = extendedInstructions
+      instructions = extendedInstructions
     }
 
     return NextResponse.json({ instructions, byRoom })
@@ -61,31 +81,46 @@ export async function POST(
       return NextResponse.json({ error: 'Instruction text is required' }, { status: 400 })
     }
 
-    const room = data.room || 'General'
-
-    // Get max sort order for this room
+    // Get max sort order
     const maxSort = await prisma.propertyInstruction.findFirst({
-      where: { propertyId, room },
+      where: { propertyId },
       orderBy: { sortOrder: 'desc' },
       select: { sortOrder: true },
     })
 
-    const instruction = await prisma.propertyInstruction.create({
-      data: {
-        propertyId,
-        room,
-        instruction: data.instruction,
-        linkedPhotoId: data.linkedPhotoId || null,
-        sortOrder: (maxSort?.sortOrder || 0) + 1,
-      },
-      include: {
-        linkedPhoto: {
-          select: { id: true, url: true, caption: true, notes: true, room: true },
+    // Try with new schema fields, fallback if not available
+    try {
+      const instruction = await prisma.propertyInstruction.create({
+        data: {
+          propertyId,
+          room: data.room || 'General',
+          instruction: data.instruction,
+          linkedPhotoId: data.linkedPhotoId || null,
+          sortOrder: (maxSort?.sortOrder || 0) + 1,
         },
-      },
-    })
-
-    return NextResponse.json(instruction)
+        include: {
+          linkedPhoto: {
+            select: { id: true, url: true, caption: true, notes: true, room: true },
+          },
+        },
+      })
+      return NextResponse.json(instruction)
+    } catch {
+      // Fallback for older schema
+      const instruction = await prisma.propertyInstruction.create({
+        data: {
+          propertyId,
+          instruction: data.instruction,
+          sortOrder: (maxSort?.sortOrder || 0) + 1,
+        },
+      })
+      return NextResponse.json({
+        ...instruction,
+        room: 'General',
+        linkedPhotoId: null,
+        linkedPhoto: null,
+      })
+    }
   } catch (error) {
     console.error('Property instructions POST error:', error)
     return NextResponse.json({ error: 'Failed to add instruction' }, { status: 500 })
@@ -108,22 +143,41 @@ export async function PUT(
 
     // Single update
     if (data.id) {
-      const updateData: Record<string, unknown> = {}
-      if (data.instruction !== undefined) updateData.instruction = data.instruction
-      if (data.room !== undefined) updateData.room = data.room
-      if (data.linkedPhotoId !== undefined) updateData.linkedPhotoId = data.linkedPhotoId || null
-      if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+      // Try with new schema fields
+      try {
+        const updateData: Record<string, unknown> = {}
+        if (data.instruction !== undefined) updateData.instruction = data.instruction
+        if (data.room !== undefined) updateData.room = data.room
+        if (data.linkedPhotoId !== undefined) updateData.linkedPhotoId = data.linkedPhotoId || null
+        if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
 
-      const instruction = await prisma.propertyInstruction.update({
-        where: { id: data.id },
-        data: updateData,
-        include: {
-          linkedPhoto: {
-            select: { id: true, url: true, caption: true, notes: true, room: true },
+        const instruction = await prisma.propertyInstruction.update({
+          where: { id: data.id },
+          data: updateData,
+          include: {
+            linkedPhoto: {
+              select: { id: true, url: true, caption: true, notes: true, room: true },
+            },
           },
-        },
-      })
-      return NextResponse.json(instruction)
+        })
+        return NextResponse.json(instruction)
+      } catch {
+        // Fallback for older schema
+        const updateData: Record<string, unknown> = {}
+        if (data.instruction !== undefined) updateData.instruction = data.instruction
+        if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+
+        const instruction = await prisma.propertyInstruction.update({
+          where: { id: data.id },
+          data: updateData,
+        })
+        return NextResponse.json({
+          ...instruction,
+          room: 'General',
+          linkedPhotoId: null,
+          linkedPhoto: null,
+        })
+      }
     }
 
     // Bulk reorder

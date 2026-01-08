@@ -16,6 +16,11 @@ import {
   MapPin,
   Clock,
   DollarSign,
+  RefreshCw,
+  Repeat,
+  Play,
+  Pause,
+  Building,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -53,6 +58,39 @@ interface TeamMember {
   name: string
 }
 
+interface Schedule {
+  id: string
+  name: string
+  propertyId: string
+  property: Property
+  isActive: boolean
+  frequency: string
+  dayOfWeek: number | null
+  dayOfMonth: number | null
+  time: string | null
+  rate: number | null
+  expensePercent: number
+  generateAheadDays: number
+  lastGeneratedDate: string | null
+}
+
+const DAYS_OF_WEEK = [
+  { value: '0', label: 'Sunday' },
+  { value: '1', label: 'Monday' },
+  { value: '2', label: 'Tuesday' },
+  { value: '3', label: 'Wednesday' },
+  { value: '4', label: 'Thursday' },
+  { value: '5', label: 'Friday' },
+  { value: '6', label: 'Saturday' },
+]
+
+const FREQUENCIES = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Bi-weekly' },
+  { value: 'monthly', label: 'Monthly' },
+]
+
 export default function JobsPage() {
   return (
     <Suspense fallback={<JobsPageLoading />}>
@@ -76,7 +114,11 @@ function JobsPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const highlightId = searchParams.get('highlight')
+  const tabParam = searchParams.get('tab')
 
+  const [activeTab, setActiveTab] = useState<'jobs' | 'recurring'>(
+    tabParam === 'recurring' ? 'recurring' : 'jobs'
+  )
   const [jobs, setJobs] = useState<Job[]>([])
   const [properties, setProperties] = useState<Property[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
@@ -85,10 +127,17 @@ function JobsPageContent() {
   const [editingJob, setEditingJob] = useState<Job | null>(null)
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
+  // Recurring schedules state
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+
   useEffect(() => {
     fetchJobs()
     fetchProperties()
     fetchTeamMembers()
+    fetchSchedules()
   }, [currentMonth])
 
   // Scroll to highlighted job
@@ -134,6 +183,126 @@ function JobsPageContent() {
     const response = await fetch('/api/team')
     if (response.ok) {
       setTeamMembers(await response.json())
+    }
+  }
+
+  const fetchSchedules = async () => {
+    try {
+      const response = await fetch('/api/recurring-schedules')
+      if (response.ok) {
+        setSchedules(await response.json())
+      }
+    } catch (error) {
+      console.error('Failed to fetch schedules:', error)
+    }
+  }
+
+  // Schedule management functions
+  const handleSaveSchedule = async (data: Record<string, unknown>) => {
+    try {
+      const url = editingSchedule
+        ? `/api/recurring-schedules/${editingSchedule.id}`
+        : '/api/recurring-schedules'
+      const method = editingSchedule ? 'PATCH' : 'POST'
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (response.ok) {
+        toast.success(editingSchedule ? 'Schedule updated' : 'Schedule created')
+        setShowScheduleModal(false)
+        setEditingSchedule(null)
+        fetchSchedules()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to save schedule')
+      }
+    } catch (error) {
+      toast.error('Failed to save schedule')
+    }
+  }
+
+  const handleDeleteSchedule = async (schedule: Schedule) => {
+    if (!confirm(`Delete schedule "${schedule.name}"?`)) return
+
+    try {
+      const response = await fetch(`/api/recurring-schedules/${schedule.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        toast.success('Schedule deleted')
+        fetchSchedules()
+      } else {
+        toast.error('Failed to delete schedule')
+      }
+    } catch (error) {
+      toast.error('Failed to delete schedule')
+    }
+  }
+
+  const handleToggleScheduleActive = async (schedule: Schedule) => {
+    try {
+      const response = await fetch(`/api/recurring-schedules/${schedule.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: !schedule.isActive }),
+      })
+
+      if (response.ok) {
+        toast.success(schedule.isActive ? 'Schedule paused' : 'Schedule activated')
+        fetchSchedules()
+      } else {
+        toast.error('Failed to update schedule')
+      }
+    } catch (error) {
+      toast.error('Failed to update schedule')
+    }
+  }
+
+  const handleGenerateScheduleJobs = async (scheduleId?: string) => {
+    setIsGenerating(true)
+    try {
+      const response = await fetch('/api/recurring-schedules/generate', {
+        method: scheduleId ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: scheduleId ? JSON.stringify({ scheduleId }) : undefined,
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        toast.success(data.message)
+        fetchSchedules()
+        fetchJobs()
+      } else {
+        toast.error('Failed to generate jobs')
+      }
+    } catch (error) {
+      toast.error('Failed to generate jobs')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const getFrequencyLabel = (schedule: Schedule) => {
+    switch (schedule.frequency) {
+      case 'daily':
+        return 'Daily'
+      case 'weekly':
+        return `Weekly on ${DAYS_OF_WEEK.find(d => d.value === String(schedule.dayOfWeek))?.label || ''}`
+      case 'biweekly':
+        return `Bi-weekly on ${DAYS_OF_WEEK.find(d => d.value === String(schedule.dayOfWeek))?.label || ''}`
+      case 'monthly':
+        const day = schedule.dayOfMonth
+        const suffix = day === 1 || day === 21 || day === 31 ? 'st' :
+                      day === 2 || day === 22 ? 'nd' :
+                      day === 3 || day === 23 ? 'rd' : 'th'
+        return `Monthly on the ${day}${suffix}`
+      default:
+        return schedule.frequency
     }
   }
 
@@ -231,11 +400,46 @@ function JobsPageContent() {
 
   const sortedDates = Object.keys(jobsByDate).sort()
 
+  const activeSchedules = schedules.filter(s => s.isActive)
+
   return (
     <div className="min-h-screen bg-gray-50">
       <AdminHeader title="Jobs & Payments" />
 
       <div className="p-6 space-y-6">
+        {/* Tab Navigation */}
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+          <button
+            onClick={() => setActiveTab('jobs')}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+              activeTab === 'jobs'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            )}
+          >
+            <Calendar size={16} className="inline mr-2" />
+            Jobs
+          </button>
+          <button
+            onClick={() => setActiveTab('recurring')}
+            className={cn(
+              'px-4 py-2 rounded-md text-sm font-medium transition-colors',
+              activeTab === 'recurring'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            )}
+          >
+            <Repeat size={16} className="inline mr-2" />
+            Recurring Schedules
+            {activeSchedules.length > 0 && (
+              <Badge variant="info" className="ml-2">{activeSchedules.length}</Badge>
+            )}
+          </button>
+        </div>
+
+        {activeTab === 'jobs' && (
+          <>
         {/* Header with Stats */}
         <div className="grid grid-cols-4 gap-4">
           <Card>
@@ -435,6 +639,131 @@ function JobsPageContent() {
             ))}
           </div>
         )}
+          </>
+        )}
+
+        {/* Recurring Schedules Tab */}
+        {activeTab === 'recurring' && (
+          <>
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-gray-500">
+                  {activeSchedules.length} active schedule{activeSchedules.length !== 1 && 's'} generating jobs automatically
+                </p>
+              </div>
+              <div className="flex gap-3">
+                {activeSchedules.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => handleGenerateScheduleJobs()}
+                    isLoading={isGenerating}
+                  >
+                    <RefreshCw size={16} />
+                    Generate All Jobs
+                  </Button>
+                )}
+                <Button onClick={() => { setEditingSchedule(null); setShowScheduleModal(true) }}>
+                  <Plus size={16} />
+                  Add Schedule
+                </Button>
+              </div>
+            </div>
+
+            {schedules.length === 0 ? (
+              <Card>
+                <CardContent className="p-6">
+                  <EmptyState
+                    icon={Repeat}
+                    title="No recurring schedules"
+                    description="Create recurring schedules to automatically generate jobs on a regular basis."
+                    actionLabel="Add Schedule"
+                    onAction={() => setShowScheduleModal(true)}
+                  />
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {schedules.map((schedule) => (
+                  <Card key={schedule.id} className={!schedule.isActive ? 'opacity-60' : ''}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            'w-12 h-12 rounded-lg flex items-center justify-center',
+                            schedule.isActive ? 'bg-blue-100' : 'bg-gray-100'
+                          )}>
+                            <Repeat className={schedule.isActive ? 'text-blue-600' : 'text-gray-400'} size={24} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-semibold text-gray-900">{schedule.name}</h4>
+                              <Badge variant={schedule.isActive ? 'success' : 'default'}>
+                                {schedule.isActive ? 'Active' : 'Paused'}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                              <span className="flex items-center gap-1">
+                                <Building size={12} />
+                                {schedule.property.name}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock size={12} />
+                                {getFrequencyLabel(schedule)}
+                                {schedule.time && ` at ${schedule.time}`}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="font-semibold text-gray-900">
+                              {formatCurrency(schedule.rate || schedule.property.baseRate)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {schedule.generateAheadDays} days ahead
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1 border-l pl-4">
+                            {schedule.isActive && (
+                              <button
+                                onClick={() => handleGenerateScheduleJobs(schedule.id)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                title="Generate jobs now"
+                              >
+                                <RefreshCw size={16} />
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleToggleScheduleActive(schedule)}
+                              className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded"
+                              title={schedule.isActive ? 'Pause schedule' : 'Activate schedule'}
+                            >
+                              {schedule.isActive ? <Pause size={16} /> : <Play size={16} />}
+                            </button>
+                            <button
+                              onClick={() => { setEditingSchedule(schedule); setShowScheduleModal(true) }}
+                              className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSchedule(schedule)}
+                              className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <JobModal
@@ -444,6 +773,14 @@ function JobsPageContent() {
         properties={properties}
         teamMembers={teamMembers}
         editingJob={editingJob}
+      />
+
+      <ScheduleModal
+        isOpen={showScheduleModal}
+        onClose={() => { setShowScheduleModal(false); setEditingSchedule(null) }}
+        onSave={handleSaveSchedule}
+        schedule={editingSchedule}
+        properties={properties}
       />
     </div>
   )
@@ -598,6 +935,183 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           </Button>
           <Button type="submit" isLoading={isSaving}>
             {editingJob ? 'Save Changes' : 'Schedule Job'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+interface ScheduleModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (data: Record<string, unknown>) => void
+  schedule: Schedule | null
+  properties: Property[]
+}
+
+function ScheduleModal({ isOpen, onClose, onSave, schedule, properties }: ScheduleModalProps) {
+  const [formData, setFormData] = useState({
+    name: '',
+    propertyId: '',
+    frequency: 'weekly',
+    dayOfWeek: '1',
+    dayOfMonth: '1',
+    time: '',
+    rate: '',
+    expensePercent: '12',
+    generateAheadDays: '30',
+  })
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      if (schedule) {
+        setFormData({
+          name: schedule.name,
+          propertyId: schedule.propertyId,
+          frequency: schedule.frequency,
+          dayOfWeek: schedule.dayOfWeek?.toString() || '1',
+          dayOfMonth: schedule.dayOfMonth?.toString() || '1',
+          time: schedule.time || '',
+          rate: schedule.rate?.toString() || '',
+          expensePercent: schedule.expensePercent.toString(),
+          generateAheadDays: schedule.generateAheadDays.toString(),
+        })
+      } else {
+        setFormData({
+          name: '',
+          propertyId: '',
+          frequency: 'weekly',
+          dayOfWeek: '1',
+          dayOfMonth: '1',
+          time: '',
+          rate: '',
+          expensePercent: '12',
+          generateAheadDays: '30',
+        })
+      }
+    }
+  }, [schedule, isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSaving(true)
+    await onSave(formData)
+    setIsSaving(false)
+  }
+
+  const selectedProperty = properties.find(p => p.id === formData.propertyId)
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={schedule ? 'Edit Schedule' : 'Add Recurring Schedule'}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input
+          label="Schedule Name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          placeholder="Weekly Deep Clean"
+          required
+        />
+
+        <Select
+          label="Property"
+          value={formData.propertyId}
+          onChange={(e) => setFormData({ ...formData, propertyId: e.target.value })}
+          options={[
+            { value: '', label: 'Select a property' },
+            ...properties.map(p => ({
+              value: p.id,
+              label: `${p.name} (${formatCurrency(p.baseRate)})`,
+            })),
+          ]}
+          required
+          disabled={!!schedule}
+        />
+
+        <div className="border-t pt-4">
+          <h4 className="font-medium text-gray-900 mb-3">Schedule Pattern</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Frequency"
+              value={formData.frequency}
+              onChange={(e) => setFormData({ ...formData, frequency: e.target.value })}
+              options={FREQUENCIES}
+            />
+
+            {(formData.frequency === 'weekly' || formData.frequency === 'biweekly') && (
+              <Select
+                label="Day of Week"
+                value={formData.dayOfWeek}
+                onChange={(e) => setFormData({ ...formData, dayOfWeek: e.target.value })}
+                options={DAYS_OF_WEEK}
+              />
+            )}
+
+            {formData.frequency === 'monthly' && (
+              <Select
+                label="Day of Month"
+                value={formData.dayOfMonth}
+                onChange={(e) => setFormData({ ...formData, dayOfMonth: e.target.value })}
+                options={Array.from({ length: 31 }, (_, i) => ({
+                  value: String(i + 1),
+                  label: String(i + 1),
+                }))}
+              />
+            )}
+          </div>
+
+          <div className="mt-4">
+            <Input
+              label="Time (optional)"
+              value={formData.time}
+              onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+              placeholder="9:00 AM"
+            />
+          </div>
+        </div>
+
+        <div className="border-t pt-4">
+          <h4 className="font-medium text-gray-900 mb-3">Job Settings</h4>
+          <div className="grid grid-cols-3 gap-4">
+            <Input
+              label="Rate (optional)"
+              type="number"
+              step="0.01"
+              value={formData.rate}
+              onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
+              placeholder={selectedProperty ? selectedProperty.baseRate.toString() : 'Property rate'}
+            />
+            <Input
+              label="Expense %"
+              type="number"
+              value={formData.expensePercent}
+              onChange={(e) => setFormData({ ...formData, expensePercent: e.target.value })}
+            />
+            <Input
+              label="Generate Ahead (days)"
+              type="number"
+              value={formData.generateAheadDays}
+              onChange={(e) => setFormData({ ...formData, generateAheadDays: e.target.value })}
+            />
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Jobs will be auto-generated up to {formData.generateAheadDays} days in advance.
+            {!formData.rate && selectedProperty && ` Using property rate: ${formatCurrency(selectedProperty.baseRate)}`}
+          </p>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" isLoading={isSaving}>
+            {schedule ? 'Save Changes' : 'Add Schedule'}
           </Button>
         </div>
       </form>
