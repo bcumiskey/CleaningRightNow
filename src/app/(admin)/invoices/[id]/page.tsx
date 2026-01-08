@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, use, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -51,20 +51,11 @@ interface CompanySettings {
   invoiceTerms?: string | null
 }
 
-function InvoiceViewLoading() {
-  return (
-    <div className="min-h-screen">
-      <AdminHeader title="Invoice" />
-      <div className="p-6 flex justify-center">
-        <div className="animate-pulse text-gray-500">Loading invoice...</div>
-      </div>
-    </div>
-  )
-}
-
-function InvoiceViewContent({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function InvoiceViewPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
+
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [company, setCompany] = useState<CompanySettings | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -73,13 +64,15 @@ function InvoiceViewContent({ params }: { params: Promise<{ id: string }> }) {
   const [isDownloading, setIsDownloading] = useState(false)
 
   useEffect(() => {
-    loadData()
-  }, [resolvedParams.id])
+    if (id) {
+      loadData()
+    }
+  }, [id])
 
   const loadData = async () => {
     try {
       const [invoiceRes, settingsRes] = await Promise.all([
-        fetch(`/api/invoices/${resolvedParams.id}`),
+        fetch(`/api/invoices/${id}`),
         fetch('/api/settings'),
       ])
 
@@ -337,13 +330,5 @@ function InvoiceViewContent({ params }: { params: Promise<{ id: string }> }) {
         }
       `}</style>
     </div>
-  )
-}
-
-export default function InvoiceViewPage({ params }: { params: Promise<{ id: string }> }) {
-  return (
-    <Suspense fallback={<InvoiceViewLoading />}>
-      <InvoiceViewContent params={params} />
-    </Suspense>
   )
 }

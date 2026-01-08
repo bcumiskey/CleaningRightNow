@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, use, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useParams } from 'next/navigation'
 import Image from 'next/image'
 import {
   ArrowLeft,
@@ -69,18 +69,10 @@ const ROOM_OPTIONS = [
   'Other',
 ]
 
-function PropertyDetailLoading() {
-  return (
-    <div className="min-h-screen">
-      <AdminHeader title="Property Details" />
-      <div className="p-6 text-center text-gray-500">Loading...</div>
-    </div>
-  )
-}
-
-function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
+export default function PropertyDetailPage() {
   const router = useRouter()
+  const params = useParams()
+  const id = params.id as string
 
   const [property, setProperty] = useState<Property | null>(null)
   const [instructions, setInstructions] = useState<Instruction[]>([])
@@ -102,15 +94,17 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
   const [isSavingPhoto, setIsSavingPhoto] = useState(false)
 
   useEffect(() => {
-    loadData()
-  }, [resolvedParams.id])
+    if (id) {
+      loadData()
+    }
+  }, [id])
 
   const loadData = async () => {
     try {
       const [propRes, instRes, photoRes] = await Promise.all([
-        fetch(`/api/properties/${resolvedParams.id}`),
-        fetch(`/api/properties/${resolvedParams.id}/instructions`),
-        fetch(`/api/properties/${resolvedParams.id}/photos`),
+        fetch(`/api/properties/${id}`),
+        fetch(`/api/properties/${id}/instructions`),
+        fetch(`/api/properties/${id}/photos`),
       ])
 
       if (propRes.ok) {
@@ -138,7 +132,7 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
 
     setIsSavingInstruction(true)
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/instructions`, {
+      const res = await fetch(`/api/properties/${id}/instructions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instruction: newInstruction }),
@@ -161,7 +155,7 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
     if (!editingInstruction) return
 
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/instructions`, {
+      const res = await fetch(`/api/properties/${id}/instructions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -182,14 +176,14 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
     }
   }
 
-  const handleDeleteInstruction = async (id: string) => {
+  const handleDeleteInstruction = async (instructionId: string) => {
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/instructions?instructionId=${id}`, {
+      const res = await fetch(`/api/properties/${id}/instructions?instructionId=${instructionId}`, {
         method: 'DELETE',
       })
 
       if (res.ok) {
-        setInstructions(instructions.filter(i => i.id !== id))
+        setInstructions(instructions.filter(i => i.id !== instructionId))
         toast.success('Instruction removed')
       }
     } catch (error) {
@@ -206,7 +200,7 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
 
     setIsSavingPhoto(true)
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/photos`, {
+      const res = await fetch(`/api/properties/${id}/photos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -223,7 +217,7 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
         setNewPhotoRoom('')
         setNewPhotoCaption('')
         // Refresh photos
-        const photoRes = await fetch(`/api/properties/${resolvedParams.id}/photos`)
+        const photoRes = await fetch(`/api/properties/${id}/photos`)
         if (photoRes.ok) {
           const data = await photoRes.json()
           setPhotos(data.photos)
@@ -239,7 +233,7 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
 
   const handleDeletePhoto = async (photoId: string) => {
     try {
-      const res = await fetch(`/api/properties/${resolvedParams.id}/photos?photoId=${photoId}`, {
+      const res = await fetch(`/api/properties/${id}/photos?photoId=${photoId}`, {
         method: 'DELETE',
       })
 
@@ -554,7 +548,7 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
             value={newPhotoUrl}
             onChange={setNewPhotoUrl}
             onRemove={() => setNewPhotoUrl('')}
-            folder={`properties/${resolvedParams.id}/reference`}
+            folder={`properties/${id}/reference`}
             label="Upload photo"
           />
           <Select
@@ -587,13 +581,5 @@ function PropertyDetailContent({ params }: { params: Promise<{ id: string }> }) 
         </div>
       </Modal>
     </div>
-  )
-}
-
-export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  return (
-    <Suspense fallback={<PropertyDetailLoading />}>
-      <PropertyDetailContent params={params} />
-    </Suspense>
   )
 }

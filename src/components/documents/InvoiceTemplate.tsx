@@ -137,10 +137,10 @@ export default function InvoiceTemplate({
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
               Bill To
             </h3>
-            <p className="font-semibold text-gray-900">{invoice.property.ownerName}</p>
-            <p className="text-gray-700">{invoice.property.name}</p>
-            <p className="text-gray-600 text-sm">{invoice.property.address}</p>
-            {invoice.property.ownerEmail && (
+            <p className="font-semibold text-gray-900">{invoice.property?.ownerName || 'N/A'}</p>
+            <p className="text-gray-700">{invoice.property?.name || 'Unknown Property'}</p>
+            <p className="text-gray-600 text-sm">{invoice.property?.address || ''}</p>
+            {invoice.property?.ownerEmail && (
               <p className="text-gray-600 text-sm">{invoice.property.ownerEmail}</p>
             )}
           </div>
@@ -186,7 +186,7 @@ export default function InvoiceTemplate({
               </tr>
             </thead>
             <tbody>
-              {invoice.lineItems.map((item, index) => (
+              {(invoice.lineItems || []).map((item, index) => (
                 <tr
                   key={item.id}
                   className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}
