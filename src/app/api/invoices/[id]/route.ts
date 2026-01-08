@@ -89,14 +89,6 @@ export async function PUT(
               sortOrder: i,
             },
           })
-
-          // If the line item has a jobId, mark the job as billed
-          if (item.jobId) {
-            await tx.job.update({
-              where: { id: item.jobId },
-              data: { invoiceId: id },
-            })
-          }
         }
 
         // Update the invoice
