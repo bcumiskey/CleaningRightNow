@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Building, MapPin, Plus, User, Phone, Mail, RefreshCw, Calendar } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Building, MapPin, Plus, User, Phone, Mail, RefreshCw, Calendar, FileText, Camera } from 'lucide-react'
 import Image from 'next/image'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -43,6 +44,7 @@ interface Property {
 }
 
 export default function PropertiesPage() {
+  const router = useRouter()
   const [properties, setProperties] = useState<Property[]>([])
   const [owners, setOwners] = useState<Owner[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -270,15 +272,27 @@ export default function PropertiesPage() {
                     )}
                   </div>
 
-                  {property.icalUrl && (
+                  <div className="mt-3 flex items-center gap-2">
+                    {property.icalUrl && (
+                      <button
+                        onClick={(e) => handleSyncProperty(property.id, e)}
+                        className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        <Calendar size={14} />
+                        Sync
+                      </button>
+                    )}
                     <button
-                      onClick={(e) => handleSyncProperty(property.id, e)}
-                      className="mt-3 flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        router.push(`/properties/${property.id}`)
+                      }}
+                      className="flex items-center gap-1 text-sm text-gray-600 hover:text-gray-800"
                     >
-                      <Calendar size={14} />
-                      Sync Calendar
+                      <FileText size={14} />
+                      Instructions & Photos
                     </button>
-                  )}
+                  </div>
 
                   {property.notes.length > 0 && (
                     <div className="mt-3 p-2 bg-amber-50 rounded-lg text-sm text-amber-700">

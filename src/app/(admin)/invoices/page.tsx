@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { FileText, Plus, Clock, CheckCircle, Send } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -19,6 +20,7 @@ interface Invoice {
 }
 
 export default function InvoicesPage() {
+  const router = useRouter()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -68,7 +70,7 @@ export default function InvoicesPage() {
           <h3 className="text-lg font-semibold text-gray-900">
             {invoices.length} Invoice{invoices.length !== 1 && 's'}
           </h3>
-          <Button onClick={() => {}}>
+          <Button onClick={() => router.push('/invoices/new')}>
             <Plus size={16} />
             Create Invoice
           </Button>
@@ -84,7 +86,7 @@ export default function InvoicesPage() {
                 title="No invoices yet"
                 description="Create your first invoice to start billing clients."
                 actionLabel="Create Invoice"
-                onAction={() => {}}
+                onAction={() => router.push('/invoices/new')}
               />
             </CardContent>
           </Card>
@@ -116,7 +118,11 @@ export default function InvoicesPage() {
                 </thead>
                 <tbody className="divide-y">
                   {invoices.map((invoice) => (
-                    <tr key={invoice.id} className="hover:bg-gray-50 cursor-pointer">
+                    <tr
+                      key={invoice.id}
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => router.push(`/invoices/${invoice.id}`)}
+                    >
                       <td className="px-6 py-4 font-mono text-sm">{invoice.invoiceNumber}</td>
                       <td className="px-6 py-4 font-medium">{invoice.property.name}</td>
                       <td className="px-6 py-4 text-gray-600">{invoice.property.ownerName}</td>
