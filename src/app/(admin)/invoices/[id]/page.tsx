@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail } from 'lucide-react'
+import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -239,6 +239,13 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
             </Button>
 
             <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/invoices/${invoice.id}/edit`)}
+              >
+                <Pencil size={16} />
+                Edit
+              </Button>
               {invoice.status === 'draft' && invoice.property.ownerEmail && (
                 <Button
                   variant="primary"
