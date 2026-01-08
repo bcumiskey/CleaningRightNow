@@ -17,10 +17,8 @@ export async function GET(
     const { id: propertyId } = await params
 
     // Try with new schema fields, fallback to basic query if fields don't exist yet
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let instructions: any[] = []
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const byRoom: Record<string, any[]> = {}
+    let instructions: unknown[] = []
+    const byRoom: Record<string, unknown[]> = {}
 
     try {
       instructions = await prisma.propertyInstruction.findMany({
