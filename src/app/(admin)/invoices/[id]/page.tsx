@@ -121,7 +121,7 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
   const handleSendEmail = async () => {
     if (!invoice) return
 
-    if (!invoice.property.ownerEmail) {
+    if (!invoice.property?.ownerEmail) {
       toast.error('Property owner has no email address')
       return
     }
@@ -139,7 +139,7 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
       }
 
       setInvoice({ ...invoice, status: 'sent' })
-      toast.success(`Invoice sent to ${invoice.property.ownerEmail}`)
+      toast.success(`Invoice sent to ${invoice.property?.ownerEmail}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to send invoice')
     } finally {
@@ -246,7 +246,7 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
                 <Pencil size={16} />
                 Edit
               </Button>
-              {invoice.status === 'draft' && invoice.property.ownerEmail && (
+              {invoice.status === 'draft' && invoice.property?.ownerEmail && (
                 <Button
                   variant="primary"
                   onClick={handleSendEmail}
@@ -256,7 +256,7 @@ export default function InvoiceViewPage({ params }: { params: Promise<{ id: stri
                   Send Email
                 </Button>
               )}
-              {invoice.status === 'draft' && !invoice.property.ownerEmail && (
+              {invoice.status === 'draft' && !invoice.property?.ownerEmail && (
                 <Button
                   variant="outline"
                   onClick={handleMarkSent}

@@ -247,7 +247,7 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
 
   const handleSendEmail = async () => {
     if (!invoice) return
-    if (!invoice.property.ownerEmail) {
+    if (!invoice.property?.ownerEmail) {
       toast.error('Property owner has no email address')
       return
     }
@@ -260,7 +260,7 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
       const res = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST' })
       if (res.ok) {
         setInvoice({ ...invoice, status: 'sent' })
-        toast.success(`Invoice sent to ${invoice.property.ownerEmail}`)
+        toast.success(`Invoice sent to ${invoice.property?.ownerEmail}`)
       } else {
         const error = await res.json()
         toast.error(error.error || 'Failed to send')
@@ -402,10 +402,10 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
                 <div className="grid grid-cols-2 gap-8 mb-8">
                   <div>
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Bill To</h3>
-                    <p className="font-semibold text-gray-900">{invoice.property.ownerName}</p>
-                    <p className="text-gray-700">{invoice.property.name}</p>
-                    <p className="text-gray-600 text-sm">{invoice.property.address}</p>
-                    {invoice.property.ownerEmail && (
+                    <p className="font-semibold text-gray-900">{invoice.property?.ownerName || '-'}</p>
+                    <p className="text-gray-700">{invoice.property?.name || 'Unknown Property'}</p>
+                    <p className="text-gray-600 text-sm">{invoice.property?.address || ''}</p>
+                    {invoice.property?.ownerEmail && (
                       <p className="text-gray-600 text-sm">{invoice.property.ownerEmail}</p>
                     )}
                   </div>
@@ -543,12 +543,12 @@ export default function InvoiceEditPage({ params }: { params: Promise<{ id: stri
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {invoice.status === 'draft' && invoice.property.ownerEmail && (
+                {invoice.status === 'draft' && invoice.property?.ownerEmail && (
                   <Button className="w-full" onClick={handleSendEmail} isLoading={isSending}>
                     <Mail size={16} /> Send Email
                   </Button>
                 )}
-                {invoice.status === 'draft' && !invoice.property.ownerEmail && (
+                {invoice.status === 'draft' && !invoice.property?.ownerEmail && (
                   <Button variant="outline" className="w-full" onClick={() => {
                     fetch(`/api/invoices/${invoice.id}`, {
                       method: 'PUT',

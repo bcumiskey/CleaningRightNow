@@ -124,8 +124,8 @@ export default function InvoicesPage() {
                       onClick={() => router.push(`/invoices/${invoice.id}`)}
                     >
                       <td className="px-6 py-4 font-mono text-sm">{invoice.invoiceNumber}</td>
-                      <td className="px-6 py-4 font-medium">{invoice.property.name}</td>
-                      <td className="px-6 py-4 text-gray-600">{invoice.property.ownerName}</td>
+                      <td className="px-6 py-4 font-medium">{invoice.property?.name || 'Unknown'}</td>
+                      <td className="px-6 py-4 text-gray-600">{invoice.property?.ownerName || '-'}</td>
                       <td className="px-6 py-4 text-gray-600">{formatDate(invoice.invoiceDate)}</td>
                       <td className="px-6 py-4 text-right font-semibold">
                         {formatCurrency(invoice.total)}
