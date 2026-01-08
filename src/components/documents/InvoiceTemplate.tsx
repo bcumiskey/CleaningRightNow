@@ -71,7 +71,15 @@ export default function InvoiceTemplate({
   }
 
   return (
-    <div className="bg-white relative" id="invoice-template">
+    <div
+      className="bg-white relative mx-auto shadow-lg print:shadow-none"
+      id="invoice-template"
+      style={{
+        width: '8.5in',
+        minHeight: '11in',
+        maxWidth: '100%',
+      }}
+    >
       {/* Watermark */}
       {showWatermark && company.logoUrl && (
         <div
@@ -86,7 +94,7 @@ export default function InvoiceTemplate({
         </div>
       )}
 
-      <div className="relative z-10 p-8 max-w-4xl mx-auto">
+      <div className="relative z-10 p-12 print:p-8">
         {/* Header */}
         <div className="flex justify-between items-start border-b-2 border-gray-800 pb-6 mb-6">
           <div className="flex items-start gap-4">
@@ -182,7 +190,7 @@ export default function InvoiceTemplate({
         <div className="mb-8">
           <table className="w-full">
             <thead>
-              <tr className="bg-gray-800 text-white">
+              <tr className="bg-gray-800 text-white print:bg-gray-800">
                 <th className="text-left py-3 px-4 font-semibold text-sm">Date</th>
                 <th className="text-left py-3 px-4 font-semibold text-sm">Description</th>
                 <th className="text-right py-3 px-4 font-semibold text-sm">Amount</th>
@@ -237,7 +245,7 @@ export default function InvoiceTemplate({
 
         {/* Notes */}
         {invoice.notes && (
-          <div className="mb-8 p-4 bg-gray-50 rounded-lg">
+          <div className="mb-8 p-4 bg-gray-50 rounded-lg print:bg-gray-50">
             <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
               Notes
             </h4>

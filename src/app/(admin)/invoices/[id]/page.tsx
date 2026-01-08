@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil, Trash2 } from 'lucide-react'
+import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil, Trash2, Loader2 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -94,13 +94,15 @@ export default function InvoiceViewPage() {
     }
   }
 
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     window.print()
-  }
+  }, [])
 
-  const handleDownloadPDF = async () => {
-    if (!invoice) return
+  const handleDownloadPDF = useCallback(async () => {
+    if (!invoice || isDownloading) return
+
     setIsDownloading(true)
+    const toastId = toast.loading('Generating PDF...')
 
     try {
       const res = await fetch(`/api/invoices/${invoice.id}/pdf`)
@@ -115,13 +117,14 @@ export default function InvoiceViewPage() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      toast.success('PDF downloaded')
+
+      toast.success('PDF downloaded', { id: toastId })
     } catch (error) {
-      toast.error('Failed to download PDF')
+      toast.error('Failed to download PDF', { id: toastId })
     } finally {
       setIsDownloading(false)
     }
-  }
+  }, [invoice, isDownloading])
 
   const handleSendEmail = async () => {
     if (!invoice) return
@@ -256,100 +259,111 @@ export default function InvoiceViewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      {/* Print-hidden header and actions */}
-      <div className="print:hidden">
-        <AdminHeader title={`Invoice ${invoice.invoiceNumber}`} />
+    <>
+      <div className="min-h-screen bg-gray-100 print:bg-white print:min-h-0">
+        {/* Print-hidden header and actions */}
+        <div className="print:hidden">
+          <AdminHeader title={`Invoice ${invoice.invoiceNumber}`} />
 
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <Button variant="outline" onClick={() => router.push('/invoices')}>
-              <ArrowLeft size={16} />
-              Back to Invoices
-            </Button>
-
-            <div className="flex gap-2">
-              {/* Edit - only for draft invoices */}
-              {invoice.status === 'draft' && (
-                <Button
-                  variant="outline"
-                  onClick={() => router.push(`/invoices/${invoice.id}/edit`)}
-                >
-                  <Pencil size={16} />
-                  Edit
-                </Button>
-              )}
-
-              {/* Send Email - only for draft with owner email */}
-              {invoice.status === 'draft' && invoice.property?.ownerEmail && (
-                <Button
-                  variant="primary"
-                  onClick={handleSendEmail}
-                  isLoading={isSending}
-                >
-                  <Mail size={16} />
-                  Send Email
-                </Button>
-              )}
-
-              {/* Mark as Sent - only for draft without owner email */}
-              {invoice.status === 'draft' && !invoice.property?.ownerEmail && (
-                <Button
-                  variant="outline"
-                  onClick={handleMarkSent}
-                  isLoading={isUpdating}
-                >
-                  <Send size={16} />
-                  Mark as Sent
-                </Button>
-              )}
-
-              {/* Mark as Paid - only for sent invoices */}
-              {invoice.status === 'sent' && (
-                <Button
-                  variant="success"
-                  onClick={handleMarkPaid}
-                  isLoading={isUpdating}
-                >
-                  <CheckCircle size={16} />
-                  Mark as Paid
-                </Button>
-              )}
-
-              {/* PDF and Print */}
-              <Button
-                variant="outline"
-                onClick={handleDownloadPDF}
-                isLoading={isDownloading}
-              >
-                <Download size={16} />
-                PDF
-              </Button>
-              <Button variant="outline" onClick={handlePrint}>
-                <Printer size={16} />
-                Print
+          <div className="p-6">
+            <div className="flex justify-between items-center mb-6">
+              <Button variant="outline" onClick={() => router.push('/invoices')}>
+                <ArrowLeft size={16} />
+                Back to Invoices
               </Button>
 
-              {/* Delete - only for draft invoices */}
-              {invoice.status === 'draft' && (
+              <div className="flex gap-2">
+                {/* Edit - only for draft invoices */}
+                {invoice.status === 'draft' && (
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/invoices/${invoice.id}/edit`)}
+                  >
+                    <Pencil size={16} />
+                    Edit
+                  </Button>
+                )}
+
+                {/* Send Email - only for draft with owner email */}
+                {invoice.status === 'draft' && invoice.property?.ownerEmail && (
+                  <Button
+                    variant="primary"
+                    onClick={handleSendEmail}
+                    isLoading={isSending}
+                  >
+                    <Mail size={16} />
+                    Send Email
+                  </Button>
+                )}
+
+                {/* Mark as Sent - only for draft without owner email */}
+                {invoice.status === 'draft' && !invoice.property?.ownerEmail && (
+                  <Button
+                    variant="outline"
+                    onClick={handleMarkSent}
+                    isLoading={isUpdating}
+                  >
+                    <Send size={16} />
+                    Mark as Sent
+                  </Button>
+                )}
+
+                {/* Mark as Paid - only for sent invoices */}
+                {invoice.status === 'sent' && (
+                  <Button
+                    variant="success"
+                    onClick={handleMarkPaid}
+                    isLoading={isUpdating}
+                  >
+                    <CheckCircle size={16} />
+                    Mark as Paid
+                  </Button>
+                )}
+
+                {/* PDF Download */}
                 <Button
                   variant="outline"
-                  onClick={handleDelete}
-                  isLoading={isDeleting}
-                  className="text-red-600 hover:text-red-700 hover:border-red-300"
+                  onClick={handleDownloadPDF}
+                  disabled={isDownloading}
                 >
-                  <Trash2 size={16} />
-                  Delete
+                  {isDownloading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} />
+                      PDF
+                    </>
+                  )}
                 </Button>
-              )}
+
+                {/* Print */}
+                <Button variant="outline" onClick={handlePrint}>
+                  <Printer size={16} />
+                  Print
+                </Button>
+
+                {/* Delete - only for draft invoices */}
+                {invoice.status === 'draft' && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDelete}
+                    isLoading={isDeleting}
+                    className="text-red-600 hover:text-red-700 hover:border-red-300"
+                  >
+                    <Trash2 size={16} />
+                    Delete
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Invoice Template - visible in print */}
-      <div className="p-6 print:p-0">
-        <div className="bg-white shadow-lg rounded-lg print:shadow-none print:rounded-none">
+        {/* Invoice Template - visible in print */}
+        <div className="p-6 print:p-0 overflow-x-auto">
           <InvoiceTemplate
             invoice={invoice}
             company={company}
@@ -358,27 +372,75 @@ export default function InvoiceViewPage() {
         </div>
       </div>
 
-      {/* Print styles */}
+      {/* Print styles - comprehensive to ensure only invoice prints */}
       <style jsx global>{`
         @media print {
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+          /* Reset everything */
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            background: white !important;
           }
-          .print\\:hidden {
+
+          /* Hide everything by default */
+          body > * {
             display: none !important;
           }
-          .print\\:p-0 {
+
+          /* Show only the main content */
+          body > #__next,
+          body > div[data-nextjs-scroll-focus-boundary] {
+            display: block !important;
+          }
+
+          /* Hide non-printable elements */
+          .print\\:hidden,
+          header,
+          nav,
+          aside,
+          footer:not(#invoice-template footer),
+          [role="navigation"],
+          [role="banner"],
+          .Toaster {
+            display: none !important;
+          }
+
+          /* Invoice container styling */
+          #invoice-template {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
             padding: 0 !important;
-          }
-          .print\\:shadow-none {
             box-shadow: none !important;
-          }
-          .print\\:rounded-none {
             border-radius: 0 !important;
+          }
+
+          /* Page setup */
+          @page {
+            size: letter;
+            margin: 0.5in;
+          }
+
+          /* Ensure backgrounds print */
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Table header background */
+          .bg-gray-800 {
+            background-color: #1f2937 !important;
+            color: white !important;
+          }
+
+          /* Alternating row colors */
+          .bg-gray-50 {
+            background-color: #f9fafb !important;
           }
         }
       `}</style>
-    </div>
+    </>
   )
 }
