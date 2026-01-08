@@ -29,7 +29,7 @@ const navItems = [
   { href: '/properties', label: 'Properties', icon: Building },
   { href: '/schedules', label: 'Recurring Jobs', icon: CalendarClock },
   { href: '/team', label: 'Team', icon: Users },
-  { href: '/linens', label: 'Linen Inventory', icon: Package },
+  { href: '/linens', label: 'Linens & Supplies', icon: Package },
   { href: '/invoices', label: 'Invoicing', icon: FileText },
   { href: '/notes', label: 'Notes', icon: StickyNote },
   { href: '/reports', label: 'Reports', icon: TrendingUp },

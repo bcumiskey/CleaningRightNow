@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         time: data.time || null,
         propertyId: data.propertyId,
         rate: data.rate || property.baseRate,
-        expensePercent: data.expensePercent || 12,
+        expensePercent: data.expensePercent ?? property.expensePercent ?? 12,
         source: 'manual',
         assignments: data.teamMemberIds?.length > 0
           ? {

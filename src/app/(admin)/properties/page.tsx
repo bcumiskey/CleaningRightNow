@@ -35,7 +35,9 @@ interface Property {
   ownerEmail: string | null
   ownerPhone: string | null
   baseRate: number
+  expensePercent: number
   billingType: string
+  billingFrequency: string
   calendarSource: string | null
   icalUrl: string | null
   accessCode: string | null
@@ -378,7 +380,9 @@ function PropertyModal({ isOpen, onClose, onSave, property, owners }: PropertyMo
     ownerEmail: '',
     ownerPhone: '',
     baseRate: '',
+    expensePercent: '12',
     billingType: 'per_job',
+    billingFrequency: 'per_job',
     calendarSource: '',
     icalUrl: '',
     accessCode: '',
@@ -419,7 +423,9 @@ function PropertyModal({ isOpen, onClose, onSave, property, owners }: PropertyMo
         ownerEmail: property.ownerEmail || '',
         ownerPhone: property.ownerPhone || '',
         baseRate: property.baseRate.toString(),
+        expensePercent: property.expensePercent?.toString() || '12',
         billingType: property.billingType,
+        billingFrequency: property.billingFrequency || 'per_job',
         calendarSource: property.calendarSource || '',
         icalUrl: property.icalUrl || '',
         accessCode: property.accessCode || '',
@@ -436,7 +442,9 @@ function PropertyModal({ isOpen, onClose, onSave, property, owners }: PropertyMo
         ownerEmail: '',
         ownerPhone: '',
         baseRate: '',
+        expensePercent: '12',
         billingType: 'per_job',
+        billingFrequency: 'per_job',
         calendarSource: '',
         icalUrl: '',
         accessCode: '',
@@ -496,6 +504,20 @@ function PropertyModal({ isOpen, onClose, onSave, property, owners }: PropertyMo
         </div>
 
         <Input
+          label="Expense Percentage"
+          type="number"
+          step="0.5"
+          min="0"
+          max="100"
+          value={formData.expensePercent}
+          onChange={(e) => setFormData({ ...formData, expensePercent: e.target.value })}
+          placeholder="12"
+        />
+        <p className="text-xs text-gray-500 -mt-4">
+          Percentage taken from each job before worker pay calculation (default: 12%)
+        </p>
+
+        <Input
           label="Address"
           value={formData.address}
           onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -553,13 +575,24 @@ function PropertyModal({ isOpen, onClose, onSave, property, owners }: PropertyMo
         {/* Billing & Calendar */}
         <div className="border-t pt-4">
           <h4 className="font-medium text-gray-900 mb-3">Billing & Calendar</h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <Select
               label="Billing Type"
               value={formData.billingType}
               onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
               options={[
                 { value: 'per_job', label: 'Per Job' },
+                { value: 'monthly', label: 'Monthly' },
+              ]}
+            />
+            <Select
+              label="Invoice Frequency"
+              value={formData.billingFrequency}
+              onChange={(e) => setFormData({ ...formData, billingFrequency: e.target.value })}
+              options={[
+                { value: 'per_job', label: 'Per Job' },
+                { value: 'weekly', label: 'Weekly' },
+                { value: 'biweekly', label: 'Bi-Weekly' },
                 { value: 'monthly', label: 'Monthly' },
               ]}
             />
@@ -577,6 +610,9 @@ function PropertyModal({ isOpen, onClose, onSave, property, owners }: PropertyMo
               ]}
             />
           </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Invoice Frequency: How often to compile and send invoices to this property&apos;s owner.
+          </p>
 
           {formData.calendarSource && formData.calendarSource !== '' && (
             <div className="mt-4">

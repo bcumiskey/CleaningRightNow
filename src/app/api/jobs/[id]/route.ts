@@ -63,6 +63,11 @@ export async function PATCH(
     if (typeof data.clientPaid === 'boolean') {
       updateData.clientPaid = data.clientPaid
       updateData.clientPaidAt = data.clientPaid ? new Date() : null
+      // When client paid is marked, also mark job as completed
+      if (data.clientPaid) {
+        updateData.completed = true
+        updateData.completedAt = new Date()
+      }
     }
     if (typeof data.teamPaid === 'boolean') {
       updateData.teamPaid = data.teamPaid
@@ -80,12 +85,65 @@ export async function PATCH(
       where: { id: params.id },
       data: updateData,
       include: {
-        property: { select: { name: true } },
+        property: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            ownerName: true,
+            ownerEmail: true,
+            billingFrequency: true,
+          },
+        },
         assignments: {
           include: { teamMember: { select: { name: true } } },
         },
       },
     })
+
+    // If clientPaid is true and property has per_job billing, create draft invoice
+    if (data.clientPaid && job.property.billingFrequency === 'per_job') {
+      // Check if invoice already exists for this job
+      const existingInvoiceItem = await prisma.invoiceLineItem.findFirst({
+        where: { jobId: job.id },
+      })
+
+      if (!existingInvoiceItem) {
+        // Generate invoice number
+        const lastInvoice = await prisma.invoice.findFirst({
+          orderBy: { invoiceNumber: 'desc' },
+        })
+        const lastNumber = lastInvoice?.invoiceNumber
+          ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, '')) || 0
+          : 0
+        const invoiceNumber = `INV-${String(lastNumber + 1).padStart(5, '0')}`
+
+        // Create draft invoice
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber,
+            propertyId: job.property.id,
+            invoiceDate: new Date(),
+            paymentTerms: 'Due on Receipt',
+            type: 'one_time',
+            subtotal: job.rate,
+            discount: 0,
+            total: job.rate,
+            status: 'draft',
+            lineItems: {
+              create: [{
+                jobId: job.id,
+                date: job.date,
+                description: `Cleaning service - ${job.property.name}`,
+                amount: job.rate,
+                itemType: 'cleaning',
+                sortOrder: 0,
+              }],
+            },
+          },
+        })
+      }
+    }
 
     // Handle team assignments if provided
     if (data.teamMemberIds !== undefined) {

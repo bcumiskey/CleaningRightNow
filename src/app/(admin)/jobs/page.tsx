@@ -192,7 +192,13 @@ function JobsPageContent() {
 
       if (response.ok) {
         fetchJobs()
-        toast.success(value ? 'Marked as paid' : 'Unmarked')
+        if (field === 'clientPaid' && value) {
+          toast.success('Job completed! Draft invoice created.')
+        } else if (field === 'teamPaid' && value) {
+          toast.success('Team marked as paid')
+        } else {
+          toast.success(value ? 'Updated' : 'Unmarked')
+        }
       }
     } catch (error) {
       toast.error('Failed to update job')

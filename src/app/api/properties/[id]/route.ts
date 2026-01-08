@@ -80,7 +80,9 @@ export async function PATCH(
       ownerEmail?: string | null
       ownerPhone?: string | null
       baseRate?: number
+      expensePercent?: number
       billingType?: string
+      billingFrequency?: string
       monthlyBillingDay?: number | null
       autoSendInvoice?: boolean
       calendarSource?: string | null
@@ -99,7 +101,9 @@ export async function PATCH(
     if (data.ownerEmail !== undefined) updateData.ownerEmail = data.ownerEmail || null
     if (data.ownerPhone !== undefined) updateData.ownerPhone = data.ownerPhone || null
     if (data.baseRate !== undefined) updateData.baseRate = parseFloat(data.baseRate)
+    if (data.expensePercent !== undefined) updateData.expensePercent = parseFloat(data.expensePercent)
     if (data.billingType !== undefined) updateData.billingType = data.billingType
+    if (data.billingFrequency !== undefined) updateData.billingFrequency = data.billingFrequency
     if (data.monthlyBillingDay !== undefined) {
       updateData.monthlyBillingDay = data.monthlyBillingDay ? parseInt(data.monthlyBillingDay) : null
     }

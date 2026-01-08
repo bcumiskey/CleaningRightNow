@@ -49,7 +49,9 @@ model Property {
 
   // Rates & Billing
   baseRate            Float
+  expensePercent      Float    @default(12)  // Percentage taken off top (default 12%)
   billingType         String   @default("per_job") // "per_job" | "monthly"
+  billingFrequency    String   @default("per_job") // "per_job" | "weekly" | "biweekly" | "monthly"
   monthlyBillingDay   Int?     // 1, 15, or 31
   autoSendInvoice     Boolean  @default(false)
 
