@@ -193,8 +193,8 @@ export default function TeamPage() {
                         </div>
                       )}
 
-                      {/* Worker Login Status */}
-                      {member.role === 'worker' && member.email && (
+                      {/* Login Status */}
+                      {member.email && (
                         <div className="mt-3 pt-3 border-t">
                           {member.hasPassword ? (
                             <div className="flex items-center justify-between">
@@ -224,9 +224,9 @@ export default function TeamPage() {
                           )}
                         </div>
                       )}
-                      {member.role === 'worker' && !member.email && (
+                      {!member.email && (
                         <p className="mt-3 pt-3 border-t text-xs text-gray-400">
-                          Add email to enable worker login
+                          Add email to enable login
                         </p>
                       )}
 
