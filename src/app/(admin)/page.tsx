@@ -18,6 +18,7 @@ import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import EmptyState from '@/components/ui/EmptyState'
+import AlertsPanel from '@/components/alerts/AlertsPanel'
 import { formatCurrency, formatDate } from '@/lib/utils'
 
 interface DashboardStats {
@@ -215,8 +216,11 @@ export default function DashboardPage() {
             </Card>
           </div>
 
-          {/* Quick Actions & Upcoming */}
+          {/* Alerts & Quick Actions */}
           <div className="space-y-6">
+            {/* Alerts Panel - Shows critical issues */}
+            <AlertsPanel />
+
             <Card>
               <CardHeader>
                 <h3 className="font-semibold text-gray-900">Quick Actions</h3>
