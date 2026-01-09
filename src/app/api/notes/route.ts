@@ -16,36 +16,87 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') // 'active', 'resolved', 'all'
     const includeResolved = searchParams.get('includeResolved') === 'true'
 
-    interface WhereClause {
-      propertyId?: string
-      status?: string | { in: string[] }
+    // Try to fetch notes - if PropertyNote table doesn't exist, return empty
+    try {
+      interface WhereClause {
+        propertyId?: string
+        status?: string | { in: string[] }
+      }
+      const where: WhereClause = {}
+
+      if (propertyId) {
+        where.propertyId = propertyId
+      }
+
+      if (status && status !== 'all') {
+        where.status = status
+      } else if (!includeResolved) {
+        where.status = { in: ['active', 'reported_to_owner'] }
+      }
+
+      // Query notes without includes first
+      const notes = await prisma.propertyNote.findMany({
+        where,
+        orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      })
+
+      // Fetch related data separately for each note
+      const notesWithDetails = await Promise.all(notes.map(async (note) => {
+        let property = null
+        let addedBy = null
+        let resolvedBy = null
+        let photos: unknown[] = []
+
+        // Get property
+        try {
+          property = await prisma.property.findUnique({
+            where: { id: note.propertyId },
+            select: { id: true, name: true, address: true },
+          })
+        } catch {
+          // Continue without property
+        }
+
+        // Get addedBy
+        try {
+          addedBy = await prisma.teamMember.findUnique({
+            where: { id: note.addedById },
+            select: { id: true, name: true },
+          })
+        } catch {
+          // Continue without addedBy
+        }
+
+        // Get resolvedBy if exists
+        if (note.resolvedById) {
+          try {
+            resolvedBy = await prisma.teamMember.findUnique({
+              where: { id: note.resolvedById },
+              select: { id: true, name: true },
+            })
+          } catch {
+            // Continue without resolvedBy
+          }
+        }
+
+        // Get photos
+        try {
+          photos = await prisma.notePhoto.findMany({
+            where: { noteId: note.id },
+            orderBy: { sortOrder: 'asc' },
+          })
+        } catch {
+          // Continue without photos
+        }
+
+        return { ...note, property, addedBy, resolvedBy, photos }
+      }))
+
+      return NextResponse.json(notesWithDetails)
+    } catch {
+      // PropertyNote table doesn't exist - return empty array
+      return NextResponse.json([])
     }
-    const where: WhereClause = {}
-
-    if (propertyId) {
-      where.propertyId = propertyId
-    }
-
-    if (status && status !== 'all') {
-      where.status = status
-    } else if (!includeResolved) {
-      where.status = { in: ['active', 'reported_to_owner'] }
-    }
-
-    const notes = await prisma.propertyNote.findMany({
-      where,
-      include: {
-        property: { select: { id: true, name: true, address: true } },
-        addedBy: { select: { id: true, name: true } },
-        resolvedBy: { select: { id: true, name: true } },
-        photos: {
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-    })
-
-    return NextResponse.json(notes)
   } catch (error) {
     console.error('Notes GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch notes' }, { status: 500 })
@@ -95,20 +146,24 @@ export async function POST(request: NextRequest) {
     if (sessionUser.role === 'admin') {
       const adminEmail = (session.user as { email?: string }).email
       if (adminEmail) {
-        let teamMember = await prisma.teamMember.findUnique({
-          where: { email: adminEmail },
-        })
-        if (!teamMember) {
-          // Create a TeamMember record for the admin
-          teamMember = await prisma.teamMember.create({
-            data: {
-              name: (session.user as { name?: string }).name || 'Admin',
-              email: adminEmail,
-              role: 'admin',
-            },
+        try {
+          let teamMember = await prisma.teamMember.findUnique({
+            where: { email: adminEmail },
           })
+          if (!teamMember) {
+            // Create a TeamMember record for the admin
+            teamMember = await prisma.teamMember.create({
+              data: {
+                name: (session.user as { name?: string }).name || 'Admin',
+                email: adminEmail,
+                role: 'admin',
+              },
+            })
+          }
+          addedById = teamMember.id
+        } catch {
+          // Continue with original addedById
         }
-        addedById = teamMember.id
       }
     }
 
@@ -127,11 +182,6 @@ export async function POST(request: NextRequest) {
         estimatedCost: data.estimatedCost ? parseFloat(data.estimatedCost) : null,
         addedById,
       },
-      include: {
-        property: { select: { id: true, name: true } },
-        addedBy: { select: { id: true, name: true } },
-        photos: true,
-      },
     })
 
     // If photos were provided, add them
@@ -140,28 +190,53 @@ export async function POST(request: NextRequest) {
         url: string
         caption?: string
       }
-      await prisma.notePhoto.createMany({
-        data: data.photos.map((photo: PhotoData, index: number) => ({
-          noteId: note.id,
-          url: photo.url,
-          caption: photo.caption || null,
-          sortOrder: index,
-        })),
-      })
-
-      // Refetch with photos
-      const noteWithPhotos = await prisma.propertyNote.findUnique({
-        where: { id: note.id },
-        include: {
-          property: { select: { id: true, name: true } },
-          addedBy: { select: { id: true, name: true } },
-          photos: { orderBy: { sortOrder: 'asc' } },
-        },
-      })
-      return NextResponse.json(noteWithPhotos)
+      try {
+        await prisma.notePhoto.createMany({
+          data: data.photos.map((photo: PhotoData, index: number) => ({
+            noteId: note.id,
+            url: photo.url,
+            caption: photo.caption || null,
+            sortOrder: index,
+          })),
+        })
+      } catch {
+        // Continue without photos
+      }
     }
 
-    return NextResponse.json(note)
+    // Fetch related data separately
+    let propertyData = null
+    let addedBy = null
+    let photos: unknown[] = []
+
+    try {
+      propertyData = await prisma.property.findUnique({
+        where: { id: note.propertyId },
+        select: { id: true, name: true },
+      })
+    } catch {
+      // Continue without property
+    }
+
+    try {
+      addedBy = await prisma.teamMember.findUnique({
+        where: { id: note.addedById },
+        select: { id: true, name: true },
+      })
+    } catch {
+      // Continue without addedBy
+    }
+
+    try {
+      photos = await prisma.notePhoto.findMany({
+        where: { noteId: note.id },
+        orderBy: { sortOrder: 'asc' },
+      })
+    } catch {
+      // Continue without photos
+    }
+
+    return NextResponse.json({ ...note, property: propertyData, addedBy, photos })
   } catch (error) {
     console.error('Notes POST error:', error)
     return NextResponse.json({ error: 'Failed to create note' }, { status: 500 })

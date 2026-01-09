@@ -7,12 +7,14 @@ import {
   ArrowLeft,
   Plus,
   Trash2,
-  GripVertical,
   Camera,
   ListChecks,
   Building,
   Save,
   X,
+  User,
+  Key,
+  DollarSign,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -22,6 +24,15 @@ import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
 import ImageUpload from '@/components/ui/ImageUpload'
 import toast from 'react-hot-toast'
+
+interface Owner {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  defaultBaseRate: number | null
+  defaultBillingType: string | null
+}
 
 interface LinkedPhoto {
   id: string
@@ -53,12 +64,19 @@ interface Property {
   id: string
   name: string
   address: string
+  ownerId: string | null
+  ownerName: string
+  ownerEmail: string | null
+  ownerPhone: string | null
   baseRate: number
-  bedConfig: string | null
+  expensePercent: number
+  billingType: string
+  billingFrequency: string
   accessCode: string | null
   accessNotes: string | null
-  ownerName: string
+  bedConfig: string | null
   imageUrl: string | null
+  keywords: string | null
 }
 
 const ROOM_OPTIONS = [
@@ -81,46 +99,79 @@ const ROOM_OPTIONS = [
   'Other',
 ]
 
-export default function PropertyDetailPage() {
+type TabType = 'details' | 'worker' | 'instructions' | 'photos'
+
+export default function PropertyEditPage() {
   const router = useRouter()
   const params = useParams()
   const id = params.id as string
+  const isNew = id === 'new'
 
-  const [property, setProperty] = useState<Property | null>(null)
+  const [activeTab, setActiveTab] = useState<TabType>('details')
+  const [isLoading, setIsLoading] = useState(!isNew)
+  const [isSaving, setIsSaving] = useState(false)
+  const [owners, setOwners] = useState<Owner[]>([])
+
+  // Property form data
+  const [formData, setFormData] = useState({
+    name: '',
+    address: '',
+    ownerId: '',
+    ownerName: '',
+    ownerEmail: '',
+    ownerPhone: '',
+    baseRate: '',
+    expensePercent: '12',
+    billingType: 'per_job',
+    billingFrequency: 'per_job',
+    accessCode: '',
+    accessNotes: '',
+    bedConfig: '',
+    imageUrl: '',
+    keywords: '',
+  })
+
+  // Instructions state
   const [instructions, setInstructions] = useState<Instruction[]>([])
   const [instructionsByRoom, setInstructionsByRoom] = useState<Record<string, Instruction[]>>({})
-  const [photos, setPhotos] = useState<Photo[]>([])
-  const [photosByRoom, setPhotosByRoom] = useState<Record<string, Photo[]>>({})
-  const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'info' | 'instructions' | 'photos'>('info')
-
-  // Instructions form
   const [newInstruction, setNewInstruction] = useState('')
   const [newInstructionRoom, setNewInstructionRoom] = useState('General')
   const [newInstructionLinkedPhoto, setNewInstructionLinkedPhoto] = useState('')
   const [editingInstruction, setEditingInstruction] = useState<Instruction | null>(null)
   const [isSavingInstruction, setIsSavingInstruction] = useState(false)
 
-  // Photos form
+  // Photos state
+  const [photos, setPhotos] = useState<Photo[]>([])
+  const [photosByRoom, setPhotosByRoom] = useState<Record<string, Photo[]>>({})
   const [showPhotoModal, setShowPhotoModal] = useState(false)
   const [newPhotoRoom, setNewPhotoRoom] = useState('')
   const [newPhotoCaption, setNewPhotoCaption] = useState('')
   const [newPhotoNotes, setNewPhotoNotes] = useState('')
   const [newPhotoUrl, setNewPhotoUrl] = useState('')
   const [isSavingPhoto, setIsSavingPhoto] = useState(false)
-
-  // Photo detail modal
   const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null)
   const [editingPhotoNotes, setEditingPhotoNotes] = useState('')
   const [isSavingPhotoNotes, setIsSavingPhotoNotes] = useState(false)
 
   useEffect(() => {
-    if (id) {
-      loadData()
+    fetchOwners()
+    if (!isNew) {
+      loadPropertyData()
     }
-  }, [id])
+  }, [id, isNew])
 
-  const loadData = async () => {
+  const fetchOwners = async () => {
+    try {
+      const res = await fetch('/api/owners')
+      if (res.ok) {
+        setOwners(await res.json())
+      }
+    } catch (error) {
+      console.error('Failed to fetch owners:', error)
+    }
+  }
+
+  const loadPropertyData = async () => {
     try {
       const [propRes, instRes, photoRes] = await Promise.all([
         fetch(`/api/properties/${id}`),
@@ -129,29 +180,110 @@ export default function PropertyDetailPage() {
       ])
 
       if (propRes.ok) {
-        setProperty(await propRes.json())
+        const prop: Property = await propRes.json()
+        setFormData({
+          name: prop.name,
+          address: prop.address,
+          ownerId: prop.ownerId || '',
+          ownerName: prop.ownerName,
+          ownerEmail: prop.ownerEmail || '',
+          ownerPhone: prop.ownerPhone || '',
+          baseRate: prop.baseRate.toString(),
+          expensePercent: prop.expensePercent?.toString() || '12',
+          billingType: prop.billingType,
+          billingFrequency: prop.billingFrequency || 'per_job',
+          accessCode: prop.accessCode || '',
+          accessNotes: prop.accessNotes || '',
+          bedConfig: prop.bedConfig || '',
+          imageUrl: prop.imageUrl || '',
+          keywords: prop.keywords || '',
+        })
+      } else {
+        toast.error('Property not found')
+        router.push('/properties')
+        return
       }
+
       if (instRes.ok) {
         const data = await instRes.json()
-        setInstructions(data.instructions || data)
+        setInstructions(data.instructions || data || [])
         setInstructionsByRoom(data.byRoom || {})
       }
+
       if (photoRes.ok) {
         const data = await photoRes.json()
-        setPhotos(data.photos)
-        setPhotosByRoom(data.byRoom)
+        setPhotos(data.photos || [])
+        setPhotosByRoom(data.byRoom || {})
       }
     } catch (error) {
-      console.error('Failed to load property data:', error)
+      console.error('Failed to load property:', error)
       toast.error('Failed to load property')
     } finally {
       setIsLoading(false)
     }
   }
 
+  const handleOwnerChange = (ownerId: string) => {
+    if (ownerId) {
+      const selectedOwner = owners.find(o => o.id === ownerId)
+      if (selectedOwner) {
+        setFormData({
+          ...formData,
+          ownerId,
+          ownerName: selectedOwner.name,
+          ownerEmail: selectedOwner.email || '',
+          ownerPhone: selectedOwner.phone || '',
+          baseRate: formData.baseRate || (selectedOwner.defaultBaseRate?.toString() || ''),
+          billingType: formData.billingType === 'per_job' && selectedOwner.defaultBillingType
+            ? selectedOwner.defaultBillingType
+            : formData.billingType,
+        })
+        return
+      }
+    }
+    setFormData({ ...formData, ownerId })
+  }
+
+  const handleSaveProperty = async () => {
+    if (!formData.name || !formData.address || !formData.ownerName || !formData.baseRate) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      const url = isNew ? '/api/properties' : `/api/properties/${id}`
+      const method = isNew ? 'POST' : 'PATCH'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...formData,
+          ownerId: formData.ownerId || null,
+        }),
+      })
+
+      if (res.ok) {
+        const savedProperty = await res.json()
+        toast.success(isNew ? 'Property created!' : 'Property saved!')
+        if (isNew) {
+          router.push(`/properties/${savedProperty.id}/edit`)
+        }
+      } else {
+        const error = await res.json()
+        toast.error(error.error || 'Failed to save property')
+      }
+    } catch (error) {
+      toast.error('Failed to save property')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   // Instruction handlers
   const handleAddInstruction = async () => {
-    if (!newInstruction.trim()) return
+    if (!newInstruction.trim() || isNew) return
 
     setIsSavingInstruction(true)
     try {
@@ -167,16 +299,14 @@ export default function PropertyDetailPage() {
 
       if (res.ok) {
         const added = await res.json()
-        setInstructions([...instructions, added])
-        // Update byRoom
-        const updatedByRoom = { ...instructionsByRoom }
-        const room = added.room || 'General'
-        if (!updatedByRoom[room]) updatedByRoom[room] = []
-        updatedByRoom[room].push(added)
-        setInstructionsByRoom(updatedByRoom)
+        const updatedInstructions = [...instructions, added]
+        setInstructions(updatedInstructions)
+        rebuildInstructionsByRoom(updatedInstructions)
         setNewInstruction('')
         setNewInstructionLinkedPhoto('')
         toast.success('Instruction added')
+      } else {
+        toast.error('Failed to add instruction')
       }
     } catch (error) {
       toast.error('Failed to add instruction')
@@ -202,20 +332,11 @@ export default function PropertyDetailPage() {
 
       if (res.ok) {
         const updated = await res.json()
-        setInstructions(instructions.map(i =>
-          i.id === editingInstruction.id ? updated : i
-        ))
-        // Rebuild byRoom
         const updatedInstructions = instructions.map(i =>
           i.id === editingInstruction.id ? updated : i
         )
-        const byRoom: Record<string, Instruction[]> = {}
-        for (const inst of updatedInstructions) {
-          const room = inst.room || 'General'
-          if (!byRoom[room]) byRoom[room] = []
-          byRoom[room].push(inst)
-        }
-        setInstructionsByRoom(byRoom)
+        setInstructions(updatedInstructions)
+        rebuildInstructionsByRoom(updatedInstructions)
         setEditingInstruction(null)
         toast.success('Instruction updated')
       }
@@ -233,14 +354,7 @@ export default function PropertyDetailPage() {
       if (res.ok) {
         const filtered = instructions.filter(i => i.id !== instructionId)
         setInstructions(filtered)
-        // Rebuild byRoom
-        const byRoom: Record<string, Instruction[]> = {}
-        for (const inst of filtered) {
-          const room = inst.room || 'General'
-          if (!byRoom[room]) byRoom[room] = []
-          byRoom[room].push(inst)
-        }
-        setInstructionsByRoom(byRoom)
+        rebuildInstructionsByRoom(filtered)
         toast.success('Instruction removed')
       }
     } catch (error) {
@@ -248,9 +362,19 @@ export default function PropertyDetailPage() {
     }
   }
 
+  const rebuildInstructionsByRoom = (instList: Instruction[]) => {
+    const byRoom: Record<string, Instruction[]> = {}
+    for (const inst of instList) {
+      const room = inst.room || 'General'
+      if (!byRoom[room]) byRoom[room] = []
+      byRoom[room].push(inst)
+    }
+    setInstructionsByRoom(byRoom)
+  }
+
   // Photo handlers
   const handleAddPhoto = async () => {
-    if (!newPhotoUrl || !newPhotoRoom) {
+    if (!newPhotoUrl || !newPhotoRoom || isNew) {
       toast.error('Please upload a photo and select a room')
       return
     }
@@ -279,9 +403,11 @@ export default function PropertyDetailPage() {
         const photoRes = await fetch(`/api/properties/${id}/photos`)
         if (photoRes.ok) {
           const data = await photoRes.json()
-          setPhotos(data.photos)
-          setPhotosByRoom(data.byRoom)
+          setPhotos(data.photos || [])
+          setPhotosByRoom(data.byRoom || {})
         }
+      } else {
+        toast.error('Failed to add photo')
       }
     } catch (error) {
       toast.error('Failed to add photo')
@@ -305,18 +431,11 @@ export default function PropertyDetailPage() {
       })
 
       if (res.ok) {
-        // Update local state
         const updated = photos.map(p =>
           p.id === selectedPhoto.id ? { ...p, notes: editingPhotoNotes } : p
         )
         setPhotos(updated)
-        // Rebuild byRoom
-        const byRoom: Record<string, Photo[]> = {}
-        for (const photo of updated) {
-          if (!byRoom[photo.room]) byRoom[photo.room] = []
-          byRoom[photo.room].push(photo)
-        }
-        setPhotosByRoom(byRoom)
+        rebuildPhotosByRoom(updated)
         setSelectedPhoto({ ...selectedPhoto, notes: editingPhotoNotes })
         toast.success('Photo notes saved')
       }
@@ -334,15 +453,9 @@ export default function PropertyDetailPage() {
       })
 
       if (res.ok) {
-        setPhotos(photos.filter(p => p.id !== photoId))
-        // Rebuild byRoom
         const updated = photos.filter(p => p.id !== photoId)
-        const byRoom: Record<string, Photo[]> = {}
-        for (const photo of updated) {
-          if (!byRoom[photo.room]) byRoom[photo.room] = []
-          byRoom[photo.room].push(photo)
-        }
-        setPhotosByRoom(byRoom)
+        setPhotos(updated)
+        rebuildPhotosByRoom(updated)
         toast.success('Photo removed')
       }
     } catch (error) {
@@ -350,137 +463,289 @@ export default function PropertyDetailPage() {
     }
   }
 
+  const rebuildPhotosByRoom = (photoList: Photo[]) => {
+    const byRoom: Record<string, Photo[]> = {}
+    for (const photo of photoList) {
+      if (!byRoom[photo.room]) byRoom[photo.room] = []
+      byRoom[photo.room].push(photo)
+    }
+    setPhotosByRoom(byRoom)
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen">
-        <AdminHeader title="Property Details" />
-        <div className="p-6 text-center text-gray-500">Loading...</div>
+        <AdminHeader title="Loading..." />
+        <div className="p-6 text-center text-gray-500">Loading property...</div>
       </div>
     )
   }
 
-  if (!property) {
-    return (
-      <div className="min-h-screen">
-        <AdminHeader title="Property Not Found" />
-        <div className="p-6">
-          <Button variant="outline" onClick={() => router.push('/properties')}>
+  const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
+    { id: 'details', label: 'Details', icon: <Building size={16} /> },
+    { id: 'worker', label: 'Worker Info', icon: <Key size={16} /> },
+    { id: 'instructions', label: `Instructions (${instructions.length})`, icon: <ListChecks size={16} /> },
+    { id: 'photos', label: `Photos (${photos.length})`, icon: <Camera size={16} /> },
+  ]
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <AdminHeader title={isNew ? 'New Property' : `Edit: ${formData.name}`} />
+
+      <div className="p-6">
+        {/* Header with back and save */}
+        <div className="flex items-center justify-between mb-6">
+          <Button variant="ghost" onClick={() => router.push('/properties')}>
             <ArrowLeft size={16} />
             Back to Properties
           </Button>
+          <Button onClick={handleSaveProperty} isLoading={isSaving}>
+            <Save size={16} />
+            Save Property
+          </Button>
         </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen">
-      <AdminHeader title={property.name} />
-
-      <div className="p-6">
-        <Button variant="ghost" onClick={() => router.push('/properties')} className="mb-4">
-          <ArrowLeft size={16} />
-          Back to Properties
-        </Button>
 
         {/* Tab Navigation */}
-        <div className="flex gap-2 mb-6">
-          <Button
-            variant={activeTab === 'info' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('info')}
-          >
-            <Building size={16} />
-            Property Info
-          </Button>
-          <Button
-            variant={activeTab === 'instructions' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('instructions')}
-          >
-            <ListChecks size={16} />
-            Cleaning Instructions ({instructions.length})
-          </Button>
-          <Button
-            variant={activeTab === 'photos' ? 'primary' : 'outline'}
-            onClick={() => setActiveTab('photos')}
-          >
-            <Camera size={16} />
-            Reference Photos ({photos.length})
-          </Button>
+        <div className="flex gap-2 mb-6 border-b pb-4">
+          {tabs.map((tab) => (
+            <Button
+              key={tab.id}
+              variant={activeTab === tab.id ? 'primary' : 'outline'}
+              onClick={() => setActiveTab(tab.id)}
+              disabled={isNew && (tab.id === 'instructions' || tab.id === 'photos')}
+            >
+              {tab.icon}
+              {tab.label}
+            </Button>
+          ))}
         </div>
 
-        {/* Info Tab */}
-        {activeTab === 'info' && (
-          <div className="grid grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Property Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {property.imageUrl && (
-                  <div className="relative h-48 w-full rounded-lg overflow-hidden">
-                    <Image
-                      src={property.imageUrl}
-                      alt={property.name}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="text-sm text-gray-500">Address</label>
-                  <p className="font-medium">{property.address}</p>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-500">Owner</label>
-                  <p className="font-medium">{property.ownerName}</p>
-                </div>
-                <div>
-                  <label className="text-sm text-gray-500">Base Rate</label>
-                  <p className="font-medium">${property.baseRate.toFixed(2)}</p>
-                </div>
-                {property.bedConfig && (
-                  <div>
-                    <label className="text-sm text-gray-500">Bed Configuration</label>
-                    <p className="font-medium">{property.bedConfig}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Access Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {property.accessCode && (
-                  <div>
-                    <label className="text-sm text-gray-500">Access Code</label>
-                    <p className="font-mono text-lg font-bold">{property.accessCode}</p>
-                  </div>
-                )}
-                {property.accessNotes && (
-                  <div>
-                    <label className="text-sm text-gray-500">Access Notes</label>
-                    <p className="font-medium">{property.accessNotes}</p>
-                  </div>
-                )}
-                {!property.accessCode && !property.accessNotes && (
-                  <p className="text-gray-500">No access information provided</p>
-                )}
-              </CardContent>
-            </Card>
+        {isNew && (activeTab === 'instructions' || activeTab === 'photos') && (
+          <div className="text-center py-8 text-gray-500">
+            Save the property first to add {activeTab}.
           </div>
         )}
 
-        {/* Instructions Tab */}
-        {activeTab === 'instructions' && (
+        {/* Details Tab */}
+        {activeTab === 'details' && (
+          <div className="grid grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building size={18} />
+                  Property Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ImageUpload
+                  value={formData.imageUrl}
+                  onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+                  onRemove={() => setFormData({ ...formData, imageUrl: '' })}
+                  folder="properties"
+                  label="Property Photo"
+                  previewSize="lg"
+                />
+                <Input
+                  label="Property Name *"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Beach House"
+                  required
+                />
+                <Input
+                  label="Address *"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  placeholder="123 Ocean Drive, Beach City, FL 12345"
+                  required
+                />
+                <Input
+                  label="Calendar Keywords"
+                  value={formData.keywords}
+                  onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
+                  placeholder="beach house, smith, oceanview"
+                />
+                <p className="text-xs text-gray-500 -mt-2">
+                  Comma-separated keywords to help match calendar events to this property
+                </p>
+              </CardContent>
+            </Card>
+
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User size={18} />
+                    Owner Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Select
+                    label="Link to Owner"
+                    value={formData.ownerId}
+                    onChange={(e) => handleOwnerChange(e.target.value)}
+                    options={[
+                      { value: '', label: 'Enter owner manually' },
+                      ...owners.map(owner => ({
+                        value: owner.id,
+                        label: owner.name + (owner.defaultBaseRate ? ` (Default: $${owner.defaultBaseRate})` : ''),
+                      })),
+                    ]}
+                  />
+                  <div className="grid grid-cols-1 gap-3">
+                    <Input
+                      label="Owner Name *"
+                      value={formData.ownerName}
+                      onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
+                      placeholder="John Smith"
+                      required
+                      disabled={!!formData.ownerId}
+                    />
+                    <Input
+                      label="Owner Phone"
+                      value={formData.ownerPhone}
+                      onChange={(e) => setFormData({ ...formData, ownerPhone: e.target.value })}
+                      placeholder="(555) 123-4567"
+                      disabled={!!formData.ownerId}
+                    />
+                    <Input
+                      label="Owner Email"
+                      type="email"
+                      value={formData.ownerEmail}
+                      onChange={(e) => setFormData({ ...formData, ownerEmail: e.target.value })}
+                      placeholder="owner@example.com"
+                      disabled={!!formData.ownerId}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <DollarSign size={18} />
+                    Billing
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input
+                      label="Base Rate *"
+                      type="number"
+                      step="0.01"
+                      value={formData.baseRate}
+                      onChange={(e) => setFormData({ ...formData, baseRate: e.target.value })}
+                      placeholder="320.00"
+                      required
+                    />
+                    <Input
+                      label="Expense %"
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="100"
+                      value={formData.expensePercent}
+                      onChange={(e) => setFormData({ ...formData, expensePercent: e.target.value })}
+                      placeholder="12"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Select
+                      label="Billing Type"
+                      value={formData.billingType}
+                      onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
+                      options={[
+                        { value: 'per_job', label: 'Per Job' },
+                        { value: 'monthly', label: 'Monthly' },
+                      ]}
+                    />
+                    <Select
+                      label="Invoice Frequency"
+                      value={formData.billingFrequency}
+                      onChange={(e) => setFormData({ ...formData, billingFrequency: e.target.value })}
+                      options={[
+                        { value: 'per_job', label: 'Per Job' },
+                        { value: 'weekly', label: 'Weekly' },
+                        { value: 'biweekly', label: 'Bi-Weekly' },
+                        { value: 'monthly', label: 'Monthly' },
+                      ]}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Worker Info Tab */}
+        {activeTab === 'worker' && (
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Cleaning Instructions</CardTitle>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Key size={18} />
+                Information Visible to Workers
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-sm text-gray-500">
+                This information is shown to workers when they view job details or the property reference.
+              </p>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <Input
+                    label="Access Code"
+                    value={formData.accessCode}
+                    onChange={(e) => setFormData({ ...formData, accessCode: e.target.value })}
+                    placeholder="1234 or Lockbox code"
+                  />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Access Notes
+                    </label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows={4}
+                      value={formData.accessNotes}
+                      onChange={(e) => setFormData({ ...formData, accessNotes: e.target.value })}
+                      placeholder="Gate code 5678, key under mat, etc."
+                    />
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <Input
+                    label="Bed Configuration"
+                    value={formData.bedConfig}
+                    onChange={(e) => setFormData({ ...formData, bedConfig: e.target.value })}
+                    placeholder="2 King, 1 Queen, 2 Twin"
+                  />
+                  <div className="p-4 bg-blue-50 rounded-lg">
+                    <h4 className="font-medium text-blue-900 mb-2">What workers see:</h4>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Property name and address</li>
+                      <li>• Access code and notes</li>
+                      <li>• Bed configuration</li>
+                      <li>• Cleaning instructions</li>
+                      <li>• Reference photos</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Instructions Tab */}
+        {activeTab === 'instructions' && !isNew && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ListChecks size={18} />
+                Cleaning Instructions
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500 mb-4">
-                Add specific cleaning instructions organized by room. Link to photos for visual reference.
+                Add specific cleaning instructions organized by room. Link to reference photos for visual guidance.
               </p>
 
               {/* Add new instruction */}
@@ -563,38 +828,6 @@ export default function PropertyDetailPage() {
                                   autoFocus
                                 />
                                 <div className="flex gap-2">
-                                  <Select
-                                    value={editingInstruction.room}
-                                    onChange={(e) =>
-                                      setEditingInstruction({
-                                        ...editingInstruction,
-                                        room: e.target.value,
-                                      })
-                                    }
-                                    options={[
-                                      { value: 'General', label: 'General' },
-                                      ...ROOM_OPTIONS.map(r => ({ value: r, label: r })),
-                                    ]}
-                                  />
-                                  <Select
-                                    value={editingInstruction.linkedPhotoId || ''}
-                                    onChange={(e) =>
-                                      setEditingInstruction({
-                                        ...editingInstruction,
-                                        linkedPhotoId: e.target.value || null,
-                                        linkedPhoto: e.target.value
-                                          ? photos.find(p => p.id === e.target.value) as LinkedPhoto || null
-                                          : null,
-                                      })
-                                    }
-                                    options={[
-                                      { value: '', label: 'No photo linked' },
-                                      ...photos.map(photo => ({
-                                        value: photo.id,
-                                        label: `${photo.room}${photo.caption ? ` - ${photo.caption}` : ''}`,
-                                      })),
-                                    ]}
-                                  />
                                   <Button size="sm" onClick={handleUpdateInstruction}>
                                     <Save size={14} />
                                   </Button>
@@ -617,19 +850,10 @@ export default function PropertyDetailPage() {
                                     {inst.instruction}
                                   </p>
                                   {inst.linkedPhoto && (
-                                    <button
-                                      onClick={() => {
-                                        const photo = photos.find(p => p.id === inst.linkedPhotoId)
-                                        if (photo) {
-                                          setSelectedPhoto(photo)
-                                          setEditingPhotoNotes(photo.notes || '')
-                                        }
-                                      }}
-                                      className="mt-1 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                                    >
+                                    <span className="text-xs text-blue-600 flex items-center gap-1 mt-1">
                                       <Camera size={12} />
-                                      View linked photo
-                                    </button>
+                                      Photo linked
+                                    </span>
                                   )}
                                 </div>
                                 <Button
@@ -654,10 +878,13 @@ export default function PropertyDetailPage() {
         )}
 
         {/* Photos Tab */}
-        {activeTab === 'photos' && (
+        {activeTab === 'photos' && !isNew && (
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Reference Photos</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Camera size={18} />
+                Reference Photos
+              </CardTitle>
               <Button onClick={() => setShowPhotoModal(true)}>
                 <Plus size={16} />
                 Add Photo
@@ -765,7 +992,7 @@ export default function PropertyDetailPage() {
             label="Caption (optional)"
             value={newPhotoCaption}
             onChange={(e) => setNewPhotoCaption(e.target.value)}
-            placeholder="Brief description for gallery view"
+            placeholder="Brief description"
           />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -819,17 +1046,14 @@ export default function PropertyDetailPage() {
                 rows={4}
                 value={editingPhotoNotes}
                 onChange={(e) => setEditingPhotoNotes(e.target.value)}
-                placeholder="Detailed instructions for this photo (visible to workers)"
+                placeholder="Detailed instructions for this photo"
               />
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <Button variant="outline" onClick={() => setSelectedPhoto(null)}>
                 Close
               </Button>
-              <Button
-                onClick={handleSavePhotoNotes}
-                isLoading={isSavingPhotoNotes}
-              >
+              <Button onClick={handleSavePhotoNotes} isLoading={isSavingPhotoNotes}>
                 <Save size={16} />
                 Save Notes
               </Button>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff, Shield, Star, TrendingUp } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -20,6 +20,13 @@ interface TeamMember {
   role: string
   isActive: boolean
   hasPassword?: boolean
+  // Supervisor fields
+  rank?: number
+  canSupervise?: boolean
+  // Performance metrics
+  avgRating?: number | null
+  totalRatings?: number
+  reliabilityScore?: number | null
 }
 
 export default function TeamPage() {
@@ -199,7 +206,7 @@ export default function TeamPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {teamMembers.map((member) => (
               <Card
                 key={member.id}
@@ -226,7 +233,36 @@ export default function TeamPage() {
                         <Badge variant={member.role === 'admin' ? 'purple' : 'info'}>
                           {member.role}
                         </Badge>
+                        {member.canSupervise && (
+                          <Badge variant="warning" className="gap-1">
+                            <Shield size={10} />
+                            Supervisor
+                          </Badge>
+                        )}
                       </div>
+
+                      {/* Rank and Performance Stats */}
+                      {member.isActive && (
+                        <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                          <div className="flex items-center gap-1" title="Team Rank (1-100)">
+                            <TrendingUp size={12} />
+                            <span>Rank: {member.rank ?? 50}</span>
+                          </div>
+                          {member.avgRating && (
+                            <div className="flex items-center gap-1" title={`Based on ${member.totalRatings} ratings`}>
+                              <Star size={12} className="text-amber-500" />
+                              <span>{member.avgRating.toFixed(1)}</span>
+                            </div>
+                          )}
+                          {member.reliabilityScore !== undefined && member.reliabilityScore !== null && (
+                            <div className="flex items-center gap-1" title="Attendance Reliability">
+                              <Check size={12} className={member.reliabilityScore >= 90 ? 'text-green-500' : member.reliabilityScore >= 70 ? 'text-amber-500' : 'text-red-500'} />
+                              <span>{Math.round(member.reliabilityScore)}%</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {member.phone && (
                         <div className="flex items-center gap-2 text-sm text-gray-500 mt-2">
                           <Phone size={14} />
@@ -372,6 +408,8 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
     email: '',
     phone: '',
     role: 'worker',
+    rank: 50,
+    canSupervise: false,
   })
   const [isSaving, setIsSaving] = useState(false)
 
@@ -382,6 +420,8 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
         email: member.email || '',
         phone: member.phone || '',
         role: member.role,
+        rank: member.rank ?? 50,
+        canSupervise: member.canSupervise ?? false,
       })
     } else {
       setFormData({
@@ -389,6 +429,8 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
         email: '',
         phone: '',
         role: 'worker',
+        rank: 50,
+        canSupervise: false,
       })
     }
   }, [member, isOpen])
@@ -439,6 +481,47 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
             { value: 'admin', label: 'Admin' },
           ]}
         />
+
+        {/* Supervisor Settings */}
+        <div className="border-t pt-4 mt-4">
+          <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+            <Shield size={16} className="text-amber-500" />
+            Supervisor Settings
+          </h4>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Team Rank (1-100)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={formData.rank}
+                onChange={(e) => setFormData({ ...formData, rank: parseInt(e.target.value) || 50 })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Higher = more senior. Owner/admin should be 100.</p>
+            </div>
+
+            <div className="flex flex-col">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Can Supervise
+              </label>
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.canSupervise}
+                  onChange={(e) => setFormData({ ...formData, canSupervise: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">Enable supervisor tools</span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1">Can mark absences and rate team.</p>
+            </div>
+          </div>
+        </div>
 
         <div className="flex justify-end gap-3 pt-4">
           <Button type="button" variant="outline" onClick={onClose}>

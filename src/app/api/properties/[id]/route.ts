@@ -16,38 +16,141 @@ export async function GET(
 
     const { id } = await params
 
-    const property = await prisma.property.findUnique({
-      where: { id },
-      include: {
-        owner: true,
-        notes: {
-          where: { status: { in: ['active', 'reported_to_owner'] } },
-          include: {
-            addedBy: { select: { name: true } },
-            photos: { orderBy: { sortOrder: 'asc' } },
+    // Try Prisma query first
+    try {
+      const property = await prisma.property.findUnique({
+        where: { id },
+      })
+
+      if (!property) {
+        return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+      }
+
+      // Build result object starting with basic property
+      const result: Record<string, unknown> = { ...property }
+
+      // Try to fetch owner separately
+      if (property.ownerId) {
+        try {
+          const owner = await prisma.owner.findUnique({
+            where: { id: property.ownerId },
+          })
+          result.owner = owner
+        } catch {
+          result.owner = null
+        }
+      } else {
+        result.owner = null
+      }
+
+      // Try to fetch notes separately
+      try {
+        const notes = await prisma.propertyNote.findMany({
+          where: {
+            propertyId: id,
+            status: { in: ['active', 'reported_to_owner'] },
           },
           orderBy: { createdAt: 'desc' },
-        },
-        instructions: {
-          orderBy: { sortOrder: 'asc' },
-        },
-        photos: {
-          include: {
-            addedBy: { select: { name: true } },
-          },
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-    })
+        })
 
-    if (!property) {
-      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+        const notesWithDetails = await Promise.all(notes.map(async (note) => {
+          let addedBy = null
+          let photos: unknown[] = []
+
+          try {
+            const teamMember = await prisma.teamMember.findUnique({
+              where: { id: note.addedById },
+              select: { name: true },
+            })
+            addedBy = teamMember
+          } catch {
+            // Continue
+          }
+
+          try {
+            photos = await prisma.notePhoto.findMany({
+              where: { noteId: note.id },
+              orderBy: { sortOrder: 'asc' },
+            })
+          } catch {
+            // Continue
+          }
+
+          return { ...note, addedBy, photos }
+        }))
+
+        result.notes = notesWithDetails
+      } catch {
+        result.notes = []
+      }
+
+      // Try to fetch instructions separately
+      try {
+        const instructions = await prisma.propertyInstruction.findMany({
+          where: { propertyId: id },
+          orderBy: { sortOrder: 'asc' },
+        })
+        result.instructions = instructions
+      } catch {
+        result.instructions = []
+      }
+
+      // Try to fetch photos separately
+      try {
+        const photos = await prisma.propertyPhoto.findMany({
+          where: { propertyId: id },
+          orderBy: { sortOrder: 'asc' },
+        })
+
+        const photosWithDetails = await Promise.all(photos.map(async (photo) => {
+          let addedBy = null
+          try {
+            const teamMember = await prisma.teamMember.findUnique({
+              where: { id: photo.addedById },
+              select: { name: true },
+            })
+            addedBy = teamMember
+          } catch {
+            // Continue
+          }
+          return { ...photo, addedBy }
+        }))
+
+        result.photos = photosWithDetails
+      } catch {
+        result.photos = []
+      }
+
+      return NextResponse.json(result)
+    } catch (prismaError) {
+      // Prisma query failed - try raw SQL
+      console.error('Prisma query failed, trying raw SQL:', prismaError)
+
+      try {
+        const properties = await prisma.$queryRaw`
+          SELECT * FROM "Property" WHERE id = ${id}
+        ` as Array<Record<string, unknown>>
+
+        if (properties.length === 0) {
+          return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+        }
+
+        const property = properties[0]
+        return NextResponse.json({
+          ...property,
+          owner: null,
+          notes: [],
+          instructions: [],
+          photos: [],
+        })
+      } catch (rawError) {
+        console.error('Raw SQL also failed:', rawError)
+        throw rawError
+      }
     }
-
-    return NextResponse.json(property)
   } catch (error) {
     console.error('Property GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch property' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch property', details: String(error) }, { status: 500 })
   }
 }
 
@@ -80,15 +183,16 @@ export async function PATCH(
       ownerEmail?: string | null
       ownerPhone?: string | null
       baseRate?: number
+      expensePercent?: number
       billingType?: string
+      billingFrequency?: string
       monthlyBillingDay?: number | null
       autoSendInvoice?: boolean
-      calendarSource?: string | null
-      icalUrl?: string | null
       accessCode?: string | null
       accessNotes?: string | null
       bedConfig?: string | null
       imageUrl?: string | null
+      keywords?: string | null
     }
     const updateData: UpdateData = {}
 
@@ -99,17 +203,18 @@ export async function PATCH(
     if (data.ownerEmail !== undefined) updateData.ownerEmail = data.ownerEmail || null
     if (data.ownerPhone !== undefined) updateData.ownerPhone = data.ownerPhone || null
     if (data.baseRate !== undefined) updateData.baseRate = parseFloat(data.baseRate)
+    if (data.expensePercent !== undefined) updateData.expensePercent = parseFloat(data.expensePercent)
     if (data.billingType !== undefined) updateData.billingType = data.billingType
+    if (data.billingFrequency !== undefined) updateData.billingFrequency = data.billingFrequency
     if (data.monthlyBillingDay !== undefined) {
       updateData.monthlyBillingDay = data.monthlyBillingDay ? parseInt(data.monthlyBillingDay) : null
     }
     if (data.autoSendInvoice !== undefined) updateData.autoSendInvoice = data.autoSendInvoice
-    if (data.calendarSource !== undefined) updateData.calendarSource = data.calendarSource || null
-    if (data.icalUrl !== undefined) updateData.icalUrl = data.icalUrl || null
     if (data.accessCode !== undefined) updateData.accessCode = data.accessCode || null
     if (data.accessNotes !== undefined) updateData.accessNotes = data.accessNotes || null
     if (data.bedConfig !== undefined) updateData.bedConfig = data.bedConfig || null
     if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl || null
+    if (data.keywords !== undefined) updateData.keywords = data.keywords || null
 
     const property = await prisma.property.update({
       where: { id },

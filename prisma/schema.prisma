@@ -49,13 +49,18 @@ model Property {
 
   // Rates & Billing
   baseRate            Float
+  expensePercent      Float    @default(12)  // Percentage taken off top (default 12%)
   billingType         String   @default("per_job") // "per_job" | "monthly"
+  billingFrequency    String   @default("per_job") // "per_job" | "weekly" | "biweekly" | "monthly"
   monthlyBillingDay   Int?     // 1, 15, or 31
   autoSendInvoice     Boolean  @default(false)
 
-  // Calendar Integration
-  calendarSource      String?  // "turno" | "google" | "manual"
-  icalUrl             String?
+  // Calendar Integration (deprecated - now managed via Calendar Sources)
+  calendarSource      String?  // "turno" | "google" | "manual" (legacy)
+  icalUrl             String?  // (legacy)
+
+  // Keywords for matching calendar events to this property
+  keywords            String?  // Comma-separated keywords, e.g., "beach house, smith rental"
 
   // Access Info (visible to workers)
   accessCode          String?
@@ -126,28 +131,35 @@ model NotePhoto {
   createdAt   DateTime  @default(now())
 }
 
-// Standing Instructions - Permanent property info
+// Standing Instructions - Permanent property info (organized by room)
 model PropertyInstruction {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  instruction String
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
+  id            String   @id @default(cuid())
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  room          String   @default("General") // "General", "Kitchen", "Master Bedroom", etc.
+  instruction   String
+  linkedPhotoId String?  // Optional link to a PropertyPhoto
+  linkedPhoto   PropertyPhoto? @relation(fields: [linkedPhotoId], references: [id], onDelete: SetNull)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
 }
 
-// Reference Photos - How things should look
+// Reference Photos - How things should look (with detailed notes)
 model PropertyPhoto {
   id          String   @id @default(cuid())
   propertyId  String
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   room        String   // "Master Bedroom", "Kitchen", etc.
-  caption     String?
+  caption     String?  // Brief caption shown in gallery
+  notes       String?  // Detailed notes shown when photo is clicked
   url         String
   addedById   String
   addedBy     TeamMember @relation(fields: [addedById], references: [id])
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
+
+  // Instructions that link to this photo
+  linkedInstructions PropertyInstruction[]
 }
 
 // ============================================================
@@ -163,12 +175,27 @@ model TeamMember {
   role        String    @default("worker") // "admin" | "worker"
   isActive    Boolean   @default(true)
 
+  // Hierarchy & Supervision
+  rank        Int       @default(50)  // 1-100, higher = more senior. Admin owner should be 100
+  canSupervise Boolean  @default(false) // Can this person supervise jobs?
+
+  // Performance Metrics (calculated from ratings)
+  avgRating       Float?   // Average performance rating (1-5)
+  totalRatings    Int      @default(0) // Number of ratings received
+  reliabilityScore Float?  // Attendance reliability (0-100)
+
   // Relations
   jobAssignments    JobAssignment[]
   notesAdded        PropertyNote[]      @relation("AddedNotes")
   notesResolved     PropertyNote[]      @relation("ResolvedNotes")
   photosAdded       PropertyPhoto[]
   pushSubscriptions PushSubscription[]
+
+  // Job sessions (check-ins)
+  jobSessions       JobSession[]
+  supervisedSessions JobSession[]      @relation("SupervisedBy")
+  ratingsGiven      PerformanceRating[] @relation("RatedBy")
+  ratingsReceived   PerformanceRating[] @relation("RatedMember")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -204,6 +231,7 @@ model Job {
   // Relations
   assignments     JobAssignment[]
   invoiceItems    InvoiceLineItem[]
+  sessions        JobSession[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -476,4 +504,99 @@ model CalendarSource {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+// ============================================================
+// JOB SESSIONS (Check-in/out tracking)
+// ============================================================
+
+model JobSession {
+  id              String    @id @default(cuid())
+  jobId           String
+  job             Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  teamMemberId    String
+  teamMember      TeamMember @relation(fields: [teamMemberId], references: [id])
+
+  // Check-in/out times
+  checkedInAt     DateTime?
+  checkedOutAt    DateTime?
+  checkInMethod   String?   // "nfc" | "qr" | "manual"
+  checkInLocation String?   // Lat,Long if available
+
+  // Status
+  status          String    @default("assigned") // "assigned" | "checked_in" | "completed" | "absent" | "late"
+  isAbsent        Boolean   @default(false)
+  absentReason    String?
+  markedAbsentAt  DateTime?
+  markedAbsentBy  String?   // TeamMember ID who marked them absent
+
+  // Fill-in bonus for last-minute replacements
+  isLastMinuteFillIn Boolean @default(false)
+  fillInBonus        Float?  // Extra payment for stepping in
+
+  // Supervisor for this session (highest ranked present team member)
+  supervisorId    String?
+  supervisor      TeamMember? @relation("SupervisedBy", fields: [supervisorId], references: [id])
+
+  // Completion notes
+  notes           String?   // Condition notes at completion
+  completionPhotos String?  // JSON array of photo URLs
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Performance rating for this session
+  rating          PerformanceRating?
+
+  @@unique([jobId, teamMemberId])
+}
+
+// ============================================================
+// PERFORMANCE RATINGS
+// ============================================================
+
+model PerformanceRating {
+  id              String    @id @default(cuid())
+
+  // The session being rated
+  sessionId       String    @unique
+  session         JobSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Who was rated
+  teamMemberId    String
+  teamMember      TeamMember @relation("RatedMember", fields: [teamMemberId], references: [id])
+
+  // Who gave the rating (supervisor)
+  ratedById       String
+  ratedBy         TeamMember @relation("RatedBy", fields: [ratedById], references: [id])
+
+  // Ratings (1-5 scale)
+  qualityRating   Int       // Quality of work
+  speedRating     Int       // Speed/efficiency
+  attitudeRating  Int       // Professionalism/attitude
+  overallRating   Float     // Calculated average
+
+  // Optional feedback
+  feedback        String?
+
+  createdAt       DateTime  @default(now())
+}
+
+// ============================================================
+// PROPERTY CHECK-IN TOKENS (NFC/QR)
+// ============================================================
+
+model PropertyCheckInToken {
+  id          String    @id @default(cuid())
+  propertyId  String
+  token       String    @unique  // UUID for the check-in token
+  isActive    Boolean   @default(true)
+
+  // Token can expire and be rotated for security
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }

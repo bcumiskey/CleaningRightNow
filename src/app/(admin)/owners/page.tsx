@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Users, Plus, Mail, Phone, Building, ChevronRight, Trash2 } from 'lucide-react'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { Users, Plus, Mail, Phone, Building, Trash2, ExternalLink } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -33,16 +34,31 @@ interface Owner {
   _count: { properties: number }
 }
 
-export default function OwnersPage() {
+function OwnersPageContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [owners, setOwners] = useState<Owner[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingOwner, setEditingOwner] = useState<Owner | null>(null)
-  const [expandedOwner, setExpandedOwner] = useState<string | null>(null)
 
   useEffect(() => {
     fetchOwners()
   }, [])
+
+  // Handle edit query param (from owner detail page)
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (editId && owners.length > 0) {
+      const ownerToEdit = owners.find(o => o.id === editId)
+      if (ownerToEdit) {
+        setEditingOwner(ownerToEdit)
+        setShowModal(true)
+        // Clear the query param
+        router.replace('/owners')
+      }
+    }
+  }, [searchParams, owners, router])
 
   const fetchOwners = async () => {
     try {
@@ -114,10 +130,6 @@ export default function OwnersPage() {
     }
   }
 
-  const toggleExpand = (ownerId: string) => {
-    setExpandedOwner(expandedOwner === ownerId ? null : ownerId)
-  }
-
   const totalProperties = owners.reduce((sum, o) => sum + o._count.properties, 0)
 
   return (
@@ -155,115 +167,98 @@ export default function OwnersPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {owners.map((owner) => (
-              <Card key={owner.id} className="overflow-hidden">
-                <div
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-                  onClick={() => toggleExpand(owner.id)}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                      <Users className="text-blue-600" size={24} />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-gray-900">{owner.name}</h4>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
-                        {owner.email && (
-                          <span className="flex items-center gap-1">
-                            <Mail size={12} />
-                            {owner.email}
-                          </span>
-                        )}
-                        {owner.phone && (
-                          <span className="flex items-center gap-1">
-                            <Phone size={12} />
-                            {owner.phone}
-                          </span>
-                        )}
+              <Card
+                key={owner.id}
+                className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => router.push(`/owners/${owner.id}`)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                        <Users className="text-blue-600" size={20} />
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900">{owner.name}</h4>
+                        <Badge variant="info" className="mt-1">
+                          {owner._count.properties} {owner._count.properties === 1 ? 'property' : 'properties'}
+                        </Badge>
                       </div>
                     </div>
+                    <ExternalLink size={16} className="text-gray-400" />
                   </div>
 
-                  <div className="flex items-center gap-4">
-                    <Badge variant="info">
-                      {owner._count.properties} {owner._count.properties === 1 ? 'property' : 'properties'}
-                    </Badge>
-                    {owner.defaultBaseRate && (
-                      <span className="text-sm text-gray-600">
-                        Default: {formatCurrency(owner.defaultBaseRate)}
-                      </span>
+                  {/* Contact Info */}
+                  <div className="space-y-1 text-sm text-gray-600 mb-3">
+                    {owner.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail size={12} />
+                        <span className="truncate">{owner.email}</span>
+                      </div>
                     )}
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => handleEdit(owner, e)}
-                      >
-                        Edit
-                      </Button>
-                      {owner._count.properties === 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => handleDelete(owner, e)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 size={14} />
-                        </Button>
-                      )}
-                    </div>
-                    <ChevronRight
-                      size={20}
-                      className={`text-gray-400 transition-transform ${
-                        expandedOwner === owner.id ? 'rotate-90' : ''
-                      }`}
-                    />
+                    {owner.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone size={12} />
+                        {owner.phone}
+                      </div>
+                    )}
                   </div>
-                </div>
 
-                {/* Expanded Properties List */}
-                {expandedOwner === owner.id && (
-                  <div className="border-t bg-gray-50 p-4">
-                    {owner.properties.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-4">
-                        No properties linked to this owner yet.
-                        <br />
-                        Link properties from the Properties page.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-3">
-                        {owner.properties.map((property) => (
+                  {/* Properties Preview */}
+                  {owner.properties.length > 0 && (
+                    <div className="border-t pt-3 mb-3">
+                      <p className="text-xs text-gray-500 mb-2">Properties:</p>
+                      <div className="space-y-1">
+                        {owner.properties.slice(0, 3).map((property) => (
                           <div
                             key={property.id}
-                            className="bg-white p-3 rounded-lg border border-gray-200"
+                            className="flex items-center justify-between text-sm"
                           >
-                            <div className="flex items-start gap-2">
-                              <Building size={16} className="text-gray-400 mt-0.5" />
-                              <div>
-                                <p className="font-medium text-gray-900 text-sm">
-                                  {property.name}
-                                </p>
-                                <p className="text-xs text-gray-500">{property.address}</p>
-                                <p className="text-sm font-medium text-gray-700 mt-1">
-                                  {formatCurrency(property.baseRate)}
-                                </p>
-                              </div>
-                            </div>
+                            <span className="text-gray-700 truncate">{property.name}</span>
+                            <span className="text-gray-500">{formatCurrency(property.baseRate)}</span>
                           </div>
                         ))}
+                        {owner.properties.length > 3 && (
+                          <p className="text-xs text-gray-400">
+                            +{owner.properties.length - 3} more
+                          </p>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {owner.notes && (
-                      <div className="mt-4 p-3 bg-amber-50 rounded-lg">
-                        <p className="text-sm text-amber-800">
-                          <strong>Notes:</strong> {owner.notes}
-                        </p>
-                      </div>
+                  {/* Default Rate */}
+                  {owner.defaultBaseRate && (
+                    <div className="text-sm text-gray-600 border-t pt-3">
+                      <span className="text-gray-500">Default Rate:</span>
+                      <span className="ml-1 font-semibold">{formatCurrency(owner.defaultBaseRate)}</span>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mt-3 pt-3 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={(e) => handleEdit(owner, e)}
+                    >
+                      Edit
+                    </Button>
+                    {owner._count.properties === 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => handleDelete(owner, e)}
+                        className="text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
                     )}
                   </div>
-                )}
+                </CardContent>
               </Card>
             ))}
           </div>
@@ -277,6 +272,14 @@ export default function OwnersPage() {
         owner={editingOwner}
       />
     </div>
+  )
+}
+
+export default function OwnersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen"><div className="p-6 text-center text-gray-500">Loading...</div></div>}>
+      <OwnersPageContent />
+    </Suspense>
   )
 }
 
@@ -346,7 +349,7 @@ function OwnerModal({ isOpen, onClose, onSave, owner }: OwnerModalProps) {
           required
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label="Email"
             type="email"
@@ -367,7 +370,7 @@ function OwnerModal({ isOpen, onClose, onSave, owner }: OwnerModalProps) {
           <p className="text-sm text-gray-500 mb-3">
             These defaults will be suggested when creating new properties for this owner.
           </p>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
               label="Default Rate"
               type="number"

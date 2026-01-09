@@ -23,14 +23,30 @@ export async function GET(
       return NextResponse.json({ error: 'Team member not found' }, { status: 404 })
     }
 
+    // Type the team member with optional new fields
+    const member = teamMember as typeof teamMember & {
+      rank?: number
+      canSupervise?: boolean
+      avgRating?: number | null
+      totalRatings?: number
+      reliabilityScore?: number | null
+    }
+
     return NextResponse.json({
-      id: teamMember.id,
-      name: teamMember.name,
-      email: teamMember.email,
-      phone: teamMember.phone,
-      role: teamMember.role,
-      isActive: teamMember.isActive,
-      hasPassword: !!teamMember.password,
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      role: member.role,
+      isActive: member.isActive,
+      hasPassword: !!member.password,
+      // Supervisor fields
+      rank: member.rank ?? 50,
+      canSupervise: member.canSupervise ?? false,
+      // Performance metrics
+      avgRating: member.avgRating ?? null,
+      totalRatings: member.totalRatings ?? 0,
+      reliabilityScore: member.reliabilityScore ?? null,
     })
   } catch (error) {
     console.error('Team member GET error:', error)
@@ -51,25 +67,50 @@ export async function PUT(
     const { id } = await params
     const data = await request.json()
 
+    // Build update data - only include fields that were provided
+    const updateData: Record<string, unknown> = {
+      name: data.name,
+      email: data.email || null,
+      phone: data.phone || null,
+      role: data.role,
+      isActive: data.isActive ?? true,
+    }
+
+    // Include supervisor fields if provided
+    if (data.rank !== undefined) {
+      updateData.rank = parseInt(data.rank) || 50
+    }
+    if (data.canSupervise !== undefined) {
+      updateData.canSupervise = Boolean(data.canSupervise)
+    }
+
     const teamMember = await prisma.teamMember.update({
       where: { id },
-      data: {
-        name: data.name,
-        email: data.email || null,
-        phone: data.phone || null,
-        role: data.role,
-        isActive: data.isActive ?? true,
-      },
+      data: updateData,
     })
 
+    // Type the team member with optional new fields
+    const member = teamMember as typeof teamMember & {
+      rank?: number
+      canSupervise?: boolean
+      avgRating?: number | null
+      totalRatings?: number
+      reliabilityScore?: number | null
+    }
+
     return NextResponse.json({
-      id: teamMember.id,
-      name: teamMember.name,
-      email: teamMember.email,
-      phone: teamMember.phone,
-      role: teamMember.role,
-      isActive: teamMember.isActive,
-      hasPassword: !!teamMember.password,
+      id: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      role: member.role,
+      isActive: member.isActive,
+      hasPassword: !!member.password,
+      rank: member.rank ?? 50,
+      canSupervise: member.canSupervise ?? false,
+      avgRating: member.avgRating ?? null,
+      totalRatings: member.totalRatings ?? 0,
+      reliabilityScore: member.reliabilityScore ?? null,
     })
   } catch (error) {
     console.error('Team member PUT error:', error)

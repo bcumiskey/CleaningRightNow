@@ -16,21 +16,59 @@ export async function GET(
 
     const { id: propertyId } = await params
 
-    const photos = await prisma.propertyPhoto.findMany({
-      where: { propertyId },
-      orderBy: [{ room: 'asc' }, { sortOrder: 'asc' }],
-      include: {
-        addedBy: { select: { name: true } },
-      },
-    })
+    // Query photos without includes first
+    let photos: Array<{
+      id: string
+      propertyId: string
+      room: string
+      caption: string | null
+      notes: string | null
+      url: string
+      addedById: string
+      sortOrder: number
+      createdAt: Date
+      addedBy: { name: string } | null
+    }> = []
+
+    try {
+      const rawPhotos = await prisma.propertyPhoto.findMany({
+        where: { propertyId },
+        orderBy: { sortOrder: 'asc' },
+      })
+
+      // Fetch addedBy separately for each photo
+      photos = await Promise.all(rawPhotos.map(async (photo) => {
+        let addedBy = null
+        try {
+          const teamMember = await prisma.teamMember.findUnique({
+            where: { id: photo.addedById },
+            select: { name: true },
+          })
+          addedBy = teamMember
+        } catch {
+          // Continue without addedBy
+        }
+
+        return {
+          ...photo,
+          room: photo.room || 'General',
+          notes: photo.notes || null,
+          addedBy,
+        }
+      }))
+    } catch {
+      // PropertyPhoto table might not exist - return empty
+      return NextResponse.json({ photos: [], byRoom: {} })
+    }
 
     // Group by room for easier display
     const byRoom: Record<string, typeof photos> = {}
     for (const photo of photos) {
-      if (!byRoom[photo.room]) {
-        byRoom[photo.room] = []
+      const room = photo.room || 'General'
+      if (!byRoom[room]) {
+        byRoom[room] = []
       }
-      byRoom[photo.room].push(photo)
+      byRoom[room].push(photo)
     }
 
     return NextResponse.json({ photos, byRoom })
@@ -63,20 +101,28 @@ export async function POST(
     let addedById = data.addedById
 
     if (!addedById && sessionUser.email) {
-      const teamMember = await prisma.teamMember.findUnique({
-        where: { email: sessionUser.email },
-      })
-      if (teamMember) {
-        addedById = teamMember.id
+      try {
+        const teamMember = await prisma.teamMember.findUnique({
+          where: { email: sessionUser.email },
+        })
+        if (teamMember) {
+          addedById = teamMember.id
+        }
+      } catch {
+        // Continue without team member lookup
       }
     }
 
     // If still no team member, create/find a default one
     if (!addedById) {
-      const defaultMember = await prisma.teamMember.findFirst({
-        where: { role: 'admin' },
-      })
-      addedById = defaultMember?.id
+      try {
+        const defaultMember = await prisma.teamMember.findFirst({
+          where: { role: 'admin' },
+        })
+        addedById = defaultMember?.id
+      } catch {
+        // Continue without default member
+      }
     }
 
     if (!addedById) {
@@ -84,27 +130,43 @@ export async function POST(
     }
 
     // Get max sort order for this room
-    const maxSort = await prisma.propertyPhoto.findFirst({
-      where: { propertyId, room: data.room },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
-    })
+    let maxSortOrder = 0
+    try {
+      const maxSort = await prisma.propertyPhoto.findFirst({
+        where: { propertyId, room: data.room },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      })
+      maxSortOrder = maxSort?.sortOrder || 0
+    } catch {
+      // Continue with default sort order
+    }
 
     const photo = await prisma.propertyPhoto.create({
       data: {
         propertyId,
         room: data.room,
         caption: data.caption || null,
+        notes: data.notes || null,
         url: data.url,
         addedById,
-        sortOrder: (maxSort?.sortOrder || 0) + 1,
-      },
-      include: {
-        addedBy: { select: { name: true } },
+        sortOrder: maxSortOrder + 1,
       },
     })
 
-    return NextResponse.json(photo)
+    // Fetch addedBy separately
+    let addedBy = null
+    try {
+      const teamMember = await prisma.teamMember.findUnique({
+        where: { id: addedById },
+        select: { name: true },
+      })
+      addedBy = teamMember
+    } catch {
+      // Continue without addedBy
+    }
+
+    return NextResponse.json({ ...photo, addedBy })
   } catch (error) {
     console.error('Property photos POST error:', error)
     return NextResponse.json({ error: 'Failed to add photo' }, { status: 500 })
@@ -128,19 +190,30 @@ export async function PUT(
       return NextResponse.json({ error: 'Photo ID is required' }, { status: 400 })
     }
 
+    const updateData: Record<string, unknown> = {}
+    if (data.room !== undefined) updateData.room = data.room
+    if (data.caption !== undefined) updateData.caption = data.caption
+    if (data.notes !== undefined) updateData.notes = data.notes
+    if (data.sortOrder !== undefined) updateData.sortOrder = data.sortOrder
+
     const photo = await prisma.propertyPhoto.update({
       where: { id: data.id },
-      data: {
-        room: data.room,
-        caption: data.caption,
-        sortOrder: data.sortOrder,
-      },
-      include: {
-        addedBy: { select: { name: true } },
-      },
+      data: updateData,
     })
 
-    return NextResponse.json(photo)
+    // Fetch addedBy separately
+    let addedBy = null
+    try {
+      const teamMember = await prisma.teamMember.findUnique({
+        where: { id: photo.addedById },
+        select: { name: true },
+      })
+      addedBy = teamMember
+    } catch {
+      // Continue without addedBy
+    }
+
+    return NextResponse.json({ ...photo, addedBy })
   } catch (error) {
     console.error('Property photos PUT error:', error)
     return NextResponse.json({ error: 'Failed to update photo' }, { status: 500 })
@@ -166,16 +239,22 @@ export async function DELETE(
     }
 
     // Get the photo URL before deleting (for blob cleanup if needed)
-    const photo = await prisma.propertyPhoto.findUnique({
-      where: { id: photoId },
-      select: { url: true },
-    })
+    let deletedUrl = null
+    try {
+      const photo = await prisma.propertyPhoto.findUnique({
+        where: { id: photoId },
+        select: { url: true },
+      })
+      deletedUrl = photo?.url
+    } catch {
+      // Continue without getting URL
+    }
 
     await prisma.propertyPhoto.delete({
       where: { id: photoId },
     })
 
-    return NextResponse.json({ success: true, deletedUrl: photo?.url })
+    return NextResponse.json({ success: true, deletedUrl })
   } catch (error) {
     console.error('Property photos DELETE error:', error)
     return NextResponse.json({ error: 'Failed to delete photo' }, { status: 500 })

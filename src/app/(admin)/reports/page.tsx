@@ -1,34 +1,128 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { TrendingUp, DollarSign, Calendar, Users } from 'lucide-react'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import {
+  TrendingUp,
+  DollarSign,
+  Calendar,
+  Users,
+  Building,
+  FileText,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  ArrowUpRight,
+  ArrowDownRight,
+  BarChart3,
+  Activity,
+} from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
-import { Card, CardContent, CardHeader } from '@/components/ui/Card'
-import { formatCurrency } from '@/lib/utils'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
+import Select from '@/components/ui/Select'
+import Badge from '@/components/ui/Badge'
+import { formatCurrency, cn } from '@/lib/utils'
+import { format } from 'date-fns'
 
 interface ReportData {
-  totalRevenue: number
-  totalJobs: number
-  avgJobValue: number
-  teamPayments: number
+  period: string
+  dateRange: { start: string; end: string }
+  overview: {
+    totalRevenue: number
+    pendingRevenue: number
+    avgJobValue: number
+    teamPayments: number
+    expenseDeductions: number
+    totalJobs: number
+    completedJobs: number
+    pendingJobs: number
+    completionRate: number
+  }
+  comparison: {
+    revenueChange: number
+    jobsChange: number
+    previousPeriodRevenue: number
+    previousPeriodJobs: number
+  }
+  invoices: {
+    total: number
+    paid: number
+    sent: number
+    draft: number
+    invoicedRevenue: number
+    paidInvoiceRevenue: number
+    outstandingRevenue: number
+  }
+  topProperties: Array<{
+    id: string
+    name: string
+    revenue: number
+    jobs: number
+    avgRate: number
+  }>
+  topOwners: Array<{
+    id: string
+    name: string
+    revenue: number
+    jobs: number
+  }>
+  teamStats: Array<{
+    id: string
+    name: string
+    jobs: number
+    earnings: number
+  }>
+  monthlyTrends: Array<{
+    month: string
+    shortMonth: string
+    revenue: number
+    jobs: number
+    invoiced: number
+  }>
+  recentJobs: Array<{
+    id: string
+    date: string
+    propertyName: string
+    rate: number
+    completed: boolean
+    clientPaid: boolean
+  }>
+  recentInvoices: Array<{
+    id: string
+    invoiceNumber: string
+    invoiceDate: string
+    propertyName: string
+    total: number
+    status: string
+  }>
+  counts: {
+    properties: number
+    teamMembers: number
+    owners: number
+  }
 }
 
+const PERIODS = [
+  { value: 'this_week', label: 'This Week' },
+  { value: 'this_month', label: 'This Month' },
+  { value: 'last_month', label: 'Last Month' },
+  { value: 'last_30_days', label: 'Last 30 Days' },
+  { value: 'last_90_days', label: 'Last 90 Days' },
+  { value: 'this_year', label: 'This Year' },
+  { value: 'all_time', label: 'All Time' },
+]
+
 export default function ReportsPage() {
-  const [data, setData] = useState<ReportData>({
-    totalRevenue: 0,
-    totalJobs: 0,
-    avgJobValue: 0,
-    teamPayments: 0,
-  })
+  const router = useRouter()
+  const [period, setPeriod] = useState('this_month')
+  const [data, setData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    fetchReportData()
-  }, [])
-
-  const fetchReportData = async () => {
+  const fetchReportData = useCallback(async () => {
+    setIsLoading(true)
     try {
-      const response = await fetch('/api/reports')
+      const response = await fetch(`/api/reports?period=${period}`)
       if (response.ok) {
         setData(await response.json())
       }
@@ -37,78 +131,548 @@ export default function ReportsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [period])
+
+  useEffect(() => {
+    fetchReportData()
+  }, [fetchReportData])
+
+  const maxRevenue = data?.monthlyTrends
+    ? Math.max(...data.monthlyTrends.map(m => m.revenue), 1)
+    : 1
 
   return (
     <div className="min-h-screen">
-      <AdminHeader title="Reports" />
+      <AdminHeader title="Reports & Analytics" />
 
       <div className="p-6 space-y-6">
+        {/* Period Selector */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">Business Overview</h2>
+            {data && (
+              <p className="text-sm text-gray-500">
+                {format(new Date(data.dateRange.start), 'MMM d, yyyy')} - {format(new Date(data.dateRange.end), 'MMM d, yyyy')}
+              </p>
+            )}
+          </div>
+          <Select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            options={PERIODS}
+            className="w-48"
+          />
+        </div>
+
         {isLoading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
-        ) : (
+          <div className="text-center py-12 text-gray-500">Loading reports...</div>
+        ) : data ? (
           <>
-            <div className="grid grid-cols-4 gap-4">
+            {/* Key Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
-                <CardContent className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <DollarSign className="text-green-600" size={24} />
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <DollarSign className="text-green-600" size={20} />
+                    </div>
+                    {data.comparison.revenueChange !== 0 && (
+                      <div className={cn(
+                        'flex items-center text-xs font-medium',
+                        data.comparison.revenueChange > 0 ? 'text-green-600' : 'text-red-600'
+                      )}>
+                        {data.comparison.revenueChange > 0 ? (
+                          <ArrowUpRight size={14} />
+                        ) : (
+                          <ArrowDownRight size={14} />
+                        )}
+                        {Math.abs(data.comparison.revenueChange).toFixed(1)}%
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Total Revenue</p>
-                    <p className="text-2xl font-bold">{formatCurrency(data.totalRevenue)}</p>
-                  </div>
+                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.totalRevenue)}</p>
+                  <p className="text-sm text-gray-500">Total Revenue</p>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <Calendar className="text-blue-600" size={24} />
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Calendar className="text-blue-600" size={20} />
+                    </div>
+                    {data.comparison.jobsChange !== 0 && (
+                      <div className={cn(
+                        'flex items-center text-xs font-medium',
+                        data.comparison.jobsChange > 0 ? 'text-green-600' : 'text-red-600'
+                      )}>
+                        {data.comparison.jobsChange > 0 ? (
+                          <ArrowUpRight size={14} />
+                        ) : (
+                          <ArrowDownRight size={14} />
+                        )}
+                        {Math.abs(data.comparison.jobsChange).toFixed(1)}%
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Total Jobs</p>
-                    <p className="text-2xl font-bold">{data.totalJobs}</p>
-                  </div>
+                  <p className="text-2xl font-bold mt-2">{data.overview.completedJobs}</p>
+                  <p className="text-sm text-gray-500">Jobs Completed</p>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="text-purple-600" size={24} />
+                <CardContent className="p-4">
+                  <div className="p-2 bg-purple-100 rounded-lg w-fit">
+                    <TrendingUp className="text-purple-600" size={20} />
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Avg Job Value</p>
-                    <p className="text-2xl font-bold">{formatCurrency(data.avgJobValue)}</p>
-                  </div>
+                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.avgJobValue)}</p>
+                  <p className="text-sm text-gray-500">Avg Job Value</p>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <Users className="text-amber-600" size={24} />
+                <CardContent className="p-4">
+                  <div className="p-2 bg-amber-100 rounded-lg w-fit">
+                    <Users className="text-amber-600" size={20} />
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Team Payments</p>
-                    <p className="text-2xl font-bold">{formatCurrency(data.teamPayments)}</p>
+                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.teamPayments)}</p>
+                  <p className="text-sm text-gray-500">Team Earnings</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Second Row Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="p-2 bg-emerald-100 rounded-lg w-fit">
+                    <CheckCircle className="text-emerald-600" size={20} />
+                  </div>
+                  <p className="text-2xl font-bold mt-2">{data.overview.completionRate.toFixed(0)}%</p>
+                  <p className="text-sm text-gray-500">Completion Rate</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="p-2 bg-orange-100 rounded-lg w-fit">
+                    <Clock className="text-orange-600" size={20} />
+                  </div>
+                  <p className="text-2xl font-bold mt-2">{data.overview.pendingJobs}</p>
+                  <p className="text-sm text-gray-500">Pending Jobs</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="p-2 bg-red-100 rounded-lg w-fit">
+                    <AlertCircle className="text-red-600" size={20} />
+                  </div>
+                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.invoices.outstandingRevenue)}</p>
+                  <p className="text-sm text-gray-500">Outstanding Invoices</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardContent className="p-4">
+                  <div className="p-2 bg-indigo-100 rounded-lg w-fit">
+                    <Activity className="text-indigo-600" size={20} />
+                  </div>
+                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.expenseDeductions)}</p>
+                  <p className="text-sm text-gray-500">Business Margin</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Revenue Trend Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 size={20} />
+                    Revenue Trend (Last 6 Months)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-end gap-2 h-48">
+                    {data.monthlyTrends.map((month, idx) => (
+                      <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+                        <div
+                          className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                          style={{ height: `${(month.revenue / maxRevenue) * 160}px`, minHeight: '4px' }}
+                          title={formatCurrency(month.revenue)}
+                        />
+                        <span className="text-xs text-gray-500">{month.shortMonth}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between mt-4 text-sm text-gray-600">
+                    <span>
+                      Total: {formatCurrency(data.monthlyTrends.reduce((sum, m) => sum + m.revenue, 0))}
+                    </span>
+                    <span>
+                      {data.monthlyTrends.reduce((sum, m) => sum + m.jobs, 0)} jobs
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Invoice Status */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText size={20} />
+                    Invoice Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 bg-green-500 rounded" />
+                        <span>Paid</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold">{data.invoices.paid}</span>
+                        <span className="text-gray-500 ml-2">
+                          {formatCurrency(data.invoices.paidInvoiceRevenue)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 bg-amber-500 rounded" />
+                        <span>Sent (Outstanding)</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold">{data.invoices.sent}</span>
+                        <span className="text-gray-500 ml-2">
+                          {formatCurrency(data.invoices.outstandingRevenue)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 bg-gray-400 rounded" />
+                        <span>Draft</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold">{data.invoices.draft}</span>
+                      </div>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="pt-4">
+                      <div className="h-4 rounded-full overflow-hidden bg-gray-100 flex">
+                        {data.invoices.total > 0 && (
+                          <>
+                            <div
+                              className="bg-green-500 h-full"
+                              style={{ width: `${(data.invoices.paid / data.invoices.total) * 100}%` }}
+                            />
+                            <div
+                              className="bg-amber-500 h-full"
+                              style={{ width: `${(data.invoices.sent / data.invoices.total) * 100}%` }}
+                            />
+                            <div
+                              className="bg-gray-400 h-full"
+                              style={{ width: `${(data.invoices.draft / data.invoices.total) * 100}%` }}
+                            />
+                          </>
+                        )}
+                      </div>
+                      <p className="text-center text-sm text-gray-500 mt-2">
+                        {data.invoices.total} total invoices
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
+            {/* Tables Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {/* Top Properties */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Building size={20} />
+                      Top Properties
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push('/properties')}
+                    >
+                      View All
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {data.topProperties.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No property data</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {data.topProperties.slice(0, 5).map((prop, idx) => (
+                        <div
+                          key={prop.id}
+                          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded"
+                          onClick={() => router.push(`/properties/${prop.id}/edit`)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400 text-sm w-4">{idx + 1}</span>
+                            <div>
+                              <p className="font-medium text-sm">{prop.name}</p>
+                              <p className="text-xs text-gray-500">{prop.jobs} jobs</p>
+                            </div>
+                          </div>
+                          <p className="font-semibold text-green-600">
+                            {formatCurrency(prop.revenue)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Top Owners */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Users size={20} />
+                      Top Owners
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push('/owners')}
+                    >
+                      View All
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {data.topOwners.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No owner data</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {data.topOwners.slice(0, 5).map((owner, idx) => (
+                        <div
+                          key={owner.id}
+                          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded"
+                          onClick={() => router.push(`/owners/${owner.id}`)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400 text-sm w-4">{idx + 1}</span>
+                            <div>
+                              <p className="font-medium text-sm">{owner.name}</p>
+                              <p className="text-xs text-gray-500">{owner.jobs} jobs</p>
+                            </div>
+                          </div>
+                          <p className="font-semibold text-green-600">
+                            {formatCurrency(owner.revenue)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Team Performance */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Users size={20} />
+                      Team Performance
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push('/team')}
+                    >
+                      View All
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {data.teamStats.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No team data</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {data.teamStats.slice(0, 5).map((member, idx) => (
+                        <div key={member.id} className="flex items-center justify-between p-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-400 text-sm w-4">{idx + 1}</span>
+                            <div>
+                              <p className="font-medium text-sm">{member.name}</p>
+                              <p className="text-xs text-gray-500">{member.jobs} jobs</p>
+                            </div>
+                          </div>
+                          <p className="font-semibold text-amber-600">
+                            {formatCurrency(member.earnings)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Recent Jobs */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <CheckCircle size={20} />
+                      Recent Jobs
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push('/schedule')}
+                    >
+                      View All
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {data.recentJobs.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No recent jobs</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {data.recentJobs.slice(0, 5).map((job) => (
+                        <div
+                          key={job.id}
+                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded"
+                        >
+                          <div className="flex items-center gap-3">
+                            {job.completed ? (
+                              <CheckCircle size={16} className="text-green-500" />
+                            ) : (
+                              <Clock size={16} className="text-amber-500" />
+                            )}
+                            <div>
+                              <p className="text-sm font-medium">{job.propertyName}</p>
+                              <p className="text-xs text-gray-500">
+                                {format(new Date(job.date), 'MMM d, yyyy')}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold">{formatCurrency(job.rate)}</p>
+                            {job.completed && (
+                              <Badge variant={job.clientPaid ? 'success' : 'warning'} className="text-xs">
+                                {job.clientPaid ? 'Paid' : 'Unpaid'}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Recent Invoices */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <FileText size={20} />
+                      Recent Invoices
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push('/invoices')}
+                    >
+                      View All
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {data.recentInvoices.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4">No recent invoices</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {data.recentInvoices.slice(0, 5).map((invoice) => (
+                        <div
+                          key={invoice.id}
+                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
+                          onClick={() => router.push(`/invoices/${invoice.id}`)}
+                        >
+                          <div>
+                            <p className="text-sm font-medium">{invoice.invoiceNumber}</p>
+                            <p className="text-xs text-gray-500">
+                              {invoice.propertyName} - {format(new Date(invoice.invoiceDate), 'MMM d')}
+                            </p>
+                          </div>
+                          <div className="text-right flex items-center gap-2">
+                            <p className="text-sm font-semibold">{formatCurrency(invoice.total)}</p>
+                            <Badge
+                              variant={
+                                invoice.status === 'paid'
+                                  ? 'success'
+                                  : invoice.status === 'sent'
+                                  ? 'warning'
+                                  : 'default'
+                              }
+                              className="text-xs"
+                            >
+                              {invoice.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Business Summary */}
             <Card>
               <CardHeader>
-                <h3 className="font-semibold text-gray-900">Revenue Overview</h3>
+                <CardTitle>Business Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-500 text-center py-12">
-                  Detailed reports and charts will appear here once you have job data.
-                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Building className="text-blue-600" size={28} />
+                    </div>
+                    <p className="text-3xl font-bold">{data.counts.properties}</p>
+                    <p className="text-gray-500">Properties</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Users className="text-purple-600" size={28} />
+                    </div>
+                    <p className="text-3xl font-bold">{data.counts.owners}</p>
+                    <p className="text-gray-500">Owners</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Users className="text-amber-600" size={28} />
+                    </div>
+                    <p className="text-3xl font-bold">{data.counts.teamMembers}</p>
+                    <p className="text-gray-500">Team Members</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </>
+        ) : (
+          <div className="text-center py-12 text-gray-500">Failed to load report data</div>
         )}
       </div>
     </div>

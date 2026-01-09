@@ -48,26 +48,45 @@ export default function CalendarPage() {
   const handleSyncCalendars = async () => {
     setIsSyncing(true)
     try {
-      // Use unified calendar sync
-      const res = await fetch('/api/calendar-sources/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const totalCreated = data.summary?.jobsCreated || 0
-        const unmatched = data.summary?.unmatchedEvents || 0
-        if (totalCreated > 0) {
-          toast.success(`Synced ${totalCreated} new job(s) from calendars`)
-          fetchJobs()
-        } else if (unmatched > 0) {
-          toast.error(`${unmatched} events couldn't be matched to properties`)
-        } else {
-          toast.success('Calendars are up to date')
+      // Sync iCal calendars and generate recurring jobs in parallel
+      const [calendarRes, recurringRes] = await Promise.all([
+        fetch('/api/calendar-sources/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+        fetch('/api/recurring-schedules/generate', {
+          method: 'PUT',
+        }),
+      ])
+
+      const messages: string[] = []
+
+      if (calendarRes.ok) {
+        const calendarData = await calendarRes.json()
+        const calendarCreated = calendarData.summary?.jobsCreated || 0
+        const unmatched = calendarData.summary?.unmatchedEvents || 0
+        if (calendarCreated > 0) {
+          messages.push(`${calendarCreated} from calendars`)
         }
+        if (unmatched > 0) {
+          toast.error(`${unmatched} calendar events couldn't be matched to properties`)
+        }
+      }
+
+      if (recurringRes.ok) {
+        const recurringData = await recurringRes.json()
+        const recurringCreated = recurringData.totalJobsCreated || 0
+        if (recurringCreated > 0) {
+          messages.push(`${recurringCreated} from recurring schedules`)
+        }
+      }
+
+      if (messages.length > 0) {
+        toast.success(`Created: ${messages.join(', ')}`)
+        fetchJobs()
       } else {
-        toast.error('Failed to sync calendars')
+        toast.success('Calendars are up to date')
       }
     } catch (error) {
       toast.error('Failed to sync calendars')
@@ -96,7 +115,7 @@ export default function CalendarPage() {
         {/* Header with Sync Button */}
         <div className="flex justify-between items-center mb-4">
           <p className="text-sm text-gray-500">
-            Jobs synced from Turno, Google Calendar, or added manually
+            Jobs from calendars, recurring schedules, or added manually
           </p>
           <div className="flex gap-2">
             <Button
