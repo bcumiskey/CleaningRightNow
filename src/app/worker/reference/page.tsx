@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { Building, ChevronRight, AlertCircle, Search } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
-import Input from '@/components/ui/Input'
 import { cn } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 interface PropertyRef {
   id: string
@@ -29,9 +29,12 @@ export default function WorkerReferencePage() {
       const response = await fetch('/api/worker/properties')
       if (response.ok) {
         setProperties(await response.json())
+      } else {
+        toast.error('Failed to load properties')
       }
     } catch (error) {
       console.error('Failed to fetch properties:', error)
+      toast.error('Failed to load properties')
     } finally {
       setIsLoading(false)
     }

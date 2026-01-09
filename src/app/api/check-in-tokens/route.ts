@@ -4,6 +4,15 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { randomBytes } from 'crypto'
 
+interface CheckInToken {
+  id: string
+  propertyId: string
+  token: string
+  expiresAt: Date | null
+  isActive: boolean
+  createdAt: Date
+}
+
 // Generate a secure random token that's hard to guess or memorize
 function generateSecureToken(): string {
   // 32 bytes = 256 bits of randomness, encoded as base64url (no padding)
@@ -19,6 +28,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { searchParams } = new URL(request.url)
     const propertyId = searchParams.get('propertyId')
 
@@ -30,14 +44,14 @@ export async function GET(request: NextRequest) {
     })
 
     // Get property names
-    const propertyIds = [...new Set(tokens.map(t => t.propertyId))]
+    const propertyIds = [...new Set((tokens as CheckInToken[]).map((t: CheckInToken) => t.propertyId))]
     const properties = await prisma.property.findMany({
       where: { id: { in: propertyIds } },
       select: { id: true, name: true },
     })
-    const propertyMap = Object.fromEntries(properties.map(p => [p.id, p.name]))
+    const propertyMap = Object.fromEntries(properties.map((p: { id: string; name: string }) => [p.id, p.name]))
 
-    const tokensWithNames = tokens.map(token => ({
+    const tokensWithNames = (tokens as CheckInToken[]).map((token: CheckInToken) => ({
       ...token,
       propertyName: propertyMap[token.propertyId] || 'Unknown',
     }))
@@ -49,12 +63,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new check-in token for a property
+// POST - Create a new check-in token for a property (admin only)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const body = await request.json()

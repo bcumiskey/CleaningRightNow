@@ -7,6 +7,7 @@ import { Building, ChevronRight, AlertCircle, Calendar } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
 import { cn } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 interface TodayJob {
   id: string
@@ -29,9 +30,12 @@ export default function WorkerTodayPage() {
       const response = await fetch('/api/worker/jobs/today')
       if (response.ok) {
         setJobs(await response.json())
+      } else {
+        toast.error('Failed to load today\'s jobs')
       }
     } catch (error) {
       console.error('Failed to fetch jobs:', error)
+      toast.error('Failed to load today\'s jobs')
     } finally {
       setIsLoading(false)
     }

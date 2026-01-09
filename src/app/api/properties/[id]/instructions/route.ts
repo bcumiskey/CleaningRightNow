@@ -3,6 +3,16 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+interface PropertyInstruction {
+  id: string
+  propertyId: string
+  instruction: string
+  room: string | null
+  sortOrder: number
+  linkedPhotoId: string | null
+  createdAt: Date
+}
+
 // GET - Fetch all instructions for a property
 export async function GET(
   request: NextRequest,
@@ -17,7 +27,7 @@ export async function GET(
     const { id: propertyId } = await params
 
     // Query instructions without includes
-    let instructions: Array<{
+    interface InstructionWithPhoto {
       id: string
       propertyId: string
       instruction: string
@@ -32,7 +42,9 @@ export async function GET(
         room: string
       } | null
       createdAt: Date
-    }> = []
+    }
+
+    let instructions: InstructionWithPhoto[] = []
 
     try {
       const rawInstructions = await prisma.propertyInstruction.findMany({
@@ -41,8 +53,8 @@ export async function GET(
       })
 
       // Fetch linkedPhoto separately for each instruction
-      instructions = await Promise.all(rawInstructions.map(async (inst) => {
-        let linkedPhoto = null
+      instructions = await Promise.all((rawInstructions as PropertyInstruction[]).map(async (inst: PropertyInstruction) => {
+        let linkedPhoto: InstructionWithPhoto['linkedPhoto'] = null
 
         if (inst.linkedPhotoId) {
           try {
@@ -57,10 +69,14 @@ export async function GET(
         }
 
         return {
-          ...inst,
+          id: inst.id,
+          propertyId: inst.propertyId,
+          instruction: inst.instruction,
+          sortOrder: inst.sortOrder,
           room: inst.room || 'General',
           linkedPhotoId: inst.linkedPhotoId || null,
           linkedPhoto,
+          createdAt: inst.createdAt,
         }
       }))
     } catch {

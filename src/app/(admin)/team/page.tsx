@@ -438,8 +438,11 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    await onSave(formData)
-    setIsSaving(false)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -569,8 +572,11 @@ function SetPasswordModal({ isOpen, onClose, onSave, memberName }: SetPasswordMo
     }
 
     setIsSaving(true)
-    await onSave(password)
-    setIsSaving(false)
+    try {
+      await onSave(password)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (

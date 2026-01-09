@@ -9,6 +9,7 @@ import Button from '@/components/ui/Button'
 import Badge from '@/components/ui/Badge'
 import EmptyState from '@/components/ui/EmptyState'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 interface Invoice {
   id: string
@@ -33,9 +34,12 @@ export default function InvoicesPage() {
       const response = await fetch('/api/invoices')
       if (response.ok) {
         setInvoices(await response.json())
+      } else {
+        toast.error('Failed to load invoices')
       }
     } catch (error) {
       console.error('Failed to fetch invoices:', error)
+      toast.error('Failed to load invoices')
     } finally {
       setIsLoading(false)
     }

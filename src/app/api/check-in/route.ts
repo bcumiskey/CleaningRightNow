@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
 
     // Include current team member in ranking consideration
     const checkedInMembers = [
-      ...allSessions.map(s => s.teamMember),
+      ...allSessions.map((s: { teamMember: { id: string; rank: number | null; canSupervise: boolean | null } }) => s.teamMember),
       teamMember,
     ]
 
@@ -164,7 +164,15 @@ export async function POST(request: NextRequest) {
     })
 
     // Get team assignments for this job
-    const teamAssignments = job.assignments.map(a => ({
+    interface JobAssignment {
+      teamMember: {
+        id: string
+        name: string
+        rank: number | null
+        canSupervise: boolean | null
+      }
+    }
+    const teamAssignments = job.assignments.map((a: JobAssignment) => ({
       id: a.teamMember.id,
       name: a.teamMember.name,
       rank: a.teamMember.rank,

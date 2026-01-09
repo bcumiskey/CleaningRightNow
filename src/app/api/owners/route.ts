@@ -4,14 +4,18 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
 // Get all owners
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const includeInactive = searchParams.get('includeInactive') === 'true'
+
     const owners = await prisma.owner.findMany({
+      where: includeInactive ? {} : { isActive: true },
       include: {
         properties: {
           select: {

@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const sessionUser = session.user as { id?: string; role?: string }
+    const sessionUser = session.user as { id?: string; role?: string; teamMemberId?: string }
 
     // Get query params
     const { searchParams } = new URL(request.url)
@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
     if (sessionUser.role === 'admin' && workerId) {
       // Admin can view any worker's earnings
       targetWorkerId = workerId
-    } else if (sessionUser.role === 'worker') {
-      // Workers can only view their own earnings
-      targetWorkerId = sessionUser.id!
+    } else if (sessionUser.teamMemberId) {
+      // Workers use their teamMemberId
+      targetWorkerId = sessionUser.teamMemberId
     } else if (sessionUser.role === 'admin') {
       return NextResponse.json({ error: 'Worker ID required for admin' }, { status: 400 })
     } else {

@@ -17,6 +17,7 @@ model Owner {
   email       String?   @unique
   phone       String?
   notes       String?   // Internal notes about this owner
+  isActive    Boolean   @default(true)
 
   // Default preferences (can be overridden per property)
   defaultBaseRate     Float?
@@ -37,6 +38,7 @@ model Property {
   id                  String   @id @default(cuid())
   name                String   @unique
   address             String
+  isActive            Boolean  @default(true)
 
   // Owner (optional - can use legacy fields or Owner relation)
   ownerId             String?

@@ -41,7 +41,22 @@ export async function GET(request: NextRequest) {
       })
 
       // Fetch related data separately for each note
-      const notesWithDetails = await Promise.all(notes.map(async (note) => {
+      interface Note {
+        id: string
+        propertyId: string
+        addedById: string
+        resolvedById: string | null
+        status: string
+        createdAt: Date
+        updatedAt: Date
+        type: string
+        title: string | null
+        content: string
+        severity: string | null
+        estimatedCost: number | null
+        resolvedAt: Date | null
+      }
+      const notesWithDetails = await Promise.all((notes as Note[]).map(async (note: Note) => {
         let property = null
         let addedBy = null
         let resolvedBy = null

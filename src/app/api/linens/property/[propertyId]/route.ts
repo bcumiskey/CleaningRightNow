@@ -31,9 +31,9 @@ export async function GET(
     let linenData: Array<{
       itemId: string
       itemName: string
-      itemCode: string
+      itemCode: string | null
       category: string
-      defaultCost: number
+      defaultCost: number | null
       unitCost: number | null
       perFlip: number
       onHand: number
@@ -49,7 +49,7 @@ export async function GET(
       let categories: Record<string, string> = {}
       try {
         const cats = await prisma.linenCategory.findMany()
-        categories = Object.fromEntries(cats.map(c => [c.id, c.name]))
+        categories = Object.fromEntries(cats.map((c: { id: string; name: string }) => [c.id, c.name]))
       } catch {
         // Continue without categories
       }
@@ -60,7 +60,7 @@ export async function GET(
         const reqs = await prisma.propertyLinenRequirement.findMany({
           where: { propertyId },
         })
-        requirements = Object.fromEntries(reqs.map(r => [r.linenItemId, { perFlip: r.perFlip, unitCost: r.unitCost }]))
+        requirements = Object.fromEntries(reqs.map((r: { linenItemId: string; perFlip: number; unitCost: number | null }) => [r.linenItemId, { perFlip: r.perFlip, unitCost: r.unitCost }]))
       } catch {
         // Continue without requirements
       }
@@ -71,13 +71,20 @@ export async function GET(
         const invs = await prisma.propertyLinenInventory.findMany({
           where: { propertyId },
         })
-        inventory = Object.fromEntries(invs.map(i => [i.linenItemId, i.onHand]))
+        inventory = Object.fromEntries(invs.map((i: { linenItemId: string; onHand: number }) => [i.linenItemId, i.onHand]))
       } catch {
         // Continue without inventory
       }
 
       // Combine data
-      linenData = allItems.map((item) => {
+      interface LinenItem {
+        id: string
+        name: string
+        code: string | null
+        categoryId: string
+        unitCost: number | null
+      }
+      linenData = allItems.map((item: LinenItem) => {
         const req = requirements[item.id]
         return {
           itemId: item.id,

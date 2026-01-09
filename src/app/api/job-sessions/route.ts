@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { startOfDay, endOfDay } from 'date-fns'
 
 // GET - List job sessions (with filters)
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const jobId = searchParams.get('jobId')
     const teamMemberId = searchParams.get('teamMemberId')
@@ -37,7 +44,7 @@ export async function GET(request: NextRequest) {
         },
         select: { id: true },
       })
-      where.jobId = { in: jobs.map(j => j.id) }
+      where.jobId = { in: jobs.map((j: { id: string }) => j.id) }
     }
 
     const sessions = await prisma.jobSession.findMany({
@@ -65,6 +72,11 @@ export async function GET(request: NextRequest) {
 // POST - Create job sessions for a job (when assigning team)
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { jobId, teamMemberIds } = body
 

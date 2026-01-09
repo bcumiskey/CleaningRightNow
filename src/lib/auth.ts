@@ -32,11 +32,19 @@ export const authOptions: NextAuthOptions = {
           if (!isValid) {
             return null
           }
+
+          // For User table logins (admins), also check if they have a matching TeamMember
+          // This allows admins to also see their own worker earnings/data
+          const matchingTeamMember = await prisma.teamMember.findUnique({
+            where: { email: credentials.email },
+          })
+
           return {
             id: user.id,
             email: user.email,
             name: user.name,
             role: 'admin',
+            teamMemberId: matchingTeamMember?.id, // Include if they also have a TeamMember record
           }
         }
 
@@ -58,7 +66,8 @@ export const authOptions: NextAuthOptions = {
           id: worker.id,
           email: worker.email,
           name: worker.name,
-          role: worker.role, // Use actual role from database (admin or worker)
+          role: worker.role || 'worker',
+          teamMemberId: worker.id, // Always set for TeamMember logins
         }
       },
     }),
@@ -68,14 +77,23 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.role = (user as { role?: string }).role
+        // Store teamMemberId if provided (for TeamMember logins)
+        const userWithTeamMemberId = user as { teamMemberId?: string }
+        if (userWithTeamMemberId.teamMemberId) {
+          token.teamMemberId = userWithTeamMemberId.teamMemberId
+        }
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        const tokenData = token as { id?: string; role?: string }
+        const tokenData = token as { id?: string; role?: string; teamMemberId?: string }
         ;(session.user as { id?: string }).id = tokenData.id
         ;(session.user as { role?: string }).role = tokenData.role
+        // Include teamMemberId if present
+        if (tokenData.teamMemberId) {
+          ;(session.user as { teamMemberId?: string }).teamMemberId = tokenData.teamMemberId
+        }
       }
       return session
     },

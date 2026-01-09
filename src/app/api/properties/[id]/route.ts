@@ -3,6 +3,34 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+interface PropertyNote {
+  id: string
+  propertyId: string
+  addedById: string
+  content: string
+  status: string
+  type: string
+  title: string | null
+  severity: string | null
+  estimatedCost: number | null
+  resolvedById: string | null
+  resolvedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface PropertyPhoto {
+  id: string
+  propertyId: string
+  caption: string | null
+  room: string
+  notes: string | null
+  url: string
+  addedById: string
+  sortOrder: number
+  createdAt: Date
+}
+
 // Get a single property with all details
 export async function GET(
   request: NextRequest,
@@ -53,7 +81,7 @@ export async function GET(
           orderBy: { createdAt: 'desc' },
         })
 
-        const notesWithDetails = await Promise.all(notes.map(async (note) => {
+        const notesWithDetails = await Promise.all((notes as PropertyNote[]).map(async (note: PropertyNote) => {
           let addedBy = null
           let photos: unknown[] = []
 
@@ -102,7 +130,7 @@ export async function GET(
           orderBy: { sortOrder: 'asc' },
         })
 
-        const photosWithDetails = await Promise.all(photos.map(async (photo) => {
+        const photosWithDetails = await Promise.all((photos as PropertyPhoto[]).map(async (photo: PropertyPhoto) => {
           let addedBy = null
           try {
             const teamMember = await prisma.teamMember.findUnique({

@@ -89,7 +89,7 @@ export async function POST(
       select: { overallRating: true },
     })
 
-    const avgRating = allRatings.reduce((sum, r) => sum + r.overallRating, 0) / allRatings.length
+    const avgRating = allRatings.reduce((sum: number, r: { overallRating: number }) => sum + r.overallRating, 0) / allRatings.length
 
     await prisma.teamMember.update({
       where: { id: session.teamMemberId },

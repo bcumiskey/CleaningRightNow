@@ -3,6 +3,18 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+interface RawPhoto {
+  id: string
+  propertyId: string
+  caption: string | null
+  room: string
+  notes: string | null
+  url: string
+  addedById: string
+  sortOrder: number
+  createdAt: Date
+}
+
 // GET - Fetch all reference photos for a property
 export async function GET(
   request: NextRequest,
@@ -37,7 +49,7 @@ export async function GET(
       })
 
       // Fetch addedBy separately for each photo
-      photos = await Promise.all(rawPhotos.map(async (photo) => {
+      photos = await Promise.all((rawPhotos as RawPhoto[]).map(async (photo: RawPhoto) => {
         let addedBy = null
         try {
           const teamMember = await prisma.teamMember.findUnique({

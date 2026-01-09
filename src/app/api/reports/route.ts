@@ -9,6 +9,26 @@ interface DateRange {
   end: Date
 }
 
+interface Job {
+  id: string
+  date: Date
+  rate: number
+  expensePercent: number
+  completed: boolean
+  clientPaid: boolean
+  property: { id: string; name: string; ownerId: string | null }
+  assignments: Array<{ teamMember: { id: string; name: string } }>
+}
+
+interface Invoice {
+  id: string
+  invoiceNumber: string
+  invoiceDate: Date
+  total: number
+  status: string
+  property: { id: string; name: string; ownerId: string | null }
+}
+
 function getDateRange(period: string): DateRange {
   const now = new Date()
 
@@ -78,16 +98,18 @@ export async function GET(request: NextRequest) {
     ])
 
     // === OVERVIEW METRICS ===
-    const completedJobs = jobs.filter(j => j.completed)
-    const pendingJobs = jobs.filter(j => !j.completed)
+    const typedJobs = jobs as Job[]
+    const typedInvoices = invoices as Invoice[]
+    const completedJobs = typedJobs.filter((j: Job) => j.completed)
+    const pendingJobs = typedJobs.filter((j: Job) => !j.completed)
 
-    const totalRevenue = completedJobs.reduce((sum, job) => sum + job.rate, 0)
-    const pendingRevenue = pendingJobs.reduce((sum, job) => sum + job.rate, 0)
+    const totalRevenue = completedJobs.reduce((sum: number, job: Job) => sum + job.rate, 0)
+    const pendingRevenue = pendingJobs.reduce((sum: number, job: Job) => sum + job.rate, 0)
     const avgJobValue = completedJobs.length > 0 ? totalRevenue / completedJobs.length : 0
 
     // Team payments (after expense deduction)
     let teamPayments = 0
-    completedJobs.forEach(job => {
+    completedJobs.forEach((job: Job) => {
       const teamTotal = job.rate * (1 - job.expensePercent / 100)
       teamPayments += teamTotal
     })
@@ -96,18 +118,18 @@ export async function GET(request: NextRequest) {
     const expenseDeductions = totalRevenue - teamPayments
 
     // === INVOICE METRICS ===
-    const paidInvoices = invoices.filter(i => i.status === 'paid')
-    const sentInvoices = invoices.filter(i => i.status === 'sent')
-    const draftInvoices = invoices.filter(i => i.status === 'draft')
+    const paidInvoices = typedInvoices.filter((i: Invoice) => i.status === 'paid')
+    const sentInvoices = typedInvoices.filter((i: Invoice) => i.status === 'sent')
+    const draftInvoices = typedInvoices.filter((i: Invoice) => i.status === 'draft')
 
-    const invoicedRevenue = invoices.reduce((sum, inv) => sum + inv.total, 0)
-    const paidInvoiceRevenue = paidInvoices.reduce((sum, inv) => sum + inv.total, 0)
-    const outstandingRevenue = sentInvoices.reduce((sum, inv) => sum + inv.total, 0)
+    const invoicedRevenue = typedInvoices.reduce((sum: number, inv: Invoice) => sum + inv.total, 0)
+    const paidInvoiceRevenue = paidInvoices.reduce((sum: number, inv: Invoice) => sum + inv.total, 0)
+    const outstandingRevenue = sentInvoices.reduce((sum: number, inv: Invoice) => sum + inv.total, 0)
 
     // === REVENUE BY PROPERTY ===
     const revenueByProperty: Record<string, { name: string; revenue: number; jobs: number; avgRate: number }> = {}
-    completedJobs.forEach(job => {
-      const propId = job.propertyId
+    completedJobs.forEach((job: Job) => {
+      const propId = job.property.id
       if (!revenueByProperty[propId]) {
         revenueByProperty[propId] = {
           name: job.property.name,
@@ -130,9 +152,9 @@ export async function GET(request: NextRequest) {
 
     // === REVENUE BY OWNER ===
     const revenueByOwner: Record<string, { name: string; revenue: number; jobs: number; properties: number }> = {}
-    const ownerMap = Object.fromEntries(owners.map(o => [o.id, o.name]))
+    const ownerMap = Object.fromEntries(owners.map((o: { id: string; name: string }) => [o.id, o.name]))
 
-    completedJobs.forEach(job => {
+    for (const job of completedJobs) {
       const ownerId = job.property.ownerId
       if (ownerId) {
         if (!revenueByOwner[ownerId]) {
@@ -146,10 +168,10 @@ export async function GET(request: NextRequest) {
         revenueByOwner[ownerId].revenue += job.rate
         revenueByOwner[ownerId].jobs += 1
       }
-    })
+    }
 
     // Count properties per owner
-    properties.forEach(prop => {
+    (properties as Array<{ ownerId: string | null }>).forEach((prop: { ownerId: string | null }) => {
       if (prop.ownerId && revenueByOwner[prop.ownerId]) {
         // Count unique properties - we'll dedupe later
       }
@@ -162,12 +184,12 @@ export async function GET(request: NextRequest) {
 
     // === TEAM PERFORMANCE ===
     const teamPerformance: Record<string, { name: string; jobs: number; earnings: number }> = {}
-    completedJobs.forEach(job => {
+    completedJobs.forEach((job: Job) => {
       const teamShare = job.rate * (1 - job.expensePercent / 100)
       const perWorker = job.assignments.length > 0 ? teamShare / job.assignments.length : 0
 
-      job.assignments.forEach(assignment => {
-        const memberId = assignment.teamMemberId
+      job.assignments.forEach((assignment: { teamMember: { id: string; name: string } }) => {
+        const memberId = assignment.teamMember.id
         if (!teamPerformance[memberId]) {
           teamPerformance[memberId] = {
             name: assignment.teamMember.name,
@@ -192,12 +214,12 @@ export async function GET(request: NextRequest) {
       const monthStart = startOfMonth(month)
       const monthEnd = endOfMonth(month)
 
-      const monthJobs = jobs.filter(j => {
+      const monthJobs = typedJobs.filter((j: Job) => {
         const jobDate = new Date(j.date)
         return jobDate >= monthStart && jobDate <= monthEnd && j.completed
       })
 
-      const monthInvoices = invoices.filter(i => {
+      const monthInvoices = typedInvoices.filter((i: Invoice) => {
         const invDate = new Date(i.invoiceDate)
         return invDate >= monthStart && invDate <= monthEnd && i.status === 'paid'
       })
@@ -205,14 +227,14 @@ export async function GET(request: NextRequest) {
       return {
         month: format(month, 'MMM yyyy'),
         shortMonth: format(month, 'MMM'),
-        revenue: monthJobs.reduce((sum, j) => sum + j.rate, 0),
+        revenue: monthJobs.reduce((sum: number, j: Job) => sum + j.rate, 0),
         jobs: monthJobs.length,
-        invoiced: monthInvoices.reduce((sum, i) => sum + i.total, 0),
+        invoiced: monthInvoices.reduce((sum: number, i: Invoice) => sum + i.total, 0),
       }
     })
 
     // === RECENT ACTIVITY ===
-    const recentJobs = jobs.slice(0, 10).map(job => ({
+    const recentJobs = typedJobs.slice(0, 10).map((job: Job) => ({
       id: job.id,
       date: job.date,
       propertyName: job.property.name,
@@ -221,7 +243,7 @@ export async function GET(request: NextRequest) {
       clientPaid: job.clientPaid,
     }))
 
-    const recentInvoices = invoices.slice(0, 10).map(inv => ({
+    const recentInvoices = typedInvoices.slice(0, 10).map((inv: Invoice) => ({
       id: inv.id,
       invoiceNumber: inv.invoiceNumber,
       invoiceDate: inv.invoiceDate,
@@ -246,7 +268,7 @@ export async function GET(request: NextRequest) {
         },
       })
 
-      previousPeriodRevenue = prevJobs.reduce((sum, j) => sum + j.rate, 0)
+      previousPeriodRevenue = prevJobs.reduce((sum: number, j: { rate: number }) => sum + j.rate, 0)
       previousPeriodJobs = prevJobs.length
     }
 

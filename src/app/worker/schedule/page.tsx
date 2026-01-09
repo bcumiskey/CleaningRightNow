@@ -6,7 +6,7 @@ import { format, addDays } from 'date-fns'
 import { Building, ChevronRight, Calendar } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
-import { cn } from '@/lib/utils'
+import toast from 'react-hot-toast'
 
 interface ScheduledJob {
   id: string
@@ -31,9 +31,12 @@ export default function WorkerSchedulePage() {
       const response = await fetch(`/api/worker/jobs?startDate=${startDate}&endDate=${endDate}`)
       if (response.ok) {
         setJobs(await response.json())
+      } else {
+        toast.error('Failed to load schedule')
       }
     } catch (error) {
       console.error('Failed to fetch schedule:', error)
+      toast.error('Failed to load schedule')
     } finally {
       setIsLoading(false)
     }

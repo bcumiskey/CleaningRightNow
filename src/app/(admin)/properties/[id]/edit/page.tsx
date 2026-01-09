@@ -272,7 +272,8 @@ export default function PropertyEditPage() {
         }
       } else {
         const error = await res.json()
-        toast.error(error.error || 'Failed to save property')
+        console.error('Property save error:', error)
+        toast.error(error.error || error.details || 'Failed to save property')
       }
     } catch (error) {
       toast.error('Failed to save property')
