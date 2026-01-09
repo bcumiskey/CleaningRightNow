@@ -55,7 +55,7 @@ export async function GET(
     ])
 
     // Collect legacy room names not yet migrated
-    const migratedRoomNames = new Set(rooms.map((r) => r.name))
+    const migratedRoomNames = new Set(rooms.map((r: { name: string }) => r.name))
     const legacyRoomNames = new Set<string>()
 
     for (const item of [...legacyInstructions, ...legacyPhotos, ...legacyLinens]) {
