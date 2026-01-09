@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Calendar, BookOpen, User, Scan } from 'lucide-react'
+import { Calendar, BookOpen, User, Scan, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/worker', label: 'Schedule', icon: Calendar },
+  { href: '/worker/report', label: 'Report', icon: AlertTriangle },
   { href: '/worker/check-in', label: 'Check In', icon: Scan, highlight: true },
   { href: '/worker/reference', label: 'Reference', icon: BookOpen },
   { href: '/worker/account', label: 'Account', icon: User },
