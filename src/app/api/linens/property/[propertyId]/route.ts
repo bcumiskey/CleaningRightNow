@@ -31,9 +31,9 @@ export async function GET(
     let linenData: Array<{
       itemId: string
       itemName: string
-      itemCode: string
+      itemCode: string | null
       category: string
-      defaultCost: number
+      defaultCost: number | null
       unitCost: number | null
       perFlip: number
       onHand: number
