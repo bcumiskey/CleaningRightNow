@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Users, Plus, Mail, Phone, Building, Trash2, ExternalLink } from 'lucide-react'
+import { Users, Plus, Mail, Phone, Building, Trash2, ExternalLink, Eye, EyeOff } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -27,6 +27,7 @@ interface Owner {
   email: string | null
   phone: string | null
   notes: string | null
+  isActive: boolean
   defaultBaseRate: number | null
   defaultBillingType: string | null
   preferredContactMethod: string | null
@@ -41,10 +42,11 @@ function OwnersPageContent() {
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingOwner, setEditingOwner] = useState<Owner | null>(null)
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
     fetchOwners()
-  }, [])
+  }, [showInactive])
 
   // Handle edit query param (from owner detail page)
   useEffect(() => {
@@ -62,7 +64,8 @@ function OwnersPageContent() {
 
   const fetchOwners = async () => {
     try {
-      const response = await fetch('/api/owners')
+      const url = showInactive ? '/api/owners?includeInactive=true' : '/api/owners'
+      const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
         setOwners(data)
@@ -140,16 +143,26 @@ function OwnersPageContent() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h3 className="text-lg font-semibold text-gray-900">
-              {owners.length} Owners
+              {owners.filter(o => o.isActive).length} Active Owners
             </h3>
             <p className="text-sm text-gray-500">
               Managing {totalProperties} properties
             </p>
           </div>
-          <Button onClick={handleAdd}>
-            <Plus size={16} />
-            Add Owner
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowInactive(!showInactive)}
+              className={showInactive ? 'bg-gray-100' : ''}
+            >
+              {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+            </Button>
+            <Button onClick={handleAdd}>
+              <Plus size={16} />
+              Add Owner
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -171,20 +184,31 @@ function OwnersPageContent() {
             {owners.map((owner) => (
               <Card
                 key={owner.id}
-                className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+                className={`overflow-hidden hover:shadow-md transition-shadow cursor-pointer ${
+                  !owner.isActive ? 'opacity-60 bg-gray-50' : ''
+                }`}
                 onClick={() => router.push(`/owners/${owner.id}`)}
               >
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Users className="text-blue-600" size={20} />
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        owner.isActive ? 'bg-blue-100' : 'bg-gray-200'
+                      }`}>
+                        <Users className={owner.isActive ? 'text-blue-600' : 'text-gray-400'} size={20} />
                       </div>
                       <div>
-                        <h4 className="font-semibold text-gray-900">{owner.name}</h4>
-                        <Badge variant="info" className="mt-1">
-                          {owner._count.properties} {owner._count.properties === 1 ? 'property' : 'properties'}
-                        </Badge>
+                        <h4 className={`font-semibold ${owner.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                          {owner.name}
+                        </h4>
+                        {!owner.isActive && (
+                          <Badge variant="secondary" className="mt-1">Inactive</Badge>
+                        )}
+                        {owner.isActive && (
+                          <Badge variant="info" className="mt-1">
+                            {owner._count.properties} {owner._count.properties === 1 ? 'property' : 'properties'}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <ExternalLink size={16} className="text-gray-400" />

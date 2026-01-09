@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   const debugInfo: string[] = []
   const { searchParams } = new URL(request.url)
   const debug = searchParams.get('debug') === 'true'
+  const includeInactive = searchParams.get('includeInactive') === 'true'
 
   try {
     const session = await getServerSession(authOptions)
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest) {
     try {
       debugInfo.push('Trying Prisma findMany...')
       const properties = await prisma.property.findMany({
+        where: includeInactive ? {} : { isActive: true },
         orderBy: { name: 'asc' },
       })
       debugInfo.push(`Prisma OK: ${properties.length} properties`)
@@ -66,6 +68,7 @@ export async function GET(request: NextRequest) {
         id: string
         name: string
         address: string
+        isActive: boolean
         ownerId: string | null
         ownerName: string
         ownerEmail: string | null
@@ -100,11 +103,12 @@ export async function GET(request: NextRequest) {
 
       try {
         const properties = await prisma.$queryRaw`
-          SELECT * FROM "Property" ORDER BY name ASC
+          SELECT * FROM "Property" WHERE ("isActive" = true OR ${includeInactive}) ORDER BY name ASC
         ` as Array<{
           id: string
           name: string
           address: string
+          isActive: boolean
           ownerId: string | null
           ownerName: string
           ownerEmail: string | null

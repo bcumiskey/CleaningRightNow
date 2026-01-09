@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Building, MapPin, Plus, User, Phone, Mail, Pencil, Trash2 } from 'lucide-react'
+import { Building, MapPin, Plus, User, Phone, Mail, Pencil, Trash2, Eye, EyeOff } from 'lucide-react'
 import Image from 'next/image'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -16,6 +16,7 @@ interface Property {
   id: string
   name: string
   address: string
+  isActive: boolean
   ownerId: string | null
   ownerName: string
   ownerEmail: string | null
@@ -31,14 +32,16 @@ export default function PropertiesPage() {
   const router = useRouter()
   const [properties, setProperties] = useState<Property[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => {
     fetchProperties()
-  }, [])
+  }, [showInactive])
 
   const fetchProperties = async () => {
     try {
-      const response = await fetch('/api/properties')
+      const url = showInactive ? '/api/properties?includeInactive=true' : '/api/properties'
+      const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
         setProperties(data)
@@ -85,12 +88,22 @@ export default function PropertiesPage() {
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-semibold text-gray-900">
-            {properties.length} Properties
+            {properties.filter(p => p.isActive).length} Active Properties
           </h3>
-          <Button onClick={handleAdd}>
-            <Plus size={16} />
-            Add Property
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowInactive(!showInactive)}
+              className={showInactive ? 'bg-gray-100' : ''}
+            >
+              {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
+              {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+            </Button>
+            <Button onClick={handleAdd}>
+              <Plus size={16} />
+              Add Property
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -112,7 +125,9 @@ export default function PropertiesPage() {
             {properties.map((property) => (
               <Card
                 key={property.id}
-                className="hover:shadow-md transition-shadow cursor-pointer overflow-hidden"
+                className={`hover:shadow-md transition-shadow cursor-pointer overflow-hidden ${
+                  !property.isActive ? 'opacity-60 bg-gray-50' : ''
+                }`}
                 onClick={() => handleEdit(property.id)}
               >
                 {/* Property Image */}
@@ -122,7 +137,7 @@ export default function PropertiesPage() {
                       src={property.imageUrl}
                       alt={property.name}
                       fill
-                      className="object-cover"
+                      className={`object-cover ${!property.isActive ? 'grayscale' : ''}`}
                     />
                   </div>
                 )}
@@ -130,15 +145,22 @@ export default function PropertiesPage() {
                 <CardContent className={property.imageUrl ? 'pt-4' : ''}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h4 className="font-semibold text-gray-900">{property.name}</h4>
+                      <h4 className={`font-semibold ${property.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                        {property.name}
+                      </h4>
+                      {!property.isActive && (
+                        <Badge variant="secondary" className="mt-1">Inactive</Badge>
+                      )}
                       <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
                         <MapPin size={14} />
                         {property.address}
                       </div>
                     </div>
-                    <Badge variant={property.billingType === 'monthly' ? 'warning' : 'info'}>
-                      {property.billingType === 'monthly' ? 'Monthly' : 'Per Job'}
-                    </Badge>
+                    {property.isActive && (
+                      <Badge variant={property.billingType === 'monthly' ? 'warning' : 'info'}>
+                        {property.billingType === 'monthly' ? 'Monthly' : 'Per Job'}
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="text-2xl font-bold text-gray-900 mb-4">
