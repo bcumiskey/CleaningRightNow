@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Nfc, QrCode, Building, Clock, Users, Play, X, CheckCircle, AlertCircle } from 'lucide-react'
@@ -35,7 +35,7 @@ interface CheckInResult {
   code?: string
 }
 
-export default function CheckInPage() {
+function CheckInPageContent() {
   const { data: session } = useSession()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -347,5 +347,13 @@ export default function CheckInPage() {
         </Card>
       )}
     </div>
+  )
+}
+
+export default function CheckInPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-center text-gray-500">Loading...</div>}>
+      <CheckInPageContent />
+    </Suspense>
   )
 }

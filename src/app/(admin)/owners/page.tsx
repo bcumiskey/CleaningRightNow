@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Users, Plus, Mail, Phone, Building, Trash2, ExternalLink } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
@@ -34,7 +34,7 @@ interface Owner {
   _count: { properties: number }
 }
 
-export default function OwnersPage() {
+function OwnersPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [owners, setOwners] = useState<Owner[]>([])
@@ -272,6 +272,14 @@ export default function OwnersPage() {
         owner={editingOwner}
       />
     </div>
+  )
+}
+
+export default function OwnersPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen"><div className="p-6 text-center text-gray-500">Loading...</div></div>}>
+      <OwnersPageContent />
+    </Suspense>
   )
 }
 
