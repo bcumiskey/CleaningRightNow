@@ -127,11 +127,15 @@ export default function CheckInPage() {
 
     setIsScanning(true)
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ndef = new (window as any).NDEFReader()
+      // Web NFC API - only available on Chrome Android
+      const NDEFReader = (window as unknown as { NDEFReader: new () => {
+        scan: () => Promise<void>
+        addEventListener: (event: string, handler: (event: { message: { records: { data: ArrayBuffer }[] } }) => void) => void
+      } }).NDEFReader
+      const ndef = new NDEFReader()
       await ndef.scan()
 
-      ndef.addEventListener('reading', ({ message }: { message: { records: { data: ArrayBuffer }[] } }) => {
+      ndef.addEventListener('reading', ({ message }) => {
         // Parse NFC tag data
         for (const record of message.records) {
           const decoder = new TextDecoder()
