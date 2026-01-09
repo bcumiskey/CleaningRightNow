@@ -8,14 +8,12 @@ import {
   Info,
   Package,
   ListChecks,
-  Image as ImageIcon,
   Navigation,
 } from 'lucide-react'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import { cn } from '@/lib/utils'
 
 interface PropertyDetail {
   id: string
@@ -62,8 +60,6 @@ export default function WorkerPropertyDetailPage() {
   const [linensByRoom, setLinensByRoom] = useState<Record<string, LinenRequirement[]>>({})
   const [instructions, setInstructions] = useState<PropertyInstruction[]>([])
   const [instructionsByRoom, setInstructionsByRoom] = useState<Record<string, PropertyInstruction[]>>({})
-  const [photos, setPhotos] = useState<PropertyPhoto[]>([])
-  const [photosByRoom, setPhotosByRoom] = useState<Record<string, PropertyPhoto[]>>({})
   const [isLoading, setIsLoading] = useState(true)
 
   // Photo detail modal
@@ -71,11 +67,10 @@ export default function WorkerPropertyDetailPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [propRes, linensRes, instructionsRes, photosRes] = await Promise.all([
+      const [propRes, linensRes, instructionsRes] = await Promise.all([
         fetch(`/api/properties/${propertyId}`),
         fetch(`/api/linens/property/${propertyId}`),
         fetch(`/api/properties/${propertyId}/instructions`),
-        fetch(`/api/properties/${propertyId}/photos`),
       ])
 
       if (propRes.ok) {
@@ -99,11 +94,6 @@ export default function WorkerPropertyDetailPage() {
         const data = await instructionsRes.json()
         setInstructions(data.instructions || data)
         setInstructionsByRoom(data.byRoom || {})
-      }
-      if (photosRes.ok) {
-        const data = await photosRes.json()
-        setPhotos(data.photos || [])
-        setPhotosByRoom(data.byRoom || {})
       }
     } catch (error) {
       console.error('Failed to fetch data:', error)
@@ -207,12 +197,11 @@ export default function WorkerPropertyDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Room-by-Room Guide - Consolidated view of instructions, photos, and linens */}
+      {/* Room-by-Room Guide - Instructions with inline photos and linens */}
       {(() => {
-        // Get all unique rooms from instructions, photos, and linens
+        // Get all unique rooms from instructions and linens
         const allRooms = new Set<string>([
           ...Object.keys(instructionsByRoom),
-          ...Object.keys(photosByRoom),
           ...Object.keys(linensByRoom),
         ])
         const roomsArray = Array.from(allRooms).sort((a, b) => {
@@ -233,18 +222,7 @@ export default function WorkerPropertyDetailPage() {
 
             {roomsArray.map((room) => {
               const roomInstructions = instructionsByRoom[room] || []
-              const roomPhotos = photosByRoom[room] || []
               const roomLinens = linensByRoom[room] || []
-
-              // Get photo IDs that are linked to instructions (to avoid showing them twice)
-              const linkedPhotoIds = new Set(
-                roomInstructions
-                  .filter((inst) => inst.linkedPhotoId)
-                  .map((inst) => inst.linkedPhotoId)
-              )
-
-              // Photos not linked to any instruction
-              const standalonePhotos = roomPhotos.filter((photo) => !linkedPhotoIds.has(photo.id))
 
               return (
                 <Card key={room}>
@@ -289,45 +267,6 @@ export default function WorkerPropertyDetailPage() {
                       </div>
                     )}
 
-                    {/* Additional reference photos (not linked to instructions) */}
-                    {standalonePhotos.length > 0 && (
-                      <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                          <ImageIcon size={14} className="text-blue-600" />
-                          Additional Photos
-                        </h5>
-                        <div className="grid grid-cols-3 gap-2">
-                          {standalonePhotos.map((photo) => (
-                            <button
-                              key={photo.id}
-                              onClick={() => setSelectedPhoto(photo)}
-                              className={cn(
-                                'relative rounded-lg overflow-hidden border-2 transition-all',
-                                photo.notes
-                                  ? 'border-blue-400 hover:border-blue-600'
-                                  : 'border-transparent hover:border-gray-300'
-                              )}
-                            >
-                              <div className="relative h-20 w-full">
-                                <Image
-                                  src={photo.url}
-                                  alt={photo.caption || room}
-                                  fill
-                                  className="object-cover"
-                                />
-                              </div>
-                              {photo.notes && (
-                                <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-0.5 text-center">
-                                  <Info size={10} className="inline mr-1" />
-                                  Notes
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* Linens */}
                     {roomLinens.length > 0 && (
                       <div>
@@ -350,7 +289,7 @@ export default function WorkerPropertyDetailPage() {
                     )}
 
                     {/* Empty room */}
-                    {roomInstructions.length === 0 && standalonePhotos.length === 0 && roomLinens.length === 0 && (
+                    {roomInstructions.length === 0 && roomLinens.length === 0 && (
                       <p className="text-sm text-gray-500 text-center py-2">
                         No specific instructions for this room
                       </p>
