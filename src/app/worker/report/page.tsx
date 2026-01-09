@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { AlertTriangle, Camera, Building, ChevronDown, X, Upload } from 'lucide-react'
+import { AlertTriangle, Camera, X } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
-import Select from '@/components/ui/Select'
 import toast from 'react-hot-toast'
 
 interface Property {
@@ -30,6 +29,14 @@ const SEVERITY_OPTIONS = [
 ]
 
 export default function ReportIssuePage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-center text-gray-500">Loading...</div>}>
+      <ReportIssueContent />
+    </Suspense>
+  )
+}
+
+function ReportIssueContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const preselectedPropertyId = searchParams.get('propertyId')
