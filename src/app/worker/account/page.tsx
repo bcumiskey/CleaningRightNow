@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { signOut, useSession } from 'next-auth/react'
 import { LogOut, User, DollarSign, Calendar, ChevronRight, FileText } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import { format, startOfMonth, endOfMonth, subMonths, addMonths } from 'date-fns'
+import toast from 'react-hot-toast'
 
 interface Earning {
   id: string
@@ -31,11 +32,7 @@ export default function WorkerAccountPage() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [showAllEarnings, setShowAllEarnings] = useState(false)
 
-  useEffect(() => {
-    fetchEarnings()
-  }, [currentMonth])
-
-  const fetchEarnings = async () => {
+  const fetchEarnings = useCallback(async () => {
     setIsLoading(true)
     try {
       const start = startOfMonth(currentMonth)
@@ -49,13 +46,20 @@ export default function WorkerAccountPage() {
         const data = await res.json()
         setEarnings(data.earnings)
         setSummary(data.summary)
+      } else {
+        toast.error('Failed to load earnings')
       }
     } catch (error) {
       console.error('Failed to fetch earnings:', error)
+      toast.error('Failed to load earnings')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentMonth])
+
+  useEffect(() => {
+    fetchEarnings()
+  }, [fetchEarnings])
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
