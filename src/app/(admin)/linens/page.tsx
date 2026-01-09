@@ -40,6 +40,16 @@ interface PropertyLinen {
   perFlip: number
   unitCost: number | null // Property-specific cost
   onHand: number
+  room: string
+}
+
+interface AvailableItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  defaultCost: number
+  onHand: number
 }
 
 interface ShoppingItem {
@@ -62,6 +72,27 @@ interface ShoppingItem {
 
 type TabType = 'catalog' | 'property' | 'shopping'
 
+const ROOM_OPTIONS = [
+  'General',
+  'Living Room',
+  'Kitchen',
+  'Master Bedroom',
+  'Bedroom 2',
+  'Bedroom 3',
+  'Bedroom 4',
+  'Master Bathroom',
+  'Bathroom 2',
+  'Bathroom 3',
+  'Dining Room',
+  'Patio/Deck',
+  'Pool Area',
+  'Garage',
+  'Laundry Room',
+  'Entry',
+  'Hallway',
+  'Other',
+]
+
 export default function LinensPage() {
   const [activeTab, setActiveTab] = useState<TabType>('catalog')
   const [categories, setCategories] = useState<LinenCategory[]>([])
@@ -82,8 +113,12 @@ export default function LinensPage() {
   // Property tab state
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')
   const [propertyLinens, setPropertyLinens] = useState<PropertyLinen[]>([])
+  const [propertyLinensByRoom, setPropertyLinensByRoom] = useState<Record<string, PropertyLinen[]>>({})
+  const [availableItems, setAvailableItems] = useState<AvailableItem[]>([])
   const [isLoadingProperty, setIsLoadingProperty] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [showAddLinenModal, setShowAddLinenModal] = useState(false)
+  const [selectedRoom, setSelectedRoom] = useState('General')
 
   // Shopping list state
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([])
@@ -246,7 +281,9 @@ export default function LinensPage() {
       const response = await fetch(`/api/linens/property/${propertyId}`)
       if (response.ok) {
         const data = await response.json()
-        setPropertyLinens(data.linens)
+        setPropertyLinens(data.linens || [])
+        setPropertyLinensByRoom(data.byRoom || {})
+        setAvailableItems(data.allItems || [])
         setHasChanges(false)
       }
     } catch (error) {
@@ -263,18 +300,70 @@ export default function LinensPage() {
       fetchPropertyLinens(propertyId)
     } else {
       setPropertyLinens([])
+      setPropertyLinensByRoom({})
+      setAvailableItems([])
     }
   }
 
-  const updatePropertyLinen = (itemId: string, field: 'perFlip' | 'onHand' | 'unitCost', value: string) => {
+  const updatePropertyLinen = (itemId: string, room: string, field: 'perFlip' | 'onHand' | 'unitCost', value: string) => {
     setPropertyLinens(prev =>
       prev.map(item =>
-        item.itemId === itemId
+        item.itemId === itemId && item.room === room
           ? { ...item, [field]: field === 'unitCost' ? (value ? parseFloat(value) : null) : (parseInt(value) || 0) }
           : item
       )
     )
+    // Update byRoom too
+    setPropertyLinensByRoom(prev => {
+      const newByRoom = { ...prev }
+      if (newByRoom[room]) {
+        newByRoom[room] = newByRoom[room].map(item =>
+          item.itemId === itemId
+            ? { ...item, [field]: field === 'unitCost' ? (value ? parseFloat(value) : null) : (parseInt(value) || 0) }
+            : item
+        )
+      }
+      return newByRoom
+    })
     setHasChanges(true)
+  }
+
+  const handleAddLinenToRoom = async (itemId: string, room: string, perFlip: number) => {
+    if (!selectedPropertyId) return
+    try {
+      const response = await fetch(`/api/linens/property/${selectedPropertyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          linens: [{ itemId, room, perFlip }],
+        }),
+      })
+      if (response.ok) {
+        toast.success('Linen added to room')
+        fetchPropertyLinens(selectedPropertyId)
+      } else {
+        toast.error('Failed to add linen')
+      }
+    } catch (error) {
+      toast.error('Failed to add linen')
+    }
+  }
+
+  const handleDeleteLinenFromRoom = async (itemId: string, room: string) => {
+    if (!selectedPropertyId) return
+    try {
+      const response = await fetch(`/api/linens/property/${selectedPropertyId}?itemId=${itemId}&room=${encodeURIComponent(room)}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        toast.success('Linen removed from room')
+        fetchPropertyLinens(selectedPropertyId)
+      } else {
+        toast.error('Failed to remove linen')
+      }
+    } catch (error) {
+      toast.error('Failed to remove linen')
+    }
   }
 
   const savePropertyLinens = async () => {
@@ -289,6 +378,7 @@ export default function LinensPage() {
             perFlip: l.perFlip,
             onHand: l.onHand,
             unitCost: l.unitCost,
+            room: l.room,
           })),
         }),
       })
@@ -517,7 +607,7 @@ export default function LinensPage() {
           </div>
         )}
 
-        {/* Property Setup Tab - Quantities + Property-Specific Pricing */}
+        {/* Property Setup Tab - Room-Based Linen Requirements */}
         {activeTab === 'property' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -534,104 +624,153 @@ export default function LinensPage() {
                 />
                 {hasChanges && <Badge variant="warning">Unsaved changes</Badge>}
               </div>
-              {selectedPropertyId && (
-                <Button onClick={savePropertyLinens} disabled={!hasChanges}>
-                  <Save size={16} />
-                  Save Changes
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {selectedPropertyId && (
+                  <>
+                    <Button variant="outline" onClick={() => setShowAddLinenModal(true)}>
+                      <Plus size={16} />
+                      Add Linen to Room
+                    </Button>
+                    <Button onClick={savePropertyLinens} disabled={!hasChanges}>
+                      <Save size={16} />
+                      Save Changes
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {!selectedPropertyId ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">
-                  Select a property to configure its linen requirements, costs, and inventory.
+                  Select a property to configure its room-based linen requirements.
                 </CardContent>
               </Card>
             ) : isLoadingProperty ? (
               <Card>
                 <CardContent className="py-12 text-center text-gray-500">Loading...</CardContent>
               </Card>
-            ) : (
+            ) : propertyLinens.length === 0 ? (
               <Card>
-                <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Item</th>
-                        <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase w-24">Per Flip</th>
-                        <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase w-28">Unit Cost</th>
-                        <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase w-24">On Hand</th>
-                        <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase w-20">Flips</th>
-                        <th className="text-center px-4 py-3 text-xs font-medium text-gray-500 uppercase w-24">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {propertyLinens.map(linen => {
-                        const flipsLeft = linen.perFlip > 0 ? Math.floor(linen.onHand / linen.perFlip) : 0
-                        const isLow = linen.perFlip > 0 && flipsLeft < 3
-                        const effectiveCost = linen.unitCost ?? linen.defaultCost
-
-                        return (
-                          <tr key={linen.itemId} className={isLow ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                            <td className="px-4 py-3">
-                              <div className="font-medium">{linen.itemName}</div>
-                              <div className="text-xs text-gray-500">{linen.category} • {linen.itemCode}</div>
-                            </td>
-                            <td className="px-4 py-2">
-                              <input
-                                type="number"
-                                min="0"
-                                value={linen.perFlip}
-                                onChange={(e) => updatePropertyLinen(linen.itemId, 'perFlip', e.target.value)}
-                                className="w-full px-2 py-1 border rounded text-center"
-                              />
-                            </td>
-                            <td className="px-4 py-2">
-                              <div className="relative">
-                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">$</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={linen.unitCost ?? ''}
-                                  onChange={(e) => updatePropertyLinen(linen.itemId, 'unitCost', e.target.value)}
-                                  placeholder={linen.defaultCost.toFixed(2)}
-                                  className="w-full px-2 py-1 pl-5 border rounded text-center"
-                                />
-                              </div>
-                            </td>
-                            <td className="px-4 py-2">
-                              <input
-                                type="number"
-                                min="0"
-                                value={linen.onHand}
-                                onChange={(e) => updatePropertyLinen(linen.itemId, 'onHand', e.target.value)}
-                                className="w-full px-2 py-1 border rounded text-center"
-                              />
-                            </td>
-                            <td className="px-4 py-3 text-center font-medium">
-                              {linen.perFlip > 0 ? flipsLeft : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {linen.perFlip === 0 ? (
-                                <span className="text-gray-400 text-sm">Not used</span>
-                              ) : isLow ? (
-                                <Badge variant="danger">Low</Badge>
-                              ) : (
-                                <Badge variant="success">OK</Badge>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                <CardContent className="py-12 text-center">
+                  <Package size={48} className="mx-auto mb-4 text-gray-300" />
+                  <h3 className="font-semibold text-gray-900 mb-2">No linens assigned</h3>
+                  <p className="text-gray-500 mb-4">Add linens to specific rooms for this property.</p>
+                  <Button onClick={() => setShowAddLinenModal(true)}>
+                    <Plus size={16} />
+                    Add Linen to Room
+                  </Button>
                 </CardContent>
               </Card>
+            ) : (
+              <div className="space-y-4">
+                {Object.entries(propertyLinensByRoom).map(([room, roomLinens]) => (
+                  <Card key={room}>
+                    <CardHeader className="flex flex-row items-center justify-between py-3">
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+                        <Package size={18} className="text-blue-600" />
+                        {room}
+                        <span className="text-sm font-normal text-gray-500">
+                          ({roomLinens.length} {roomLinens.length === 1 ? 'item' : 'items'})
+                        </span>
+                      </h3>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Item</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-20">Qty</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-24">Unit Cost</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-20">On Hand</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-16">Flips</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-16">Status</th>
+                            <th className="w-12"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {roomLinens.map(linen => {
+                            const flipsLeft = linen.perFlip > 0 ? Math.floor(linen.onHand / linen.perFlip) : 0
+                            const isLow = linen.perFlip > 0 && flipsLeft < 3
+
+                            return (
+                              <tr key={`${linen.itemId}-${room}`} className={isLow ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                                <td className="px-4 py-2">
+                                  <div className="font-medium text-sm">{linen.itemName}</div>
+                                  <div className="text-xs text-gray-500">{linen.category}</div>
+                                </td>
+                                <td className="px-4 py-1">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={linen.perFlip}
+                                    onChange={(e) => updatePropertyLinen(linen.itemId, room, 'perFlip', e.target.value)}
+                                    className="w-full px-2 py-1 border rounded text-center text-sm"
+                                  />
+                                </td>
+                                <td className="px-4 py-1">
+                                  <div className="relative">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={linen.unitCost ?? ''}
+                                      onChange={(e) => updatePropertyLinen(linen.itemId, room, 'unitCost', e.target.value)}
+                                      placeholder={linen.defaultCost?.toFixed(2) || '0.00'}
+                                      className="w-full px-2 py-1 pl-5 border rounded text-center text-sm"
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-4 py-1">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={linen.onHand}
+                                    onChange={(e) => updatePropertyLinen(linen.itemId, room, 'onHand', e.target.value)}
+                                    className="w-full px-2 py-1 border rounded text-center text-sm"
+                                  />
+                                </td>
+                                <td className="px-4 py-2 text-center font-medium text-sm">
+                                  {flipsLeft}
+                                </td>
+                                <td className="px-4 py-2 text-center">
+                                  {isLow ? (
+                                    <Badge variant="danger">Low</Badge>
+                                  ) : (
+                                    <Badge variant="success">OK</Badge>
+                                  )}
+                                </td>
+                                <td className="px-2 py-2">
+                                  <button
+                                    onClick={() => handleDeleteLinenFromRoom(linen.itemId, room)}
+                                    className="p-1 text-gray-400 hover:text-red-600"
+                                    title="Remove from room"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </div>
         )}
+
+        {/* Add Linen to Room Modal */}
+        <AddLinenToRoomModal
+          isOpen={showAddLinenModal}
+          onClose={() => setShowAddLinenModal(false)}
+          onSave={handleAddLinenToRoom}
+          availableItems={availableItems}
+          existingLinens={propertyLinens}
+        />
 
         {/* Shopping List Tab */}
         {activeTab === 'shopping' && (
@@ -841,6 +980,125 @@ function AddItemModal({ isOpen, onClose, onSave, categoryId, categories }: {
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" isLoading={isSaving}>Add Item</Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function AddLinenToRoomModal({ isOpen, onClose, onSave, availableItems, existingLinens }: {
+  isOpen: boolean
+  onClose: () => void
+  onSave: (itemId: string, room: string, perFlip: number) => void
+  availableItems: AvailableItem[]
+  existingLinens: PropertyLinen[]
+}) {
+  const [selectedItemId, setSelectedItemId] = useState('')
+  const [selectedRoom, setSelectedRoom] = useState('General')
+  const [perFlip, setPerFlip] = useState('1')
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedItemId('')
+      setSelectedRoom('General')
+      setPerFlip('1')
+    }
+  }, [isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedItemId || !selectedRoom) return
+
+    // Check if this item is already in this room
+    const alreadyExists = existingLinens.some(
+      l => l.itemId === selectedItemId && l.room === selectedRoom
+    )
+    if (alreadyExists) {
+      return // Already exists, don't add duplicate
+    }
+
+    setIsSaving(true)
+    try {
+      await onSave(selectedItemId, selectedRoom, parseInt(perFlip) || 1)
+      onClose()
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Filter out items that are already in the selected room
+  const itemsNotInRoom = availableItems.filter(
+    item => !existingLinens.some(l => l.itemId === item.itemId && l.room === selectedRoom)
+  )
+
+  // Group items by category for the dropdown
+  const itemsByCategory = itemsNotInRoom.reduce((acc, item) => {
+    if (!acc[item.category]) acc[item.category] = []
+    acc[item.category].push(item)
+    return acc
+  }, {} as Record<string, AvailableItem[]>)
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Add Linen to Room">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Select
+          label="Room"
+          value={selectedRoom}
+          onChange={(e) => {
+            setSelectedRoom(e.target.value)
+            setSelectedItemId('') // Reset item when room changes
+          }}
+          options={ROOM_OPTIONS.map(room => ({ value: room, label: room }))}
+          required
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Linen Item
+          </label>
+          <select
+            value={selectedItemId}
+            onChange={(e) => setSelectedItemId(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required
+          >
+            <option value="">Select an item...</option>
+            {Object.entries(itemsByCategory).map(([category, items]) => (
+              <optgroup key={category} label={category}>
+                {items.map(item => (
+                  <option key={item.itemId} value={item.itemId}>
+                    {item.itemName} ({item.itemCode})
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {itemsNotInRoom.length === 0 && (
+            <p className="text-sm text-amber-600 mt-1">
+              All items are already assigned to {selectedRoom}
+            </p>
+          )}
+        </div>
+
+        <Input
+          label="Quantity per Flip"
+          type="number"
+          min="1"
+          value={perFlip}
+          onChange={(e) => setPerFlip(e.target.value)}
+          required
+        />
+
+        <div className="flex justify-end gap-3 pt-2">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button
+            type="submit"
+            isLoading={isSaving}
+            disabled={!selectedItemId || itemsNotInRoom.length === 0}
+          >
+            Add to Room
+          </Button>
         </div>
       </form>
     </Modal>

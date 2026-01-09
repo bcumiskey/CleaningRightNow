@@ -37,7 +37,11 @@ export async function GET(
       unitCost: number | null
       perFlip: number
       onHand: number
+      room: string
     }> = []
+
+    // Group by room for the response
+    let byRoom: Record<string, typeof linenData> = {}
 
     try {
       // Get all linen items
@@ -54,13 +58,24 @@ export async function GET(
         // Continue without categories
       }
 
-      // Get requirements separately
-      let requirements: Record<string, { perFlip: number; unitCost: number | null }> = {}
+      // Get requirements separately - now includes room
+      interface Requirement {
+        linenItemId: string
+        perFlip: number
+        unitCost: number | null
+        room: string
+      }
+      let requirements: Requirement[] = []
       try {
         const reqs = await prisma.propertyLinenRequirement.findMany({
           where: { propertyId },
         })
-        requirements = Object.fromEntries(reqs.map((r: { linenItemId: string; perFlip: number; unitCost: number | null }) => [r.linenItemId, { perFlip: r.perFlip, unitCost: r.unitCost }]))
+        requirements = reqs.map((r: { linenItemId: string; perFlip: number; unitCost: number | null; room: string }) => ({
+          linenItemId: r.linenItemId,
+          perFlip: r.perFlip,
+          unitCost: r.unitCost,
+          room: r.room || 'General',
+        }))
       } catch {
         // Continue without requirements
       }
@@ -76,7 +91,7 @@ export async function GET(
         // Continue without inventory
       }
 
-      // Combine data
+      // Create linen items lookup
       interface LinenItem {
         id: string
         name: string
@@ -84,18 +99,47 @@ export async function GET(
         categoryId: string
         unitCost: number | null
       }
-      linenData = allItems.map((item: LinenItem) => {
-        const req = requirements[item.id]
-        return {
+      const itemsById = Object.fromEntries(allItems.map((item: LinenItem) => [item.id, item]))
+
+      // Build linen data from requirements (items that have requirements for this property)
+      for (const req of requirements) {
+        const item = itemsById[req.linenItemId]
+        if (!item) continue
+
+        const linenEntry = {
           itemId: item.id,
           itemName: item.name,
           itemCode: item.code,
           category: categories[item.categoryId] || 'Unknown',
           defaultCost: item.unitCost,
-          unitCost: req?.unitCost ?? null,
-          perFlip: req?.perFlip || 0,
+          unitCost: req.unitCost,
+          perFlip: req.perFlip,
           onHand: inventory[item.id] || 0,
+          room: req.room,
         }
+        linenData.push(linenEntry)
+
+        // Group by room
+        if (!byRoom[req.room]) byRoom[req.room] = []
+        byRoom[req.room].push(linenEntry)
+      }
+
+      // Also return all available items for the admin UI to select from
+      const allItemsFormatted = allItems.map((item: LinenItem) => ({
+        itemId: item.id,
+        itemName: item.name,
+        itemCode: item.code,
+        category: categories[item.categoryId] || 'Unknown',
+        defaultCost: item.unitCost,
+        onHand: inventory[item.id] || 0,
+      }))
+
+      return NextResponse.json({
+        propertyId: property.id,
+        propertyName: property.name,
+        linens: linenData,
+        byRoom,
+        allItems: allItemsFormatted,
       })
     } catch {
       // LinenItem table doesn't exist - return empty linens
@@ -105,6 +149,8 @@ export async function GET(
       propertyId: property.id,
       propertyName: property.name,
       linens: linenData,
+      byRoom,
+      allItems: [],
     })
   } catch (error) {
     console.error('Property linens GET error:', error)
@@ -131,7 +177,7 @@ export async function PUT(
     const { propertyId } = await params
     const data = await request.json()
 
-    // data.linens = [{ itemId, perFlip, onHand }, ...]
+    // data.linens = [{ itemId, perFlip, onHand, room }, ...]
     if (!Array.isArray(data.linens)) {
       return NextResponse.json({ error: 'Invalid data format' }, { status: 400 })
     }
@@ -139,18 +185,22 @@ export async function PUT(
     // Update requirements and inventory in a transaction
     await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const item of data.linens) {
-        // Update or create requirement (includes perFlip and property-specific unitCost)
+        const room = item.room || 'General'
+
+        // Update or create requirement (includes perFlip, room, and property-specific unitCost)
         if (item.perFlip !== undefined || item.unitCost !== undefined) {
           await tx.propertyLinenRequirement.upsert({
             where: {
-              propertyId_linenItemId: {
+              propertyId_linenItemId_room: {
                 propertyId,
                 linenItemId: item.itemId,
+                room,
               },
             },
             create: {
               propertyId,
               linenItemId: item.itemId,
+              room,
               perFlip: parseInt(item.perFlip) || 0,
               unitCost: item.unitCost !== undefined && item.unitCost !== null
                 ? parseFloat(item.unitCost)
@@ -165,7 +215,7 @@ export async function PUT(
           })
         }
 
-        // Update or create inventory
+        // Update or create inventory (still keyed by item only, not room)
         if (item.onHand !== undefined) {
           await tx.propertyLinenInventory.upsert({
             where: {
@@ -191,5 +241,47 @@ export async function PUT(
   } catch (error) {
     console.error('Property linens PUT error:', error)
     return NextResponse.json({ error: 'Failed to update property linens' }, { status: 500 })
+  }
+}
+
+// DELETE - Remove a linen requirement from a property room
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ propertyId: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const { propertyId } = await params
+    const { searchParams } = new URL(request.url)
+    const itemId = searchParams.get('itemId')
+    const room = searchParams.get('room') || 'General'
+
+    if (!itemId) {
+      return NextResponse.json({ error: 'itemId is required' }, { status: 400 })
+    }
+
+    await prisma.propertyLinenRequirement.delete({
+      where: {
+        propertyId_linenItemId_room: {
+          propertyId,
+          linenItemId: itemId,
+          room,
+        },
+      },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Property linens DELETE error:', error)
+    return NextResponse.json({ error: 'Failed to delete linen requirement' }, { status: 500 })
   }
 }

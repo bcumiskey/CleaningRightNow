@@ -374,13 +374,14 @@ model PropertyLinenRequirement {
   id          String    @id @default(cuid())
   propertyId  String
   linenItemId String
+  room        String    @default("General") // Which room needs these linens
   perFlip     Int       @default(0)
   unitCost    Float?    // Property-specific cost (can differ from master item)
 
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   linenItem   LinenItem @relation(fields: [linenItemId], references: [id], onDelete: Cascade)
 
-  @@unique([propertyId, linenItemId])
+  @@unique([propertyId, linenItemId, room])
 }
 
 // Current inventory on-hand

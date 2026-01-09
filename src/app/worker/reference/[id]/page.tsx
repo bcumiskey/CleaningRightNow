@@ -67,6 +67,7 @@ interface LinenRequirement {
   category: string
   perFlip: number
   onHand: number
+  room: string
 }
 
 interface PropertyPhoto {
@@ -107,6 +108,7 @@ export default function WorkerPropertyDetailPage() {
   const [property, setProperty] = useState<PropertyDetail | null>(null)
   const [notes, setNotes] = useState<PropertyNote[]>([])
   const [linenRequirements, setLinenRequirements] = useState<LinenRequirement[]>([])
+  const [linensByRoom, setLinensByRoom] = useState<Record<string, LinenRequirement[]>>({})
   const [instructions, setInstructions] = useState<PropertyInstruction[]>([])
   const [instructionsByRoom, setInstructionsByRoom] = useState<Record<string, PropertyInstruction[]>>({})
   const [photos, setPhotos] = useState<PropertyPhoto[]>([])
@@ -149,9 +151,16 @@ export default function WorkerPropertyDetailPage() {
       if (linensRes.ok) {
         const data = await linensRes.json()
         // Only show items with perFlip > 0 (items needed for this property)
-        setLinenRequirements(
-          (data.linens || []).filter((l: LinenRequirement) => l.perFlip > 0)
-        )
+        const filteredLinens = (data.linens || []).filter((l: LinenRequirement) => l.perFlip > 0)
+        setLinenRequirements(filteredLinens)
+        // Build byRoom from filtered linens
+        const byRoom: Record<string, LinenRequirement[]> = {}
+        for (const linen of filteredLinens) {
+          const room = linen.room || 'General'
+          if (!byRoom[room]) byRoom[room] = []
+          byRoom[room].push(linen)
+        }
+        setLinensByRoom(byRoom)
       }
       if (instructionsRes.ok) {
         const data = await instructionsRes.json()
@@ -340,152 +349,143 @@ export default function WorkerPropertyDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Cleaning Instructions */}
-      {instructions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <button
-              onClick={() => setShowInstructions(!showInstructions)}
-              className="w-full flex items-center justify-between"
-            >
-              <CardTitle className="flex items-center gap-2">
-                <ListChecks size={20} className="text-emerald-600" />
-                Cleaning Instructions ({instructions.length})
-              </CardTitle>
-              {showInstructions ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-            </button>
-          </CardHeader>
-          {showInstructions && (
-            <CardContent className="space-y-4">
-              {Object.entries(instructionsByRoom).map(([room, roomInstructions]) => (
-                <div key={room} className="bg-gray-50 rounded-lg p-3">
-                  <h4 className="font-semibold text-gray-800 mb-2">{room}</h4>
-                  <ul className="space-y-2">
-                    {roomInstructions.map((inst, idx) => (
-                      <li key={inst.id} className="flex items-start gap-2">
-                        <span className="text-emerald-600 font-medium">{idx + 1}.</span>
-                        <div className="flex-1">
-                          <p className="text-gray-700">{inst.instruction}</p>
-                          {inst.linkedPhoto && (
-                            <button
-                              onClick={() => setSelectedPhoto(inst.linkedPhoto)}
-                              className="mt-1 text-sm text-blue-600 flex items-center gap-1 hover:underline"
-                            >
-                              <Camera size={14} />
-                              View photo
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </CardContent>
-          )}
-        </Card>
-      )}
+      {/* Room-by-Room Guide - Consolidated view of instructions, photos, and linens */}
+      {(() => {
+        // Get all unique rooms from instructions, photos, and linens
+        const allRooms = new Set<string>([
+          ...Object.keys(instructionsByRoom),
+          ...Object.keys(photosByRoom),
+          ...Object.keys(linensByRoom),
+        ])
+        const roomsArray = Array.from(allRooms).sort((a, b) => {
+          // Sort "General" first, then alphabetically
+          if (a === 'General') return -1
+          if (b === 'General') return 1
+          return a.localeCompare(b)
+        })
 
-      {/* Reference Photos */}
-      {photos.length > 0 && (
-        <Card>
-          <CardHeader>
-            <button
-              onClick={() => setShowPhotos(!showPhotos)}
-              className="w-full flex items-center justify-between"
-            >
-              <CardTitle className="flex items-center gap-2">
-                <Camera size={20} className="text-blue-600" />
-                Reference Photos ({photos.length})
-              </CardTitle>
-              {showPhotos ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
-            </button>
-          </CardHeader>
-          {showPhotos && (
-            <CardContent className="space-y-4">
-              <p className="text-sm text-gray-500">
-                Tap a photo to see detailed instructions
-              </p>
-              {Object.entries(photosByRoom).map(([room, roomPhotos]) => (
-                <div key={room}>
-                  <h4 className="font-semibold text-gray-800 mb-2">{room}</h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    {roomPhotos.map((photo) => (
-                      <button
-                        key={photo.id}
-                        onClick={() => setSelectedPhoto(photo)}
-                        className={cn(
-                          'relative rounded-lg overflow-hidden border-2 transition-all',
-                          photo.notes
-                            ? 'border-blue-400 hover:border-blue-600'
-                            : 'border-transparent hover:border-gray-300'
-                        )}
-                      >
-                        <div className="relative h-24 w-full">
-                          <Image
-                            src={photo.url}
-                            alt={photo.caption || room}
-                            fill
-                            className="object-cover"
-                          />
-                        </div>
-                        {photo.notes && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-0.5 text-center">
-                            <Info size={10} className="inline mr-1" />
-                            Notes
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          )}
-        </Card>
-      )}
+        if (roomsArray.length === 0) return null
 
-      {/* Linens & Supplies Required */}
-      {linenRequirements.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Package size={20} className="text-emerald-600" />
-              Linens & Supplies Needed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-500 mb-3">
-              Items needed to fully stock this property per turnover:
-            </p>
-            <div className="space-y-2">
-              {/* Group by category */}
-              {Object.entries(
-                linenRequirements.reduce((acc, item) => {
-                  if (!acc[item.category]) acc[item.category] = []
-                  acc[item.category].push(item)
-                  return acc
-                }, {} as Record<string, LinenRequirement[]>)
-              ).map(([category, items]) => (
-                <div key={category} className="bg-gray-50 rounded-lg p-3">
-                  <h4 className="font-semibold text-gray-700 mb-2 capitalize">{category}</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {items.map((item) => (
-                      <div
-                        key={item.itemId}
-                        className="flex items-center justify-between bg-white p-2 rounded border"
-                      >
-                        <span className="text-sm text-gray-700">{item.itemName}</span>
-                        <span className="font-bold text-emerald-700 text-lg">{item.perFlip}</span>
+        return (
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <ListChecks size={20} className="text-emerald-600" />
+              Room-by-Room Guide
+            </h2>
+
+            {roomsArray.map((room) => {
+              const roomInstructions = instructionsByRoom[room] || []
+              const roomPhotos = photosByRoom[room] || []
+              const roomLinens = linensByRoom[room] || []
+
+              return (
+                <Card key={room}>
+                  <CardHeader className="py-3 bg-gray-50">
+                    <CardTitle className="text-base">{room}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Instructions */}
+                    {roomInstructions.length > 0 && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                          <ListChecks size={14} className="text-emerald-600" />
+                          Instructions
+                        </h5>
+                        <ul className="space-y-2 pl-1">
+                          {roomInstructions.map((inst, idx) => (
+                            <li key={inst.id} className="flex items-start gap-2">
+                              <span className="text-emerald-600 font-medium text-sm">{idx + 1}.</span>
+                              <div className="flex-1">
+                                <p className="text-sm text-gray-700">{inst.instruction}</p>
+                                {inst.linkedPhoto && (
+                                  <button
+                                    onClick={() => setSelectedPhoto(inst.linkedPhoto)}
+                                    className="mt-1 text-xs text-blue-600 flex items-center gap-1 hover:underline"
+                                  >
+                                    <Camera size={12} />
+                                    View photo
+                                  </button>
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                    )}
+
+                    {/* Photos */}
+                    {roomPhotos.length > 0 && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                          <Camera size={14} className="text-blue-600" />
+                          Reference Photos
+                        </h5>
+                        <div className="grid grid-cols-3 gap-2">
+                          {roomPhotos.map((photo) => (
+                            <button
+                              key={photo.id}
+                              onClick={() => setSelectedPhoto(photo)}
+                              className={cn(
+                                'relative rounded-lg overflow-hidden border-2 transition-all',
+                                photo.notes
+                                  ? 'border-blue-400 hover:border-blue-600'
+                                  : 'border-transparent hover:border-gray-300'
+                              )}
+                            >
+                              <div className="relative h-20 w-full">
+                                <Image
+                                  src={photo.url}
+                                  alt={photo.caption || room}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                              {photo.notes && (
+                                <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-0.5 text-center">
+                                  <Info size={10} className="inline mr-1" />
+                                  Notes
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Linens */}
+                    {roomLinens.length > 0 && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
+                          <Package size={14} className="text-amber-600" />
+                          Linens Needed
+                        </h5>
+                        <div className="grid grid-cols-2 gap-2">
+                          {roomLinens.map((item) => (
+                            <div
+                              key={`${item.itemId}-${room}`}
+                              className="flex items-center justify-between bg-amber-50 p-2 rounded border border-amber-100"
+                            >
+                              <span className="text-sm text-gray-700">{item.itemName}</span>
+                              <span className="font-bold text-amber-700">{item.perFlip}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Empty room */}
+                    {roomInstructions.length === 0 && roomPhotos.length === 0 && roomLinens.length === 0 && (
+                      <p className="text-sm text-gray-500 text-center py-2">
+                        No specific instructions for this room
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )
+      })()}
 
       {/* Add Note Button */}
       {!showAddNote && (
