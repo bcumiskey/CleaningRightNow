@@ -149,7 +149,7 @@ export default function PropertiesPage() {
                         {property.name}
                       </h4>
                       {!property.isActive && (
-                        <Badge variant="secondary" className="mt-1">Inactive</Badge>
+                        <Badge variant="default" className="mt-1">Inactive</Badge>
                       )}
                       <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
                         <MapPin size={14} />

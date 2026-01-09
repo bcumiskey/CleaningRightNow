@@ -202,7 +202,7 @@ function OwnersPageContent() {
                           {owner.name}
                         </h4>
                         {!owner.isActive && (
-                          <Badge variant="secondary" className="mt-1">Inactive</Badge>
+                          <Badge variant="default" className="mt-1">Inactive</Badge>
                         )}
                         {owner.isActive && (
                           <Badge variant="info" className="mt-1">
