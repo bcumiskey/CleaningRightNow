@@ -64,6 +64,12 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Only admins can update team members
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { id } = await params
     const data = await request.json()
 
