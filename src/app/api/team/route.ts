@@ -90,21 +90,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build create data - only include supervisor fields if they're defined
-    // This ensures backward compatibility if DB hasn't been migrated yet
-    const createData: Record<string, unknown> = {
-      name: data.name,
-      email: data.email || null,
-      phone: data.phone || null,
-      role: data.role || 'worker',
-    }
-
-    // Add supervisor fields only if provided (requires DB migration)
-    if (data.rank !== undefined) createData.rank = data.rank
-    if (data.canSupervise !== undefined) createData.canSupervise = data.canSupervise
-
+    // Create team member with basic fields only
+    // New fields (rank, canSupervise) require DB migration to work
     const teamMember = await prisma.teamMember.create({
-      data: createData,
+      data: {
+        name: data.name,
+        email: data.email || null,
+        phone: data.phone || null,
+        role: data.role || 'worker',
+      },
     })
 
     return NextResponse.json(teamMember)
