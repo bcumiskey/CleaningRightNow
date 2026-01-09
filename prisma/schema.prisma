@@ -26,6 +26,10 @@ model Owner {
 
   properties  Property[]
 
+  // Owner-specific items (linens and supplies)
+  linenItems  LinenItem[]
+  supplyItems SupplyItem[]
+
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -64,17 +68,19 @@ model Property {
   accessCode          String?
   accessNotes         String?
 
-  // Bed Configuration (for linen reference)
+  // Bed Configuration (legacy - replaced by Room.beds)
   bedConfig           String?  // e.g., "3 King, 2 Queen, 1 Twin"
 
   // Main property image
   imageUrl            String?
 
   // Relations
+  rooms               Room[]
   jobs                Job[]
   invoices            Invoice[]
   linenRequirements   PropertyLinenRequirement[]
   linenInventory      PropertyLinenInventory[]
+  supplyRequirements  PropertySupplyRequirement[]
   notes               PropertyNote[]
   photos              PropertyPhoto[]
   instructions        PropertyInstruction[]
@@ -82,6 +88,35 @@ model Property {
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+// ============================================================
+// ROOMS (First-class entities within properties)
+// ============================================================
+
+model Room {
+  id          String    @id @default(cuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  name        String    // "Master Bedroom", "Guest Bathroom 1", "Kitchen"
+  type        String    // "bedroom" | "bathroom" | "kitchen" | "living" | "laundry" | "outdoor" | "other"
+  sortOrder   Int       @default(0)
+
+  // For bedrooms - structured bed configuration
+  // JSON: [{ "type": "King", "count": 1 }, { "type": "Queen", "count": 2 }]
+  beds        Json?
+
+  // Relations
+  instructions        PropertyInstruction[]
+  photos              PropertyPhoto[]
+  linenRequirements   PropertyLinenRequirement[]
+  supplyRequirements  PropertySupplyRequirement[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([propertyId, name])
 }
 
 // Property Notes - Timeline of issues/reminders/requests (incident documentation)
@@ -134,7 +169,14 @@ model PropertyInstruction {
   id            String   @id @default(cuid())
   propertyId    String
   property      Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  // Room reference (new structured approach)
+  roomId        String?
+  roomRef       Room?    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Legacy room string (for backwards compatibility during migration)
   room          String   @default("General") // "General", "Kitchen", "Master Bedroom", etc.
+
   instruction   String
   linkedPhotoId String?  // Optional link to a PropertyPhoto
   linkedPhoto   PropertyPhoto? @relation(fields: [linkedPhotoId], references: [id], onDelete: SetNull)
@@ -147,7 +189,14 @@ model PropertyPhoto {
   id          String   @id @default(cuid())
   propertyId  String
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  // Room reference (new structured approach)
+  roomId      String?
+  roomRef     Room?    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Legacy room string (for backwards compatibility during migration)
   room        String   // "Master Bedroom", "Kitchen", etc.
+
   caption     String?  // Brief caption shown in gallery
   notes       String?  // Detailed notes shown when photo is clicked
   url         String
@@ -361,6 +410,11 @@ model LinenItem {
   categoryId  String
   category    LinenCategory @relation(fields: [categoryId], references: [id])
 
+  // Scoping - who can use this item
+  scope       String    @default("global") // "global" | "owner" | "property"
+  ownerId     String?   // Only for owner-scoped items
+  owner       Owner?    @relation(fields: [ownerId], references: [id])
+
   requirements   PropertyLinenRequirement[]
   inventory      PropertyLinenInventory[]
   vendorProducts VendorProduct[]
@@ -374,7 +428,14 @@ model PropertyLinenRequirement {
   id          String    @id @default(cuid())
   propertyId  String
   linenItemId String
+
+  // Room reference (new structured approach)
+  roomId      String?
+  roomRef     Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Legacy room string (for backwards compatibility during migration)
   room        String    @default("General") // Which room needs these linens
+
   perFlip     Int       @default(0)
   unitCost    Float?    // Property-specific cost (can differ from master item)
 
@@ -400,12 +461,13 @@ model PropertyLinenInventory {
 }
 
 model Vendor {
-  id        String          @id @default(cuid())
-  name      String          @unique
-  website   String?
-  notes     String?
-  products  VendorProduct[]
-  createdAt DateTime        @default(now())
+  id              String          @id @default(cuid())
+  name            String          @unique
+  website         String?
+  notes           String?
+  products        VendorProduct[]
+  supplyProducts  SupplyVendorProduct[]
+  createdAt       DateTime        @default(now())
 }
 
 model VendorProduct {
@@ -424,6 +486,80 @@ model VendorProduct {
   updatedAt   DateTime  @updatedAt
 
   @@unique([vendorId, linenItemId])
+}
+
+// ============================================================
+// SUPPLIES (Consumables - cleaning products, toiletries, etc.)
+// ============================================================
+
+model SupplyCategory {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  sortOrder Int           @default(0)
+  items     SupplyItem[]
+}
+
+model SupplyItem {
+  id          String    @id @default(cuid())
+  name        String
+  code        String    @unique
+  unitCost    Float     @default(0)
+  brand       String?   // Brand name (e.g., "Method", "Mrs. Meyer's")
+
+  categoryId  String
+  category    SupplyCategory @relation(fields: [categoryId], references: [id])
+
+  // Scoping - who can use this item
+  scope       String    @default("global") // "global" | "owner" | "property"
+  ownerId     String?   // Only for owner-scoped items
+  owner       Owner?    @relation(fields: [ownerId], references: [id])
+
+  requirements   PropertySupplyRequirement[]
+  vendorProducts SupplyVendorProduct[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Per-property supply requirements
+model PropertySupplyRequirement {
+  id          String    @id @default(cuid())
+  propertyId  String
+  supplyItemId String
+
+  // Room reference (optional - some supplies are property-wide)
+  roomId      String?
+  roomRef     Room?     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  // Legacy room string
+  room        String    @default("General")
+
+  perFlip     Int       @default(0)  // Quantity needed per turnover
+  unitCost    Float?    // Property-specific cost override
+
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  supplyItem  SupplyItem @relation(fields: [supplyItemId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, supplyItemId, room])
+}
+
+// Vendor products for supplies
+model SupplyVendorProduct {
+  id            String    @id @default(cuid())
+  vendorId      String
+  supplyItemId  String
+  productName   String
+  packSize      Int       @default(1)
+  costPerPack   Float
+  link          String?
+  notes         String?
+
+  vendor        Vendor      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  supplyItem    SupplyItem  @relation(fields: [supplyItemId], references: [id], onDelete: Cascade)
+
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([vendorId, supplyItemId])
 }
 
 // ============================================================
