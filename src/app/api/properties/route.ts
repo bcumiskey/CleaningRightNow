@@ -162,6 +162,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Only admins can create properties
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const data = await request.json()
 
     // Validate required fields
@@ -177,6 +183,14 @@ export async function POST(request: NextRequest) {
     const baseRate = parseFloat(data.baseRate)
     if (isNaN(baseRate) || baseRate <= 0) {
       return NextResponse.json({ error: 'Base rate must be a positive number' }, { status: 400 })
+    }
+
+    // Check for duplicate property name
+    const existingProperty = await prisma.property.findUnique({
+      where: { name: data.name.trim() },
+    })
+    if (existingProperty) {
+      return NextResponse.json({ error: 'A property with this name already exists' }, { status: 400 })
     }
 
     const property = await prisma.property.create({
@@ -204,6 +218,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(property)
   } catch (error) {
     console.error('Properties POST error:', error)
+
+    // Handle Prisma unique constraint errors
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      return NextResponse.json({ error: 'A property with this name already exists' }, { status: 400 })
+    }
+
     return NextResponse.json({ error: 'Failed to create property', details: String(error) }, { status: 500 })
   }
 }
