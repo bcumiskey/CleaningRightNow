@@ -48,10 +48,13 @@ export async function GET(request: NextRequest) {
         resolvedById: string | null
         status: string
         createdAt: Date
+        updatedAt: Date
+        type: string
+        title: string | null
         content: string
-        priority: string
+        severity: string | null
+        estimatedCost: number | null
         resolvedAt: Date | null
-        resolutionNotes: string | null
       }
       const notesWithDetails = await Promise.all((notes as Note[]).map(async (note: Note) => {
         let property = null
