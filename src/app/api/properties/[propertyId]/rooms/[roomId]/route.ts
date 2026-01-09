@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 // Room types for validation
@@ -10,6 +12,11 @@ export async function GET(
   { params }: { params: Promise<{ propertyId: string; roomId: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { propertyId, roomId } = await params
 
     const room = await prisma.room.findUnique({
@@ -48,6 +55,16 @@ export async function PATCH(
   { params }: { params: Promise<{ propertyId: string; roomId: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { propertyId, roomId } = await params
     const body = await request.json()
 
@@ -132,6 +149,16 @@ export async function DELETE(
   { params }: { params: Promise<{ propertyId: string; roomId: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { propertyId, roomId } = await params
 
     // Check room exists and belongs to this property

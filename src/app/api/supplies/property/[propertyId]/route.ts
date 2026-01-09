@@ -148,6 +148,16 @@ export async function PUT(
     }
 
     const { propertyId } = await params
+
+    // Verify property exists
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { id: true },
+    })
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+
     const data = await request.json()
 
     if (!Array.isArray(data.supplies)) {
@@ -209,6 +219,16 @@ export async function DELETE(
     }
 
     const { propertyId } = await params
+
+    // Verify property exists
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { id: true },
+    })
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+
     const { searchParams } = new URL(request.url)
     const itemId = searchParams.get('itemId')
     const room = searchParams.get('room') || 'General'

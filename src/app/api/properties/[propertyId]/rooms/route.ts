@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 // Room types for validation
@@ -18,7 +20,21 @@ export async function GET(
   { params }: { params: Promise<{ propertyId: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { propertyId } = await params
+
+    // Verify property exists
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { id: true },
+    })
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
 
     const rooms = await prisma.room.findMany({
       where: { propertyId },
@@ -82,7 +98,27 @@ export async function POST(
   { params }: { params: Promise<{ propertyId: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { role?: string }
+    if (sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const { propertyId } = await params
+
+    // Verify property exists
+    const property = await prisma.property.findUnique({
+      where: { id: propertyId },
+      select: { id: true },
+    })
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
+    }
+
     const body = await request.json()
 
     const { name, type, beds, sortOrder } = body
