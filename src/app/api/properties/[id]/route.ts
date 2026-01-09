@@ -9,8 +9,14 @@ interface PropertyNote {
   addedById: string
   content: string
   status: string
-  priority: string
+  type: string
+  title: string | null
+  severity: string | null
+  estimatedCost: number | null
+  resolvedById: string | null
+  resolvedAt: Date | null
   createdAt: Date
+  updatedAt: Date
 }
 
 interface PropertyPhoto {
