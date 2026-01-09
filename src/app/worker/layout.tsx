@@ -1,20 +1,44 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, Calendar, BookOpen, User, Scan } from 'lucide-react'
+import { Calendar, BookOpen, User, Scan, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/worker', label: 'Today', icon: Home },
+  { href: '/worker', label: 'Schedule', icon: Calendar },
+  { href: '/worker/report', label: 'Report', icon: AlertTriangle },
   { href: '/worker/check-in', label: 'Check In', icon: Scan, highlight: true },
-  { href: '/worker/schedule', label: 'Schedule', icon: Calendar },
   { href: '/worker/reference', label: 'Reference', icon: BookOpen },
   { href: '/worker/account', label: 'Account', icon: User },
 ]
 
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
 export default function WorkerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [workerName, setWorkerName] = useState<string>('')
+
+  useEffect(() => {
+    // Fetch worker info for greeting
+    fetch('/api/worker/me')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.name) {
+          // Get first name only
+          setWorkerName(data.name.split(' ')[0])
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const greeting = getGreeting()
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -22,11 +46,13 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
       <header className="bg-emerald-600 text-white px-4 py-4 sticky top-0 z-10">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-semibold text-lg">Cleaning Right Now</h1>
-            <p className="text-sm text-emerald-100">Worker Portal</p>
+            <h1 className="font-semibold text-lg">
+              {greeting}{workerName ? `, ${workerName}` : ''}
+            </h1>
+            <p className="text-sm text-emerald-100">Cleaning Right Now</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-semibold">
-            W
+          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-semibold text-lg">
+            {workerName ? workerName[0].toUpperCase() : 'W'}
           </div>
         </div>
       </header>
@@ -44,7 +70,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
           const Icon = item.icon
           const isHighlight = 'highlight' in item && item.highlight
 
-          // Special styling for check-in button
+          // Special styling for check-in button (center, raised)
           if (isHighlight) {
             return (
               <Link
