@@ -762,8 +762,11 @@ function AddCategoryModal({ isOpen, onClose, onSave }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    await onSave(name)
-    setIsSaving(false)
+    try {
+      await onSave(name)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -804,8 +807,11 @@ function AddItemModal({ isOpen, onClose, onSave, categoryId, categories }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    await onSave(formData)
-    setIsSaving(false)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (

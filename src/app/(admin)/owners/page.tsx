@@ -329,8 +329,11 @@ function OwnerModal({ isOpen, onClose, onSave, owner }: OwnerModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    await onSave(formData)
-    setIsSaving(false)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (

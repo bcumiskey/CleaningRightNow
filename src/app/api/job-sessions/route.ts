@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         },
         select: { id: true },
       })
-      where.jobId = { in: jobs.map(j => j.id) }
+      where.jobId = { in: jobs.map((j: { id: string }) => j.id) }
     }
 
     const sessions = await prisma.jobSession.findMany({

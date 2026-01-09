@@ -145,15 +145,30 @@ export async function POST(request: NextRequest) {
 
     const data = await request.json()
 
+    // Validate required fields
+    if (!data.name || typeof data.name !== 'string' || data.name.trim().length === 0) {
+      return NextResponse.json({ error: 'Property name is required' }, { status: 400 })
+    }
+    if (!data.address || typeof data.address !== 'string' || data.address.trim().length === 0) {
+      return NextResponse.json({ error: 'Property address is required' }, { status: 400 })
+    }
+    if (!data.ownerName || typeof data.ownerName !== 'string' || data.ownerName.trim().length === 0) {
+      return NextResponse.json({ error: 'Owner name is required' }, { status: 400 })
+    }
+    const baseRate = parseFloat(data.baseRate)
+    if (isNaN(baseRate) || baseRate <= 0) {
+      return NextResponse.json({ error: 'Base rate must be a positive number' }, { status: 400 })
+    }
+
     const property = await prisma.property.create({
       data: {
-        name: data.name,
-        address: data.address,
-        ownerName: data.ownerName,
-        ownerEmail: data.ownerEmail || null,
-        ownerPhone: data.ownerPhone || null,
+        name: data.name.trim(),
+        address: data.address.trim(),
+        ownerName: data.ownerName.trim(),
+        ownerEmail: data.ownerEmail?.trim() || null,
+        ownerPhone: data.ownerPhone?.trim() || null,
         ownerId: data.ownerId || null,
-        baseRate: parseFloat(data.baseRate),
+        baseRate: baseRate,
         expensePercent: data.expensePercent ? parseFloat(data.expensePercent) : 12,
         billingType: data.billingType || 'per_job',
         billingFrequency: data.billingFrequency || 'per_job',

@@ -67,6 +67,19 @@ export async function PUT(
     const { id } = await params
     const data = await request.json()
 
+    // Check for duplicate email if email is provided and changed
+    if (data.email) {
+      const existing = await prisma.teamMember.findFirst({
+        where: {
+          email: data.email,
+          NOT: { id: id },
+        },
+      })
+      if (existing) {
+        return NextResponse.json({ error: 'A team member with this email already exists' }, { status: 400 })
+      }
+    }
+
     // Build update data - only include fields that were provided
     const updateData: Record<string, unknown> = {
       name: data.name,

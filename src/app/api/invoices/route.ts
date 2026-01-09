@@ -112,20 +112,34 @@ export async function POST(request: NextRequest) {
     // If additional line items provided (preset items, custom items)
     if (data.lineItems && Array.isArray(data.lineItems)) {
       const startOrder = lineItemsToCreate.length
-      data.lineItems.forEach((item: { date?: string; description: string; amount: number; itemType?: string }, index: number) => {
+      for (let i = 0; i < data.lineItems.length; i++) {
+        const item = data.lineItems[i] as { date?: string; description: string; amount: number; itemType?: string }
+        if (!item.description || typeof item.description !== 'string' || item.description.trim().length === 0) {
+          return NextResponse.json({ error: `Line item ${i + 1}: Description is required` }, { status: 400 })
+        }
+        const amount = parseFloat(String(item.amount))
+        if (isNaN(amount)) {
+          return NextResponse.json({ error: `Line item ${i + 1}: Invalid amount "${item.amount}"` }, { status: 400 })
+        }
         lineItemsToCreate.push({
           date: item.date ? new Date(item.date) : null,
-          description: item.description,
-          amount: parseFloat(String(item.amount)) || 0,
+          description: item.description.trim(),
+          amount: amount,
           itemType: item.itemType || 'service',
           jobId: null,
-          sortOrder: startOrder + index + 1,
+          sortOrder: startOrder + i + 1,
         })
-        subtotal += parseFloat(String(item.amount)) || 0
-      })
+        subtotal += amount
+      }
     }
 
-    const discount = parseFloat(data.discount) || 0
+    let discount = 0
+    if (data.discount !== undefined && data.discount !== null && data.discount !== '') {
+      discount = parseFloat(String(data.discount))
+      if (isNaN(discount) || discount < 0) {
+        return NextResponse.json({ error: 'Discount must be a non-negative number' }, { status: 400 })
+      }
+    }
     const total = subtotal - discount
 
     // Create invoice with line items in transaction

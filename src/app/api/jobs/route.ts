@@ -16,8 +16,14 @@ export async function GET(request: NextRequest) {
 
     let whereClause = {}
     if (month && year) {
-      const startDate = new Date(parseInt(year), parseInt(month) - 1, 1)
-      const endDate = new Date(parseInt(year), parseInt(month), 0, 23, 59, 59)
+      const monthNum = parseInt(month)
+      const yearNum = parseInt(year)
+      // Validate month and year ranges
+      if (isNaN(monthNum) || monthNum < 1 || monthNum > 12 || isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+        return NextResponse.json({ error: 'Invalid month or year' }, { status: 400 })
+      }
+      const startDate = new Date(yearNum, monthNum - 1, 1)
+      const endDate = new Date(yearNum, monthNum, 0, 23, 59, 59)
       whereClause = {
         date: { gte: startDate, lte: endDate },
       }
@@ -54,6 +60,21 @@ export async function POST(request: NextRequest) {
 
     const data = await request.json()
 
+    // Validate required fields
+    if (!data.propertyId) {
+      return NextResponse.json({ error: 'Property is required' }, { status: 400 })
+    }
+    if (!data.date) {
+      return NextResponse.json({ error: 'Date is required' }, { status: 400 })
+    }
+    const jobDate = new Date(data.date)
+    if (isNaN(jobDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid date format' }, { status: 400 })
+    }
+    if (data.rate !== undefined && (isNaN(parseFloat(data.rate)) || parseFloat(data.rate) < 0)) {
+      return NextResponse.json({ error: 'Rate must be a non-negative number' }, { status: 400 })
+    }
+
     // Get property for rate if not provided
     const property = await prisma.property.findUnique({
       where: { id: data.propertyId },
@@ -65,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     const job = await prisma.job.create({
       data: {
-        date: new Date(data.date),
+        date: jobDate,
         time: data.time || null,
         propertyId: data.propertyId,
         rate: data.rate || property.baseRate,

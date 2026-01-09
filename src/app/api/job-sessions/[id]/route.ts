@@ -121,7 +121,7 @@ export async function PATCH(
         select: { isAbsent: true },
       })
       const totalSessions = memberSessions.length
-      const absentSessions = memberSessions.filter(s => s.isAbsent).length
+      const absentSessions = memberSessions.filter((s: { isAbsent: boolean | null }) => s.isAbsent).length
       const reliabilityScore = totalSessions > 0
         ? ((totalSessions - absentSessions) / totalSessions) * 100
         : 100

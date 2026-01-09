@@ -842,8 +842,11 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    await onSave(formData)
-    setIsSaving(false)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const toggleTeamMember = (id: string) => {
@@ -997,8 +1000,11 @@ function ScheduleModal({ isOpen, onClose, onSave, schedule, properties }: Schedu
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
-    await onSave(formData)
-    setIsSaving(false)
+    try {
+      await onSave(formData)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const selectedProperty = properties.find(p => p.id === formData.propertyId)
