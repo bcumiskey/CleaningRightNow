@@ -58,7 +58,8 @@ export const authOptions: NextAuthOptions = {
           id: worker.id,
           email: worker.email,
           name: worker.name,
-          role: worker.role, // Use actual role from database (admin or worker)
+          role: worker.role || 'worker',
+          teamMemberId: worker.id, // Always set for TeamMember logins
         }
       },
     }),
@@ -68,9 +69,10 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.role = (user as { role?: string }).role
-        // For workers, also store teamMemberId (same as id for workers)
-        if ((user as { role?: string }).role === 'worker') {
-          token.teamMemberId = user.id
+        // Store teamMemberId if provided (for TeamMember logins)
+        const userWithTeamMemberId = user as { teamMemberId?: string }
+        if (userWithTeamMemberId.teamMemberId) {
+          token.teamMemberId = userWithTeamMemberId.teamMemberId
         }
       }
       return token
@@ -80,7 +82,7 @@ export const authOptions: NextAuthOptions = {
         const tokenData = token as { id?: string; role?: string; teamMemberId?: string }
         ;(session.user as { id?: string }).id = tokenData.id
         ;(session.user as { role?: string }).role = tokenData.role
-        // Include teamMemberId for workers
+        // Include teamMemberId if present
         if (tokenData.teamMemberId) {
           ;(session.user as { teamMemberId?: string }).teamMemberId = tokenData.teamMemberId
         }
