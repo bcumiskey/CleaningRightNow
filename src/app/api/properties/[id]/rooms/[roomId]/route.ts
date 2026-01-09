@@ -6,10 +6,10 @@ import { prisma } from '@/lib/prisma'
 // Room types for validation
 const ROOM_TYPES = ['bedroom', 'bathroom', 'kitchen', 'living', 'laundry', 'outdoor', 'other'] as const
 
-// GET /api/properties/[propertyId]/rooms/[roomId] - Get a single room with details
+// GET /api/properties/[id]/rooms/[roomId] - Get a single room with details
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ propertyId: string; roomId: string }> }
+  { params }: { params: Promise<{ id: string; roomId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -17,7 +17,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { propertyId, roomId } = await params
+    const { id: propertyId, roomId } = await params
 
     const room = await prisma.room.findUnique({
       where: { id: roomId },
@@ -49,10 +49,10 @@ export async function GET(
   }
 }
 
-// PATCH /api/properties/[propertyId]/rooms/[roomId] - Update a room
+// PATCH /api/properties/[id]/rooms/[roomId] - Update a room
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ propertyId: string; roomId: string }> }
+  { params }: { params: Promise<{ id: string; roomId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -65,7 +65,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { propertyId, roomId } = await params
+    const { id: propertyId, roomId } = await params
     const body = await request.json()
 
     const { name, type, beds, sortOrder } = body
@@ -143,10 +143,10 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/properties/[propertyId]/rooms/[roomId] - Delete a room
+// DELETE /api/properties/[id]/rooms/[roomId] - Delete a room
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ propertyId: string; roomId: string }> }
+  { params }: { params: Promise<{ id: string; roomId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -159,7 +159,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { propertyId, roomId } = await params
+    const { id: propertyId, roomId } = await params
 
     // Check room exists and belongs to this property
     const existingRoom = await prisma.room.findUnique({

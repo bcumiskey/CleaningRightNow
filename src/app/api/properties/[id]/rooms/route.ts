@@ -14,10 +14,10 @@ interface BedConfig {
   count: number
 }
 
-// GET /api/properties/[propertyId]/rooms - List all rooms for a property
+// GET /api/properties/[id]/rooms - List all rooms for a property
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ propertyId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -25,7 +25,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { propertyId } = await params
+    const { id: propertyId } = await params
 
     // Verify property exists
     const property = await prisma.property.findUnique({
@@ -92,10 +92,10 @@ export async function GET(
   }
 }
 
-// POST /api/properties/[propertyId]/rooms - Create a new room
+// POST /api/properties/[id]/rooms - Create a new room
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ propertyId: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -108,7 +108,7 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { propertyId } = await params
+    const { id: propertyId } = await params
 
     // Verify property exists
     const property = await prisma.property.findUnique({
