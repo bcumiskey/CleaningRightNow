@@ -119,8 +119,6 @@ export async function GET(request: NextRequest) {
           billingFrequency: string
           monthlyBillingDay: number | null
           autoSendInvoice: boolean
-          calendarSource: string | null
-          icalUrl: string | null
           accessCode: string | null
           accessNotes: string | null
           bedConfig: string | null

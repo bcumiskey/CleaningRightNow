@@ -57,10 +57,6 @@ model Property {
   monthlyBillingDay   Int?     // 1, 15, or 31
   autoSendInvoice     Boolean  @default(false)
 
-  // Calendar Integration (deprecated - now managed via Calendar Sources)
-  calendarSource      String?  // "turno" | "google" | "manual" (legacy)
-  icalUrl             String?  // (legacy)
-
   // Keywords for matching calendar events to this property
   keywords            String?  // Comma-separated keywords, e.g., "beach house, smith rental"
 
