@@ -243,6 +243,6 @@ export async function POST(request: NextRequest) {
     }
 
     const errorMessage = error instanceof Error ? error.message : String(error)
-    return NextResponse.json({ error: 'Failed to create property', details: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: `Failed to create property: ${errorMessage}` }, { status: 500 })
   }
 }
