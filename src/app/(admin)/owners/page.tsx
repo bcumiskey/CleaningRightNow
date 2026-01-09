@@ -141,28 +141,31 @@ function OwnersPageContent() {
 
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {owners.filter(o => o.isActive).length} Active Owners
-            </h3>
-            <p className="text-sm text-gray-500">
-              Managing {totalProperties} properties
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
+          <div className="flex items-center gap-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {owners.filter(o => o.isActive).length} Active Owners
+              </h3>
+              <p className="text-sm text-gray-500">
+                Managing {totalProperties} properties
+              </p>
+            </div>
+            <button
               onClick={() => setShowInactive(!showInactive)}
-              className={showInactive ? 'bg-gray-100' : ''}
+              className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${
+                showInactive
+                  ? 'bg-gray-200 text-gray-700'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
             >
               {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
               {showInactive ? 'Hide Inactive' : 'Show Inactive'}
-            </Button>
-            <Button onClick={handleAdd}>
-              <Plus size={16} />
-              Add Owner
-            </Button>
+            </button>
           </div>
+          <Button onClick={handleAdd}>
+            <Plus size={16} />
+            Add Owner
+          </Button>
         </div>
 
         {isLoading ? (
@@ -198,12 +201,14 @@ function OwnersPageContent() {
                         <Users className={owner.isActive ? 'text-blue-600' : 'text-gray-400'} size={20} />
                       </div>
                       <div>
-                        <h4 className={`font-semibold ${owner.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
-                          {owner.name}
-                        </h4>
-                        {!owner.isActive && (
-                          <Badge variant="default" className="mt-1">Inactive</Badge>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <h4 className={`font-semibold ${owner.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                            {owner.name}
+                          </h4>
+                          {!owner.isActive && (
+                            <Badge variant="default">Inactive</Badge>
+                          )}
+                        </div>
                         {owner.isActive && (
                           <Badge variant="info" className="mt-1">
                             {owner._count.properties} {owner._count.properties === 1 ? 'property' : 'properties'}

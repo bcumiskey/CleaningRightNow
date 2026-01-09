@@ -87,23 +87,26 @@ export default function PropertiesPage() {
 
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {properties.filter(p => p.isActive).length} Active Properties
-          </h3>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
+          <div className="flex items-center gap-4">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {properties.filter(p => p.isActive).length} Active Properties
+            </h3>
+            <button
               onClick={() => setShowInactive(!showInactive)}
-              className={showInactive ? 'bg-gray-100' : ''}
+              className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${
+                showInactive
+                  ? 'bg-gray-200 text-gray-700'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
             >
               {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
               {showInactive ? 'Hide Inactive' : 'Show Inactive'}
-            </Button>
-            <Button onClick={handleAdd}>
-              <Plus size={16} />
-              Add Property
-            </Button>
+            </button>
           </div>
+          <Button onClick={handleAdd}>
+            <Plus size={16} />
+            Add Property
+          </Button>
         </div>
 
         {isLoading ? (
@@ -145,12 +148,14 @@ export default function PropertiesPage() {
                 <CardContent className={property.imageUrl ? 'pt-4' : ''}>
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <h4 className={`font-semibold ${property.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
-                        {property.name}
-                      </h4>
-                      {!property.isActive && (
-                        <Badge variant="default" className="mt-1">Inactive</Badge>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <h4 className={`font-semibold ${property.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                          {property.name}
+                        </h4>
+                        {!property.isActive && (
+                          <Badge variant="default">Inactive</Badge>
+                        )}
+                      </div>
                       <div className="flex items-center gap-1 text-sm text-gray-500 mt-1">
                         <MapPin size={14} />
                         {property.address}
