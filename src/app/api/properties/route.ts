@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       let owners: Record<string, { id: string; name: string; email: string | null; phone: string | null; defaultBaseRate: number | null; defaultBillingType: string | null }> = {}
       try {
         const ownerList = await prisma.owner.findMany()
-        owners = Object.fromEntries(ownerList.map(o => [o.id, o]))
+        owners = Object.fromEntries(ownerList.map((o: { id: string; name: string; email: string | null; phone: string | null; defaultBaseRate: number | null; defaultBillingType: string | null }) => [o.id, o]))
         debugInfo.push(`Owners: ${ownerList.length}`)
       } catch (e) {
         debugInfo.push(`Owners failed: ${e}`)
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
           where: { status: 'active' },
           _count: { id: true },
         })
-        noteCounts = Object.fromEntries(notes.map(n => [n.propertyId, n._count.id]))
+        noteCounts = Object.fromEntries(notes.map((n: { propertyId: string; _count: { id: number } }) => [n.propertyId, n._count.id]))
         debugInfo.push(`Notes count groups: ${notes.length}`)
       } catch (e) {
         debugInfo.push(`Notes failed: ${e}`)
@@ -55,14 +55,33 @@ export async function GET(request: NextRequest) {
           by: ['propertyId'],
           _count: { id: true },
         })
-        jobCounts = Object.fromEntries(jobs.map(j => [j.propertyId, j._count.id]))
+        jobCounts = Object.fromEntries(jobs.map((j: { propertyId: string; _count: { id: number } }) => [j.propertyId, j._count.id]))
         debugInfo.push(`Jobs count groups: ${jobs.length}`)
       } catch (e) {
         debugInfo.push(`Jobs failed: ${e}`)
       }
 
       // Combine results
-      const result = properties.map(property => ({
+      interface PropertyRecord {
+        id: string
+        name: string
+        address: string
+        ownerId: string | null
+        ownerName: string
+        ownerEmail: string | null
+        ownerPhone: string | null
+        baseRate: number
+        expensePercent: number | null
+        billingType: string | null
+        billingFrequency: string | null
+        monthlyBillingDay: number | null
+        autoSendInvoice: boolean | null
+        accessCode: string | null
+        accessNotes: string | null
+        bedConfig: string | null
+        createdAt: Date
+      }
+      const result = (properties as PropertyRecord[]).map((property: PropertyRecord) => ({
         ...property,
         owner: property.ownerId ? owners[property.ownerId] || null : null,
         notes: Array(noteCounts[property.id] || 0).fill({ id: 'placeholder' }).slice(0, noteCounts[property.id] || 0),

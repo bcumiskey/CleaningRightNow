@@ -3,6 +3,24 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
+interface JobWithProperty {
+  id: string
+  date: Date
+  rate: number
+  completed: boolean
+  clientPaid: boolean
+  property: { name: string }
+}
+
+interface InvoiceWithProperty {
+  id: string
+  invoiceNumber: string
+  invoiceDate: Date
+  total: number
+  status: string
+  property: { name: string }
+}
+
 // Get owner statistics - revenue, jobs, invoices
 export async function GET(
   request: NextRequest,
@@ -30,7 +48,7 @@ export async function GET(
       return NextResponse.json({ error: 'Owner not found' }, { status: 404 })
     }
 
-    const propertyIds = owner.properties.map(p => p.id)
+    const propertyIds = owner.properties.map((p: { id: string }) => p.id)
 
     if (propertyIds.length === 0) {
       return NextResponse.json({
@@ -58,8 +76,9 @@ export async function GET(
       orderBy: { date: 'desc' },
     })
 
-    const completedJobs = jobs.filter(j => j.completed)
-    const pendingJobs = jobs.filter(j => !j.completed)
+    const typedJobs = jobs as JobWithProperty[]
+    const completedJobs = typedJobs.filter((j: JobWithProperty) => j.completed)
+    const pendingJobs = typedJobs.filter((j: JobWithProperty) => !j.completed)
 
     // Get invoice stats
     const invoices = await prisma.invoice.findMany({
@@ -70,26 +89,27 @@ export async function GET(
       orderBy: { invoiceDate: 'desc' },
     })
 
-    const paidInvoices = invoices.filter(i => i.status === 'paid')
-    const sentInvoices = invoices.filter(i => i.status === 'sent')
-    const draftInvoices = invoices.filter(i => i.status === 'draft')
+    const typedInvoices = invoices as InvoiceWithProperty[]
+    const paidInvoices = typedInvoices.filter((i: InvoiceWithProperty) => i.status === 'paid')
+    const sentInvoices = typedInvoices.filter((i: InvoiceWithProperty) => i.status === 'sent')
+    const draftInvoices = typedInvoices.filter((i: InvoiceWithProperty) => i.status === 'draft')
 
-    const totalRevenue = invoices.reduce((sum, inv) => sum + inv.total, 0)
-    const paidRevenue = paidInvoices.reduce((sum, inv) => sum + inv.total, 0)
-    const unpaidRevenue = sentInvoices.reduce((sum, inv) => sum + inv.total, 0)
+    const totalRevenue = typedInvoices.reduce((sum: number, inv: InvoiceWithProperty) => sum + inv.total, 0)
+    const paidRevenue = paidInvoices.reduce((sum: number, inv: InvoiceWithProperty) => sum + inv.total, 0)
+    const unpaidRevenue = sentInvoices.reduce((sum: number, inv: InvoiceWithProperty) => sum + inv.total, 0)
 
     return NextResponse.json({
       totalRevenue,
       paidRevenue,
       unpaidRevenue,
-      totalJobs: jobs.length,
+      totalJobs: typedJobs.length,
       completedJobs: completedJobs.length,
       pendingJobs: pendingJobs.length,
-      totalInvoices: invoices.length,
+      totalInvoices: typedInvoices.length,
       paidInvoices: paidInvoices.length,
       unpaidInvoices: sentInvoices.length,
       draftInvoices: draftInvoices.length,
-      recentJobs: jobs.slice(0, 5).map(j => ({
+      recentJobs: typedJobs.slice(0, 5).map((j: JobWithProperty) => ({
         id: j.id,
         date: j.date,
         propertyName: j.property.name,
@@ -97,7 +117,7 @@ export async function GET(
         completed: j.completed,
         clientPaid: j.clientPaid,
       })),
-      recentInvoices: invoices.slice(0, 5).map(i => ({
+      recentInvoices: typedInvoices.slice(0, 5).map((i: InvoiceWithProperty) => ({
         id: i.id,
         invoiceNumber: i.invoiceNumber,
         invoiceDate: i.invoiceDate,
