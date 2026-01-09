@@ -19,7 +19,22 @@ export async function GET(request: NextRequest) {
     })
 
     // Add hasPassword indicator without exposing password
-    const membersWithPasswordStatus = teamMembers.map((member: { id: string; name: string; email: string | null; phone: string | null; role: string; isActive: boolean; password: string | null }) => ({
+    interface TeamMemberFromDb {
+      id: string
+      name: string
+      email: string | null
+      phone: string | null
+      role: string
+      isActive: boolean
+      password: string | null
+      rank?: number
+      canSupervise?: boolean
+      avgRating?: number | null
+      totalRatings?: number
+      reliabilityScore?: number | null
+    }
+
+    const membersWithPasswordStatus = teamMembers.map((member: TeamMemberFromDb) => ({
       id: member.id,
       name: member.name,
       email: member.email,
@@ -27,6 +42,13 @@ export async function GET(request: NextRequest) {
       role: member.role,
       isActive: member.isActive,
       hasPassword: !!member.password,
+      // Supervisor fields
+      rank: member.rank ?? 50,
+      canSupervise: member.canSupervise ?? false,
+      // Performance metrics
+      avgRating: member.avgRating ?? null,
+      totalRatings: member.totalRatings ?? 0,
+      reliabilityScore: member.reliabilityScore ?? null,
     }))
 
     return NextResponse.json(membersWithPasswordStatus)
@@ -74,6 +96,8 @@ export async function POST(request: NextRequest) {
         email: data.email || null,
         phone: data.phone || null,
         role: data.role || 'worker',
+        rank: data.rank || 50,
+        canSupervise: data.canSupervise || false,
       },
     })
 

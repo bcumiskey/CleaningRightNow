@@ -175,12 +175,27 @@ model TeamMember {
   role        String    @default("worker") // "admin" | "worker"
   isActive    Boolean   @default(true)
 
+  // Hierarchy & Supervision
+  rank        Int       @default(50)  // 1-100, higher = more senior. Admin owner should be 100
+  canSupervise Boolean  @default(false) // Can this person supervise jobs?
+
+  // Performance Metrics (calculated from ratings)
+  avgRating       Float?   // Average performance rating (1-5)
+  totalRatings    Int      @default(0) // Number of ratings received
+  reliabilityScore Float?  // Attendance reliability (0-100)
+
   // Relations
   jobAssignments    JobAssignment[]
   notesAdded        PropertyNote[]      @relation("AddedNotes")
   notesResolved     PropertyNote[]      @relation("ResolvedNotes")
   photosAdded       PropertyPhoto[]
   pushSubscriptions PushSubscription[]
+
+  // Job sessions (check-ins)
+  jobSessions       JobSession[]
+  supervisedSessions JobSession[]      @relation("SupervisedBy")
+  ratingsGiven      PerformanceRating[] @relation("RatedBy")
+  ratingsReceived   PerformanceRating[] @relation("RatedMember")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -216,6 +231,7 @@ model Job {
   // Relations
   assignments     JobAssignment[]
   invoiceItems    InvoiceLineItem[]
+  sessions        JobSession[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -488,4 +504,99 @@ model CalendarSource {
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+// ============================================================
+// JOB SESSIONS (Check-in/out tracking)
+// ============================================================
+
+model JobSession {
+  id              String    @id @default(cuid())
+  jobId           String
+  job             Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  teamMemberId    String
+  teamMember      TeamMember @relation(fields: [teamMemberId], references: [id])
+
+  // Check-in/out times
+  checkedInAt     DateTime?
+  checkedOutAt    DateTime?
+  checkInMethod   String?   // "nfc" | "qr" | "manual"
+  checkInLocation String?   // Lat,Long if available
+
+  // Status
+  status          String    @default("assigned") // "assigned" | "checked_in" | "completed" | "absent" | "late"
+  isAbsent        Boolean   @default(false)
+  absentReason    String?
+  markedAbsentAt  DateTime?
+  markedAbsentBy  String?   // TeamMember ID who marked them absent
+
+  // Fill-in bonus for last-minute replacements
+  isLastMinuteFillIn Boolean @default(false)
+  fillInBonus        Float?  // Extra payment for stepping in
+
+  // Supervisor for this session (highest ranked present team member)
+  supervisorId    String?
+  supervisor      TeamMember? @relation("SupervisedBy", fields: [supervisorId], references: [id])
+
+  // Completion notes
+  notes           String?   // Condition notes at completion
+  completionPhotos String?  // JSON array of photo URLs
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Performance rating for this session
+  rating          PerformanceRating?
+
+  @@unique([jobId, teamMemberId])
+}
+
+// ============================================================
+// PERFORMANCE RATINGS
+// ============================================================
+
+model PerformanceRating {
+  id              String    @id @default(cuid())
+
+  // The session being rated
+  sessionId       String    @unique
+  session         JobSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Who was rated
+  teamMemberId    String
+  teamMember      TeamMember @relation("RatedMember", fields: [teamMemberId], references: [id])
+
+  // Who gave the rating (supervisor)
+  ratedById       String
+  ratedBy         TeamMember @relation("RatedBy", fields: [ratedById], references: [id])
+
+  // Ratings (1-5 scale)
+  qualityRating   Int       // Quality of work
+  speedRating     Int       // Speed/efficiency
+  attitudeRating  Int       // Professionalism/attitude
+  overallRating   Float     // Calculated average
+
+  // Optional feedback
+  feedback        String?
+
+  createdAt       DateTime  @default(now())
+}
+
+// ============================================================
+// PROPERTY CHECK-IN TOKENS (NFC/QR)
+// ============================================================
+
+model PropertyCheckInToken {
+  id          String    @id @default(cuid())
+  propertyId  String
+  token       String    @unique  // UUID for the check-in token
+  isActive    Boolean   @default(true)
+
+  // Token can expire and be rotated for security
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
