@@ -378,50 +378,68 @@ export default function WorkerPropertyDetailPage() {
               const roomPhotos = photosByRoom[room] || []
               const roomLinens = linensByRoom[room] || []
 
+              // Get photo IDs that are linked to instructions (to avoid showing them twice)
+              const linkedPhotoIds = new Set(
+                roomInstructions
+                  .filter((inst) => inst.linkedPhotoId)
+                  .map((inst) => inst.linkedPhotoId)
+              )
+
+              // Photos not linked to any instruction
+              const standalonePhotos = roomPhotos.filter((photo) => !linkedPhotoIds.has(photo.id))
+
               return (
                 <Card key={room}>
                   <CardHeader className="py-3 bg-gray-50">
                     <CardTitle className="text-base">{room}</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Instructions */}
+                    {/* Instructions with inline photos */}
                     {roomInstructions.length > 0 && (
-                      <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                          <ListChecks size={14} className="text-emerald-600" />
-                          Instructions
-                        </h5>
-                        <ul className="space-y-2 pl-1">
-                          {roomInstructions.map((inst, idx) => (
-                            <li key={inst.id} className="flex items-start gap-2">
-                              <span className="text-emerald-600 font-medium text-sm">{idx + 1}.</span>
-                              <div className="flex-1">
-                                <p className="text-sm text-gray-700">{inst.instruction}</p>
-                                {inst.linkedPhoto && (
-                                  <button
-                                    onClick={() => setSelectedPhoto(inst.linkedPhoto)}
-                                    className="mt-1 text-xs text-blue-600 flex items-center gap-1 hover:underline"
-                                  >
-                                    <Camera size={12} />
-                                    View photo
-                                  </button>
+                      <div className="space-y-3">
+                        {roomInstructions.map((inst, idx) => (
+                          <div key={inst.id} className="border-l-2 border-emerald-400 pl-3">
+                            <div className="flex items-start gap-2">
+                              <span className="bg-emerald-100 text-emerald-700 font-bold text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                                {idx + 1}
+                              </span>
+                              <p className="text-sm text-gray-700 flex-1">{inst.instruction}</p>
+                            </div>
+                            {inst.linkedPhoto && (
+                              <button
+                                onClick={() => setSelectedPhoto(inst.linkedPhoto)}
+                                className="mt-2 ml-7 relative rounded-lg overflow-hidden border-2 border-blue-200 hover:border-blue-400 transition-all"
+                              >
+                                <div className="relative h-24 w-32">
+                                  <Image
+                                    src={inst.linkedPhoto.url}
+                                    alt={inst.linkedPhoto.caption || 'Reference'}
+                                    fill
+                                    className="object-cover"
+                                  />
+                                </div>
+                                {inst.linkedPhoto.notes && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-xs py-0.5 text-center">
+                                    <Info size={10} className="inline mr-1" />
+                                    Tap for details
+                                  </div>
                                 )}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                              </button>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
 
-                    {/* Photos */}
-                    {roomPhotos.length > 0 && (
+                    {/* Additional reference photos (not linked to instructions) */}
+                    {standalonePhotos.length > 0 && (
                       <div>
                         <h5 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
-                          <Camera size={14} className="text-blue-600" />
-                          Reference Photos
+                          <ImageIcon size={14} className="text-blue-600" />
+                          Additional Photos
                         </h5>
                         <div className="grid grid-cols-3 gap-2">
-                          {roomPhotos.map((photo) => (
+                          {standalonePhotos.map((photo) => (
                             <button
                               key={photo.id}
                               onClick={() => setSelectedPhoto(photo)}
@@ -474,7 +492,7 @@ export default function WorkerPropertyDetailPage() {
                     )}
 
                     {/* Empty room */}
-                    {roomInstructions.length === 0 && roomPhotos.length === 0 && roomLinens.length === 0 && (
+                    {roomInstructions.length === 0 && standalonePhotos.length === 0 && roomLinens.length === 0 && (
                       <p className="text-sm text-gray-500 text-center py-2">
                         No specific instructions for this room
                       </p>
