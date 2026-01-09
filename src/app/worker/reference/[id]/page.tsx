@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronRight,
   Image as ImageIcon,
+  Navigation,
 } from 'lucide-react'
 import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -275,9 +276,37 @@ export default function WorkerPropertyDetailPage() {
         >
           <ArrowLeft size={24} />
         </button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold">{property.name}</h1>
-          <p className="text-sm text-gray-500">{property.address}</p>
+          <a
+            href={`https://maps.google.com/maps?q=${encodeURIComponent(property.address)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            onClick={(e) => {
+              e.preventDefault()
+              // Try to use native navigation on mobile
+              const address = encodeURIComponent(property.address)
+              // Check if on iOS
+              const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+              // Check if on Android
+              const isAndroid = /Android/.test(navigator.userAgent)
+
+              if (isIOS) {
+                // Apple Maps with fallback to Google Maps
+                window.location.href = `maps://maps.google.com/maps?daddr=${address}`
+              } else if (isAndroid) {
+                // Google Maps intent for Android
+                window.location.href = `geo:0,0?q=${address}`
+              } else {
+                // Desktop - open Google Maps in new tab
+                window.open(`https://maps.google.com/maps?q=${address}`, '_blank')
+              }
+            }}
+          >
+            <Navigation size={14} />
+            {property.address}
+          </a>
         </div>
       </div>
 
