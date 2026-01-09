@@ -32,11 +32,19 @@ export const authOptions: NextAuthOptions = {
           if (!isValid) {
             return null
           }
+
+          // For User table logins (admins), also check if they have a matching TeamMember
+          // This allows admins to also see their own worker earnings/data
+          const matchingTeamMember = await prisma.teamMember.findUnique({
+            where: { email: credentials.email },
+          })
+
           return {
             id: user.id,
             email: user.email,
             name: user.name,
             role: 'admin',
+            teamMemberId: matchingTeamMember?.id, // Include if they also have a TeamMember record
           }
         }
 
