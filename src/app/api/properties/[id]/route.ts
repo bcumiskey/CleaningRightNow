@@ -188,12 +188,11 @@ export async function PATCH(
       billingFrequency?: string
       monthlyBillingDay?: number | null
       autoSendInvoice?: boolean
-      calendarSource?: string | null
-      icalUrl?: string | null
       accessCode?: string | null
       accessNotes?: string | null
       bedConfig?: string | null
       imageUrl?: string | null
+      keywords?: string | null
     }
     const updateData: UpdateData = {}
 
@@ -211,12 +210,11 @@ export async function PATCH(
       updateData.monthlyBillingDay = data.monthlyBillingDay ? parseInt(data.monthlyBillingDay) : null
     }
     if (data.autoSendInvoice !== undefined) updateData.autoSendInvoice = data.autoSendInvoice
-    if (data.calendarSource !== undefined) updateData.calendarSource = data.calendarSource || null
-    if (data.icalUrl !== undefined) updateData.icalUrl = data.icalUrl || null
     if (data.accessCode !== undefined) updateData.accessCode = data.accessCode || null
     if (data.accessNotes !== undefined) updateData.accessNotes = data.accessNotes || null
     if (data.bedConfig !== undefined) updateData.bedConfig = data.bedConfig || null
     if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl || null
+    if (data.keywords !== undefined) updateData.keywords = data.keywords || null
 
     const property = await prisma.property.update({
       where: { id },

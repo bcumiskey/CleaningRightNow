@@ -159,12 +159,11 @@ export async function POST(request: NextRequest) {
         billingFrequency: data.billingFrequency || 'per_job',
         monthlyBillingDay: data.monthlyBillingDay ? parseInt(data.monthlyBillingDay) : null,
         autoSendInvoice: data.autoSendInvoice || false,
-        calendarSource: data.calendarSource || null,
-        icalUrl: data.icalUrl || null,
         accessCode: data.accessCode || null,
         accessNotes: data.accessNotes || null,
         bedConfig: data.bedConfig || null,
         imageUrl: data.imageUrl || null,
+        keywords: data.keywords || null,
       },
     })
 
