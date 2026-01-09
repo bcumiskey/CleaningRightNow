@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Printer, Download } from 'lucide-react'
+import { ArrowLeft, Printer } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import PayStatementTemplate from '@/components/documents/PayStatementTemplate'
 import { format, startOfMonth, endOfMonth, parse } from 'date-fns'
+import toast from 'react-hot-toast'
 
 interface Earning {
   id: string
@@ -61,11 +62,7 @@ function PayStatementContent() {
     ? parse(monthParam, 'yyyy-MM', new Date())
     : new Date()
 
-  useEffect(() => {
-    loadData()
-  }, [monthParam])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
       const start = startOfMonth(currentMonth)
@@ -79,6 +76,8 @@ function PayStatementContent() {
       if (earningsRes.ok) {
         const data = await earningsRes.json()
         setEarningsData(data)
+      } else {
+        toast.error('Failed to load pay statement')
       }
 
       if (settingsRes.ok) {
@@ -87,10 +86,15 @@ function PayStatementContent() {
       }
     } catch (error) {
       console.error('Failed to load data:', error)
+      toast.error('Failed to load pay statement')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [currentMonth])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
   const handlePrint = () => {
     window.print()

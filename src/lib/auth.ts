@@ -68,14 +68,22 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id
         token.role = (user as { role?: string }).role
+        // For workers, also store teamMemberId (same as id for workers)
+        if ((user as { role?: string }).role === 'worker') {
+          token.teamMemberId = user.id
+        }
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
-        const tokenData = token as { id?: string; role?: string }
+        const tokenData = token as { id?: string; role?: string; teamMemberId?: string }
         ;(session.user as { id?: string }).id = tokenData.id
         ;(session.user as { role?: string }).role = tokenData.role
+        // Include teamMemberId for workers
+        if (tokenData.teamMemberId) {
+          ;(session.user as { teamMemberId?: string }).teamMemberId = tokenData.teamMemberId
+        }
       }
       return session
     },
