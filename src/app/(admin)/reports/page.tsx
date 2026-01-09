@@ -147,7 +147,7 @@ export default function ReportsPage() {
 
       <div className="p-6 space-y-6">
         {/* Period Selector */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Business Overview</h2>
             {data && (
@@ -169,7 +169,7 @@ export default function ReportsPage() {
         ) : data ? (
           <>
             {/* Key Metrics */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
@@ -242,7 +242,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Second Row Metrics */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="p-4">
                   <div className="p-2 bg-emerald-100 rounded-lg w-fit">
@@ -285,7 +285,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Charts Row */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Revenue Trend Chart */}
               <Card>
                 <CardHeader>
@@ -392,7 +392,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Tables Row */}
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Top Properties */}
               <Card>
                 <CardHeader>
@@ -526,7 +526,7 @@ export default function ReportsPage() {
             </div>
 
             {/* Recent Activity */}
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Recent Jobs */}
               <Card>
                 <CardHeader>
@@ -645,7 +645,7 @@ export default function ReportsPage() {
                 <CardTitle>Business Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
                   <div className="text-center">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
                       <Building className="text-blue-600" size={28} />

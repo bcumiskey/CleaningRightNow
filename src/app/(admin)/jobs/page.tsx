@@ -441,7 +441,7 @@ function JobsPageContent() {
         {activeTab === 'jobs' && (
           <>
         {/* Header with Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
@@ -869,7 +869,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           required
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label="Date"
             type="date"
@@ -1036,7 +1036,7 @@ function ScheduleModal({ isOpen, onClose, onSave, schedule, properties }: Schedu
 
         <div className="border-t pt-4">
           <h4 className="font-medium text-gray-900 mb-3">Schedule Pattern</h4>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Select
               label="Frequency"
               value={formData.frequency}
@@ -1078,7 +1078,7 @@ function ScheduleModal({ isOpen, onClose, onSave, schedule, properties }: Schedu
 
         <div className="border-t pt-4">
           <h4 className="font-medium text-gray-900 mb-3">Job Settings</h4>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Input
               label="Rate (optional)"
               type="number"

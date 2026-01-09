@@ -90,7 +90,7 @@ export default function DashboardPage() {
             <p className="text-blue-100 mb-4">
               Get started by adding your first property, team member, or scheduling a job.
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Link href="/properties">
                 <Button variant="secondary" size="sm">
                   <Building size={16} />
@@ -114,7 +114,7 @@ export default function DashboardPage() {
         )}
 
         {/* Stats Row */}
-        <div className="grid grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           <StatCard
             label="Monthly Revenue"
             value={formatCurrency(stats.monthlyRevenue)}
@@ -148,9 +148,9 @@ export default function DashboardPage() {
         </div>
 
         {/* Two Column Layout */}
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Today's Jobs */}
-          <div className="col-span-2">
+          <div className="lg:col-span-2">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">

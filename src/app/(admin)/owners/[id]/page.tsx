@@ -235,7 +235,7 @@ export default function OwnerDetailPage() {
 
         {/* Stats Grid */}
         {stats && (
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -303,7 +303,7 @@ export default function OwnerDetailPage() {
         )}
 
         {/* Properties and Activity */}
-        <div className="grid grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Properties */}
           <Card>
             <CardHeader>
@@ -355,7 +355,7 @@ export default function OwnerDetailPage() {
                 {/* Jobs Summary */}
                 <div>
                   <h4 className="font-semibold text-gray-700 mb-3">Jobs</h4>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3">
                     <div className="text-center p-3 bg-gray-50 rounded-lg">
                       <p className="text-2xl font-bold text-gray-900">{stats.totalJobs}</p>
                       <p className="text-xs text-gray-500">Total</p>
@@ -374,7 +374,7 @@ export default function OwnerDetailPage() {
                 {/* Invoices Summary */}
                 <div>
                   <h4 className="font-semibold text-gray-700 mb-3">Invoices</h4>
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                     <div className="text-center p-3 bg-gray-50 rounded-lg">
                       <p className="text-2xl font-bold text-gray-900">{stats.totalInvoices}</p>
                       <p className="text-xs text-gray-500">Total</p>
@@ -400,7 +400,7 @@ export default function OwnerDetailPage() {
 
         {/* Recent Activity Tables */}
         {stats && (
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Recent Jobs */}
             <Card>
               <CardHeader>
