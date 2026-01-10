@@ -22,6 +22,7 @@ interface PropertyDetail {
   accessCode?: string
   accessNotes?: string
   bedConfig?: string
+  imageUrl?: string | null
 }
 
 interface LinenRequirement {
@@ -123,49 +124,71 @@ export default function WorkerPropertyDetailPage() {
     )
   }
 
-  return (
-    <div className="p-4 space-y-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-2 hover:bg-gray-100 rounded-lg"
-        >
-          <ArrowLeft size={24} />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">{property.name}</h1>
-          <a
-            href={`https://maps.google.com/maps?q=${encodeURIComponent(property.address)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            onClick={(e) => {
-              e.preventDefault()
-              // Try to use native navigation on mobile
-              const address = encodeURIComponent(property.address)
-              // Check if on iOS
-              const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-              // Check if on Android
-              const isAndroid = /Android/.test(navigator.userAgent)
+  const openNavigation = () => {
+    const address = encodeURIComponent(property.address)
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const isAndroid = /Android/.test(navigator.userAgent)
 
-              if (isIOS) {
-                // Apple Maps with fallback to Google Maps
-                window.location.href = `maps://maps.google.com/maps?daddr=${address}`
-              } else if (isAndroid) {
-                // Google Maps intent for Android
-                window.location.href = `geo:0,0?q=${address}`
-              } else {
-                // Desktop - open Google Maps in new tab
-                window.open(`https://maps.google.com/maps?q=${address}`, '_blank')
-              }
-            }}
+    if (isIOS) {
+      window.location.href = `maps://maps.google.com/maps?daddr=${address}`
+    } else if (isAndroid) {
+      window.location.href = `geo:0,0?q=${address}`
+    } else {
+      window.open(`https://maps.google.com/maps?q=${address}`, '_blank')
+    }
+  }
+
+  return (
+    <div className="pb-24">
+      {/* Property Photo Header */}
+      {property.imageUrl ? (
+        <div className="relative h-48 -mt-4 -mx-4">
+          <Image
+            src={property.imageUrl}
+            alt={property.name}
+            fill
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
+          <button
+            onClick={() => router.back()}
+            className="absolute top-4 left-4 p-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-colors"
           >
-            <Navigation size={14} />
-            {property.address}
-          </a>
+            <ArrowLeft size={24} />
+          </button>
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <h1 className="text-2xl font-bold drop-shadow-lg">{property.name}</h1>
+            <button
+              onClick={openNavigation}
+              className="flex items-center gap-1 text-white/90 text-sm mt-1 hover:text-white"
+            >
+              <Navigation size={14} />
+              {property.address}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="relative h-32 -mt-4 -mx-4 bg-gradient-to-br from-emerald-500 to-emerald-600">
+          <button
+            onClick={() => router.back()}
+            className="absolute top-4 left-4 p-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-colors"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <h1 className="text-2xl font-bold">{property.name}</h1>
+            <button
+              onClick={openNavigation}
+              className="flex items-center gap-1 text-white/90 text-sm mt-1 hover:text-white"
+            >
+              <Navigation size={14} />
+              {property.address}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="p-4 space-y-4">
 
       {/* Property Info */}
       <Card>
@@ -346,6 +369,7 @@ export default function WorkerPropertyDetailPage() {
           </div>
         )}
       </Modal>
+      </div>
     </div>
   )
 }

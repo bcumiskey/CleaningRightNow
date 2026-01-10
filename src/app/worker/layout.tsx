@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Calendar, BookOpen, User, Scan, AlertTriangle } from 'lucide-react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { Calendar, BookOpen, User, Scan, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
@@ -23,7 +23,25 @@ function getGreeting(): string {
 
 export default function WorkerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [workerName, setWorkerName] = useState<string>('')
+  const [showAdminReturn, setShowAdminReturn] = useState(false)
+
+  useEffect(() => {
+    // Check if user came from admin portal
+    const fromAdmin = searchParams.get('from') === 'admin'
+    if (fromAdmin) {
+      // Store in sessionStorage so it persists across worker pages
+      sessionStorage.setItem('workerFromAdmin', 'true')
+      setShowAdminReturn(true)
+    } else {
+      // Check sessionStorage for existing flag
+      const storedFlag = sessionStorage.getItem('workerFromAdmin')
+      if (storedFlag === 'true') {
+        setShowAdminReturn(true)
+      }
+    }
+  }, [searchParams])
 
   useEffect(() => {
     // Fetch worker info for greeting
@@ -44,6 +62,16 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
       <header className="bg-emerald-600 text-white px-4 py-4 sticky top-0 z-10">
+        {showAdminReturn && (
+          <Link
+            href="/"
+            onClick={() => sessionStorage.removeItem('workerFromAdmin')}
+            className="flex items-center gap-1 text-emerald-100 hover:text-white text-sm mb-2 -mt-1"
+          >
+            <ArrowLeft size={14} />
+            <span>Return to Admin</span>
+          </Link>
+        )}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="font-semibold text-lg">

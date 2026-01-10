@@ -18,11 +18,11 @@ export async function GET(
       where: { id: params.id },
       include: {
         property: {
-          select: { id: true, name: true, address: true },
+          select: { id: true, name: true, address: true, imageUrl: true },
         },
         assignments: {
           include: {
-            teamMember: { select: { id: true, name: true } },
+            teamMember: { select: { id: true, name: true, rank: true, canSupervise: true } },
           },
         },
       },
