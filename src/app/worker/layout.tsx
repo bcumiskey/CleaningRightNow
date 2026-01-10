@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { Calendar, BookOpen, User, Scan, AlertTriangle, ArrowLeft } from 'lucide-react'
@@ -21,27 +21,38 @@ function getGreeting(): string {
   return 'Good evening'
 }
 
-export default function WorkerLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
+// Separate component for admin return detection that uses searchParams
+function AdminReturnChecker({ onAdminReturn }: { onAdminReturn: (show: boolean) => void }) {
   const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const fromAdmin = searchParams.get('from') === 'admin'
+    if (fromAdmin) {
+      sessionStorage.setItem('workerFromAdmin', 'true')
+      onAdminReturn(true)
+    } else {
+      const storedFlag = sessionStorage.getItem('workerFromAdmin')
+      if (storedFlag === 'true') {
+        onAdminReturn(true)
+      }
+    }
+  }, [searchParams, onAdminReturn])
+
+  return null
+}
+
+function WorkerLayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
   const [workerName, setWorkerName] = useState<string>('')
   const [showAdminReturn, setShowAdminReturn] = useState(false)
 
   useEffect(() => {
-    // Check if user came from admin portal
-    const fromAdmin = searchParams.get('from') === 'admin'
-    if (fromAdmin) {
-      // Store in sessionStorage so it persists across worker pages
-      sessionStorage.setItem('workerFromAdmin', 'true')
+    // Check sessionStorage on mount (for subsequent page loads)
+    const storedFlag = sessionStorage.getItem('workerFromAdmin')
+    if (storedFlag === 'true') {
       setShowAdminReturn(true)
-    } else {
-      // Check sessionStorage for existing flag
-      const storedFlag = sessionStorage.getItem('workerFromAdmin')
-      if (storedFlag === 'true') {
-        setShowAdminReturn(true)
-      }
     }
-  }, [searchParams])
+  }, [])
 
   useEffect(() => {
     // Fetch worker info for greeting
@@ -49,7 +60,6 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.name) {
-          // Get first name only
           setWorkerName(data.name.split(' ')[0])
         }
       })
@@ -60,6 +70,11 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Suspense-wrapped search params checker */}
+      <Suspense fallback={null}>
+        <AdminReturnChecker onAdminReturn={setShowAdminReturn} />
+      </Suspense>
+
       {/* Header */}
       <header className="bg-emerald-600 text-white px-4 py-4 sticky top-0 z-10">
         {showAdminReturn && (
@@ -137,4 +152,8 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
       </nav>
     </div>
   )
+}
+
+export default function WorkerLayout({ children }: { children: React.ReactNode }) {
+  return <WorkerLayoutContent>{children}</WorkerLayoutContent>
 }
