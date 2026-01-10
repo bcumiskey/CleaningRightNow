@@ -20,6 +20,7 @@ import {
   ChevronDown,
   ChevronUp,
   Edit3,
+  Package,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -119,6 +120,25 @@ interface Property {
   color: string | null
 }
 
+interface InventoryItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  perFlip: number
+  onHand?: number
+  room: string
+  type: 'linen' | 'supply'
+}
+
+interface AvailableItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  defaultCost: number
+}
+
 const ROOM_OPTIONS = [
   'Living Room',
   'Kitchen',
@@ -212,6 +232,17 @@ export default function PropertyEditPage() {
   const [roomNewPhotoCaption, setRoomNewPhotoCaption] = useState('')
   const [isAddingRoomPhoto, setIsAddingRoomPhoto] = useState(false)
   const [isAddingRoomInstruction, setIsAddingRoomInstruction] = useState(false)
+
+  // Room inventory state
+  const [roomInventory, setRoomInventory] = useState<Record<string, InventoryItem[]>>({})
+  const [availableLinens, setAvailableLinens] = useState<AvailableItem[]>([])
+  const [availableSupplies, setAvailableSupplies] = useState<AvailableItem[]>([])
+  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false)
+  const [addInventoryRoom, setAddInventoryRoom] = useState('')
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState('')
+  const [selectedInventoryType, setSelectedInventoryType] = useState<'linen' | 'supply'>('linen')
+  const [newPerFlip, setNewPerFlip] = useState('1')
+  const [isAddingInventory, setIsAddingInventory] = useState(false)
 
   useEffect(() => {
     fetchOwners()
@@ -444,6 +475,125 @@ export default function PropertyEditPage() {
     if (!roomInstructions[room.name]) {
       const filtered = instructions.filter(i => i.room === room.name)
       setRoomInstructions(prev => ({ ...prev, [room.name]: filtered }))
+    }
+
+    // Load inventory for this room
+    if (!roomInventory[room.name]) {
+      await fetchRoomInventory(room.name)
+    }
+  }
+
+  // Fetch inventory items for a specific room
+  const fetchRoomInventory = async (roomName: string) => {
+    try {
+      const [linensRes, suppliesRes] = await Promise.all([
+        fetch(`/api/linens/property/${id}`),
+        fetch(`/api/supplies/property/${id}`),
+      ])
+
+      const inventoryItems: InventoryItem[] = []
+
+      if (linensRes.ok) {
+        const data = await linensRes.json()
+        const roomLinens = data.byRoom?.[roomName] || []
+        roomLinens.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; onHand?: number }) => {
+          inventoryItems.push({
+            ...item,
+            room: roomName,
+            type: 'linen',
+          })
+        })
+        // Store available items for adding
+        if (data.allItems && availableLinens.length === 0) {
+          setAvailableLinens(data.allItems)
+        }
+      }
+
+      if (suppliesRes.ok) {
+        const data = await suppliesRes.json()
+        const roomSupplies = data.byRoom?.[roomName] || []
+        roomSupplies.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number }) => {
+          inventoryItems.push({
+            ...item,
+            room: roomName,
+            type: 'supply',
+          })
+        })
+        // Store available items for adding
+        if (data.allItems && availableSupplies.length === 0) {
+          setAvailableSupplies(data.allItems)
+        }
+      }
+
+      setRoomInventory(prev => ({ ...prev, [roomName]: inventoryItems }))
+    } catch (error) {
+      console.error('Failed to fetch room inventory:', error)
+    }
+  }
+
+  // Add inventory item to room
+  const handleAddInventoryItem = async () => {
+    if (!selectedInventoryItem || !addInventoryRoom || isNew) return
+
+    setIsAddingInventory(true)
+    try {
+      const apiPath = selectedInventoryType === 'linen'
+        ? `/api/linens/property/${id}`
+        : `/api/supplies/property/${id}`
+
+      const items = selectedInventoryType === 'linen' ? 'linens' : 'supplies'
+
+      const res = await fetch(apiPath, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [items]: [{
+            itemId: selectedInventoryItem,
+            perFlip: parseInt(newPerFlip) || 1,
+            room: addInventoryRoom,
+          }],
+        }),
+      })
+
+      if (res.ok) {
+        toast.success('Inventory item added')
+        setShowAddInventoryModal(false)
+        setSelectedInventoryItem('')
+        setNewPerFlip('1')
+        // Refresh inventory for this room
+        await fetchRoomInventory(addInventoryRoom)
+        fetchRooms()
+      } else {
+        toast.error('Failed to add inventory item')
+      }
+    } catch (error) {
+      toast.error('Failed to add inventory item')
+    } finally {
+      setIsAddingInventory(false)
+    }
+  }
+
+  // Delete inventory item from room
+  const handleDeleteInventoryItem = async (item: InventoryItem) => {
+    try {
+      const apiPath = item.type === 'linen'
+        ? `/api/linens/property/${id}?itemId=${item.itemId}&room=${encodeURIComponent(item.room)}`
+        : `/api/supplies/property/${id}?itemId=${item.itemId}&room=${encodeURIComponent(item.room)}`
+
+      const res = await fetch(apiPath, { method: 'DELETE' })
+
+      if (res.ok) {
+        toast.success('Item removed')
+        setRoomInventory(prev => ({
+          ...prev,
+          [item.room]: (prev[item.room] || []).filter(i => !(i.itemId === item.itemId && i.type === item.type)),
+        }))
+        fetchRooms()
+      } else {
+        toast.error('Failed to remove item')
+      }
+    } catch (error) {
+      toast.error('Failed to remove item')
     }
   }
 
@@ -1226,7 +1376,7 @@ export default function PropertyEditPage() {
                       {/* Expanded Content */}
                       {isExpanded && (
                         <CardContent className="border-t bg-gray-50 pt-4">
-                          <div className="grid grid-cols-2 gap-6">
+                          <div className="grid grid-cols-3 gap-6">
                             {/* Photos Section */}
                             <div>
                               <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -1236,13 +1386,13 @@ export default function PropertyEditPage() {
 
                               {/* Existing photos */}
                               {currentRoomPhotos.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2 mb-4">
+                                <div className="grid grid-cols-2 gap-2 mb-4">
                                   {currentRoomPhotos.map((photo) => (
                                     <div
                                       key={photo.id}
                                       className="relative group rounded-lg overflow-hidden bg-gray-200"
                                     >
-                                      <div className="relative h-20 w-full">
+                                      <div className="relative h-16 w-full">
                                         <Image
                                           src={photo.url}
                                           alt={photo.caption || room.name}
@@ -1294,6 +1444,55 @@ export default function PropertyEditPage() {
                                   </div>
                                 )}
                               </div>
+                            </div>
+
+                            {/* Inventory Section */}
+                            <div>
+                              <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <Package size={16} />
+                                Inventory
+                              </h5>
+
+                              {/* Existing inventory items */}
+                              {(roomInventory[room.name] || []).length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                  {(roomInventory[room.name] || []).map((item) => (
+                                    <div
+                                      key={`${item.type}-${item.itemId}`}
+                                      className="flex items-center gap-2 p-2 bg-white rounded border border-gray-200 group"
+                                    >
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${item.type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                                        {item.type === 'linen' ? 'L' : 'S'}
+                                      </span>
+                                      <span className="flex-1 text-sm truncate">{item.itemName}</span>
+                                      <span className="text-xs text-gray-500">×{item.perFlip}</span>
+                                      <button
+                                        onClick={() => handleDeleteInventoryItem(item)}
+                                        className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Add inventory button */}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                  setAddInventoryRoom(room.name)
+                                  setSelectedInventoryType('linen')
+                                  setSelectedInventoryItem('')
+                                  setNewPerFlip('1')
+                                  setShowAddInventoryModal(true)
+                                }}
+                              >
+                                <Plus size={14} />
+                                Add Linen/Supply
+                              </Button>
                             </div>
 
                             {/* Instructions Section */}
@@ -1348,21 +1547,6 @@ export default function PropertyEditPage() {
                               </div>
                             </div>
                           </div>
-
-                          {/* Linens/Supplies info */}
-                          {(room._count?.linenRequirements || room._count?.supplyRequirements) && (
-                            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center gap-4 text-sm text-gray-500">
-                              {room._count?.linenRequirements > 0 && (
-                                <span>{room._count.linenRequirements} linen items configured</span>
-                              )}
-                              {room._count?.supplyRequirements > 0 && (
-                                <span>{room._count.supplyRequirements} supply items configured</span>
-                              )}
-                              <span className="text-blue-600">
-                                Manage linens/supplies in the Linens & Supplies page
-                              </span>
-                            </div>
-                          )}
                         </CardContent>
                       )}
                     </Card>
@@ -1791,6 +1975,77 @@ export default function PropertyEditPage() {
               disabled={!newRoomName.trim()}
             >
               {editingRoom ? 'Update Room' : 'Add Room'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add Inventory Modal */}
+      <Modal
+        isOpen={showAddInventoryModal}
+        onClose={() => {
+          setShowAddInventoryModal(false)
+          setSelectedInventoryItem('')
+          setNewPerFlip('1')
+        }}
+        title={`Add Inventory to ${addInventoryRoom}`}
+      >
+        <div className="space-y-4">
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
+            <button
+              onClick={() => setSelectedInventoryType('linen')}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                selectedInventoryType === 'linen'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Linens
+            </button>
+            <button
+              onClick={() => setSelectedInventoryType('supply')}
+              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                selectedInventoryType === 'supply'
+                  ? 'bg-white text-amber-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Supplies
+            </button>
+          </div>
+
+          <Select
+            label="Select Item"
+            value={selectedInventoryItem}
+            onChange={(e) => setSelectedInventoryItem(e.target.value)}
+            options={[
+              { value: '', label: 'Choose an item...' },
+              ...(selectedInventoryType === 'linen' ? availableLinens : availableSupplies).map(item => ({
+                value: item.itemId,
+                label: `${item.itemName} (${item.itemCode})`,
+              })),
+            ]}
+          />
+
+          <Input
+            label="Quantity Per Flip"
+            type="number"
+            min="1"
+            value={newPerFlip}
+            onChange={(e) => setNewPerFlip(e.target.value)}
+          />
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button variant="outline" onClick={() => setShowAddInventoryModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddInventoryItem}
+              isLoading={isAddingInventory}
+              disabled={!selectedInventoryItem}
+            >
+              <Plus size={16} />
+              Add Item
             </Button>
           </div>
         </div>
