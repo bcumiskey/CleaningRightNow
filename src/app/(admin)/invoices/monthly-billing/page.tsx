@@ -236,8 +236,8 @@ export default function MonthlyBillingPage() {
               <CardContent className="p-4">
                 <h4 className="font-medium text-blue-900 mb-2">How Monthly Billing Works</h4>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Properties set to "Monthly" billing appear here when they have completed jobs</li>
-                  <li>• Click "Create Invoice" to generate an invoice with all unbilled jobs</li>
+                  <li>• Properties set to &quot;Monthly&quot; billing appear here when they have completed jobs</li>
+                  <li>• Click &quot;Create Invoice&quot; to generate an invoice with all unbilled jobs</li>
                   <li>• Review the draft invoice, then send it to the property owner</li>
                   <li>• The billing day setting on each property is for your reference</li>
                 </ul>
