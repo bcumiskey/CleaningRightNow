@@ -16,7 +16,7 @@ interface Job {
   time: string | null
   completed: boolean
   source: string
-  property: { name: string }
+  property: { name: string; color: string | null }
 }
 
 export default function CalendarPage() {
@@ -105,6 +105,28 @@ export default function CalendarPage() {
 
   const getJobsForDay = (date: Date) => {
     return jobs.filter((job) => isSameDay(new Date(job.date), date))
+  }
+
+  // Get color styles for a job based on property color and completion status
+  const getJobColorStyle = (job: Job) => {
+    if (job.property.color) {
+      // Use property color with opacity for completed jobs
+      const baseColor = job.property.color
+      if (job.completed) {
+        return {
+          backgroundColor: `${baseColor}30`,
+          color: baseColor,
+          borderLeft: `3px solid ${baseColor}`,
+        }
+      }
+      return {
+        backgroundColor: `${baseColor}20`,
+        color: baseColor,
+        borderLeft: `3px solid ${baseColor}`,
+      }
+    }
+    // Default colors if no property color set
+    return undefined
   }
 
   return (
@@ -197,24 +219,29 @@ export default function CalendarPage() {
                       {format(day, 'd')}
                     </div>
                     <div className="space-y-1">
-                      {dayJobs.slice(0, 3).map((job) => (
-                        <div
-                          key={job.id}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            router.push(`/jobs?highlight=${job.id}`)
-                          }}
-                          className={cn(
-                            'text-xs p-1 rounded truncate cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all',
-                            job.completed
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-blue-100 text-blue-700'
-                          )}
-                        >
-                          {job.time && <span className="font-medium">{job.time} </span>}
-                          {job.property.name}
-                        </div>
-                      ))}
+                      {dayJobs.slice(0, 3).map((job) => {
+                        const colorStyle = getJobColorStyle(job)
+                        return (
+                          <div
+                            key={job.id}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              router.push(`/jobs?highlight=${job.id}`)
+                            }}
+                            className={cn(
+                              'text-xs p-1 rounded truncate cursor-pointer hover:ring-2 hover:ring-blue-400 transition-all',
+                              !colorStyle && (job.completed
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-blue-100 text-blue-700')
+                            )}
+                            style={colorStyle}
+                          >
+                            {job.completed && <span className="opacity-60">✓ </span>}
+                            {job.time && <span className="font-medium">{job.time} </span>}
+                            {job.property.name}
+                          </div>
+                        )
+                      })}
                       {dayJobs.length > 3 && (
                         <div className="text-xs text-gray-500">
                           +{dayJobs.length - 3} more

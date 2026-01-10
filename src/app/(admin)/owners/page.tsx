@@ -418,6 +418,7 @@ function OwnerModal({ isOpen, onClose, onSave, owner }: OwnerModalProps) {
               options={[
                 { value: '', label: 'No default' },
                 { value: 'per_job', label: 'Per Job' },
+                { value: 'biweekly', label: 'Bi-Weekly' },
                 { value: 'monthly', label: 'Monthly' },
               ]}
             />

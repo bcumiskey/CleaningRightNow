@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       where: whereClause,
       include: {
         property: {
-          select: { id: true, name: true, address: true },
+          select: { id: true, name: true, address: true, color: true },
         },
         assignments: {
           include: {

@@ -116,6 +116,7 @@ interface Property {
   bedConfig: string | null
   imageUrl: string | null
   keywords: string | null
+  color: string | null
 }
 
 const ROOM_OPTIONS = [
@@ -168,6 +169,7 @@ export default function PropertyEditPage() {
     bedConfig: '',
     imageUrl: '',
     keywords: '',
+    color: '',
   })
 
   // Instructions state
@@ -256,6 +258,7 @@ export default function PropertyEditPage() {
           bedConfig: prop.bedConfig || '',
           imageUrl: prop.imageUrl || '',
           keywords: prop.keywords || '',
+          color: prop.color || '',
         })
       } else {
         toast.error('Property not found')
@@ -919,6 +922,44 @@ export default function PropertyEditPage() {
                 <p className="text-xs text-gray-500 -mt-2">
                   Comma-separated keywords to help match calendar events to this property
                 </p>
+
+                {/* Calendar Color Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Calendar Color
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={formData.color || '#3B82F6'}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      className="w-12 h-10 rounded cursor-pointer border border-gray-300"
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      {['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, color: c })}
+                          className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${formData.color === c ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                    {formData.color && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, color: '' })}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Color used to display this property on the calendar
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -1007,6 +1048,7 @@ export default function PropertyEditPage() {
                       onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
                       options={[
                         { value: 'per_job', label: 'Per Job' },
+                        { value: 'biweekly', label: 'Bi-Weekly' },
                         { value: 'monthly', label: 'Monthly' },
                       ]}
                     />

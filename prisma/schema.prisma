@@ -74,6 +74,9 @@ model Property {
   // Main property image
   imageUrl            String?
 
+  // Calendar display color (hex code like "#3B82F6")
+  color               String?
+
   // Relations
   rooms               Room[]
   jobs                Job[]
