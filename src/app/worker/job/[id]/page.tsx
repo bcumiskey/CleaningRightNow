@@ -156,7 +156,7 @@ export default function WorkerJobDetailPage() {
     return highestRank.length > 0 && highestRank[0].teamMember.id === teamMemberId
   })()
 
-  const handleStartJob = async () => {
+  const handleStartJob = async (method: 'manual' | 'nfc' | 'qr' = 'manual') => {
     if (!teamMemberId) return
 
     try {
@@ -170,7 +170,7 @@ export default function WorkerJobDetailPage() {
       })
 
       if (response.ok) {
-        // Now check in
+        // Now check in with the specified method
         const sessions = await response.json()
         if (sessions[0]) {
           await fetch(`/api/job-sessions/${sessions[0].id}`, {
@@ -179,6 +179,7 @@ export default function WorkerJobDetailPage() {
             body: JSON.stringify({
               status: 'checked_in',
               checkedInAt: new Date().toISOString(),
+              checkInMethod: method,
             }),
           })
         }
@@ -431,7 +432,7 @@ export default function WorkerJobDetailPage() {
             <>
               <Clock size={48} className="mx-auto text-gray-400 mb-2" />
               <h2 className="text-xl font-semibold text-gray-700">Not Started</h2>
-              <p className="text-gray-500">Check in at the property to begin</p>
+              <p className="text-gray-500">Tap the button below to start this job</p>
             </>
           )}
         </CardContent>
@@ -556,9 +557,9 @@ export default function WorkerJobDetailPage() {
       {!isCompleted && (
         <div className="fixed bottom-20 left-4 right-4 space-y-2">
           {!isCheckedIn ? (
-            <Button size="lg" className="w-full" onClick={handleStartJob}>
+            <Button size="lg" className="w-full" onClick={() => handleStartJob('manual')}>
               <Play size={20} />
-              Start Job
+              Start Job (Manual Check-in)
             </Button>
           ) : (
             <Button

@@ -69,8 +69,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // Allow status changes (marking as sent/paid) but block content editing for non-draft
-    const isStatusChangeOnly = Object.keys(data).length === 1 && 'status' in data
+    // Allow status changes (marking as sent/paid) and payment method but block content editing for non-draft
+    const statusFields = ['status', 'paymentMethod']
+    const isStatusChangeOnly = Object.keys(data).every(key => statusFields.includes(key))
     const isLocked = ['sent', 'paid'].includes(existingInvoice.status)
 
     if (isLocked && !isStatusChangeOnly) {
@@ -125,6 +126,7 @@ export async function PUT(
             notes: data.notes,
             sentAt: data.status === 'sent' ? new Date() : undefined,
             paidAt: data.status === 'paid' ? new Date() : undefined,
+            paymentMethod: data.paymentMethod,
           },
           include: {
             property: {
@@ -163,6 +165,7 @@ export async function PUT(
         notes: data.notes,
         sentAt: data.status === 'sent' ? new Date() : undefined,
         paidAt: data.status === 'paid' ? new Date() : undefined,
+        paymentMethod: data.paymentMethod,
       },
       include: {
         property: {

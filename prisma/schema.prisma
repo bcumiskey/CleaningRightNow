@@ -294,6 +294,7 @@ model JobAssignment {
   teamMemberId  String
   amountEarned  Float?      // Calculated when job completed
   paidAt        DateTime?   // When this worker was paid
+  paymentMethod String?     // "venmo" | "cash" | "zelle" | "other"
 
   job           Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
   teamMember    TeamMember  @relation(fields: [teamMemberId], references: [id], onDelete: Cascade)
@@ -344,7 +345,7 @@ model Invoice {
   propertyId      String
   property        Property  @relation(fields: [propertyId], references: [id])
 
-  type            String    // "per_job" | "monthly"
+  type            String    // "per_job" | "weekly" | "biweekly" | "monthly"
   billingPeriod   String?   // "January 2026" for monthly
 
   invoiceDate     DateTime
@@ -357,6 +358,7 @@ model Invoice {
   status          String    @default("draft") // "draft" | "sent" | "paid"
   sentAt          DateTime?
   paidAt          DateTime?
+  paymentMethod   String?   // "venmo" | "cash" | "zelle" | "other"
 
   notes           String?   // Client-visible notes
 

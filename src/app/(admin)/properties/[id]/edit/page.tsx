@@ -1198,6 +1198,7 @@ export default function PropertyEditPage() {
                       onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
                       options={[
                         { value: 'per_job', label: 'Per Job' },
+                        { value: 'weekly', label: 'Weekly' },
                         { value: 'biweekly', label: 'Bi-Weekly' },
                         { value: 'monthly', label: 'Monthly' },
                       ]}

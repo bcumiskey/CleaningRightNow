@@ -36,7 +36,10 @@ export async function GET(request: NextRequest) {
           select: { id: true, name: true, address: true, color: true },
         },
         assignments: {
-          include: {
+          select: {
+            id: true,
+            paidAt: true,
+            paymentMethod: true,
             teamMember: { select: { id: true, name: true } },
           },
         },
