@@ -642,7 +642,9 @@ export default function LinensPage() {
                       <thead className="bg-gray-50 border-b">
                         <tr>
                           <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Item Name</th>
-                          <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Code</th>
+                          <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">
+                            {catalogSubTab === 'supplies' ? 'Use/Purpose' : 'Code'}
+                          </th>
                           {catalogSubTab === 'supplies' && (
                             <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Brand</th>
                           )}
@@ -1206,10 +1208,10 @@ function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type }:
           required
         />
         <Input
-          label="Item Code"
+          label={type === 'supplies' ? 'Use/Purpose' : 'Item Code'}
           value={formData.code}
-          onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-          placeholder="e.g., KFS"
+          onChange={(e) => setFormData({ ...formData, code: type === 'supplies' ? e.target.value : e.target.value.toUpperCase() })}
+          placeholder={type === 'supplies' ? 'e.g., Bathroom cleaning, Kitchen surfaces' : 'e.g., KFS'}
           required
         />
         {type === 'supplies' && (

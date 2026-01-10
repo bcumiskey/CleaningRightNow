@@ -37,6 +37,7 @@ interface Job {
   id: string
   date: string
   time: string | null
+  priority: number
   rate: number
   expensePercent: number
   completed: boolean
@@ -46,6 +47,19 @@ interface Job {
   property: { id: string; name: string }
   assignments: { teamMember: { id: string; name: string } }[]
 }
+
+const PRIORITY_OPTIONS = [
+  { value: '1', label: '1 - Highest' },
+  { value: '2', label: '2 - High' },
+  { value: '3', label: '3' },
+  { value: '4', label: '4' },
+  { value: '5', label: '5 - Normal' },
+  { value: '6', label: '6' },
+  { value: '7', label: '7' },
+  { value: '8', label: '8 - Low' },
+  { value: '9', label: '9' },
+  { value: '10', label: '10 - Lowest' },
+]
 
 interface Property {
   id: string
@@ -311,6 +325,8 @@ function JobsPageContent() {
       const payload = {
         ...data,
         rate: parseFloat(data.rate) || 0,
+        expensePercent: parseFloat(data.expensePercent) || 12,
+        priority: parseInt(data.priority) || 5,
       }
 
       const url = editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs'
@@ -553,6 +569,14 @@ function JobsPageContent() {
                               <div>
                                 <h3 className="font-semibold text-gray-900">{job.property.name}</h3>
                                 <div className="flex items-center gap-3 text-sm text-gray-500">
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    job.priority <= 2 ? 'bg-red-100 text-red-700' :
+                                    job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
+                                    job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
+                                    'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    P{job.priority}
+                                  </span>
                                   {job.time && (
                                     <span className="flex items-center gap-1">
                                       <Clock size={14} />
@@ -800,7 +824,9 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
     propertyId: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     time: '',
+    priority: '5',
     rate: '',
+    expensePercent: '12',
     teamMemberIds: [] as string[],
     completed: false,
   })
@@ -813,7 +839,9 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           propertyId: editingJob.property.id,
           date: format(new Date(editingJob.date), 'yyyy-MM-dd'),
           time: editingJob.time || '',
+          priority: editingJob.priority?.toString() || '5',
           rate: editingJob.rate.toString(),
+          expensePercent: editingJob.expensePercent?.toString() || '12',
           teamMemberIds: editingJob.assignments.map(a => a.teamMember.id),
           completed: editingJob.completed,
         })
@@ -822,7 +850,9 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           propertyId: '',
           date: format(new Date(), 'yyyy-MM-dd'),
           time: '',
+          priority: '5',
           rate: '',
+          expensePercent: '12',
           teamMemberIds: [],
           completed: false,
         })
@@ -872,7 +902,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           required
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Input
             label="Date"
             type="date"
@@ -880,22 +910,39 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
           />
+          <Select
+            label="Priority"
+            value={formData.priority}
+            onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+            options={PRIORITY_OPTIONS}
+          />
           <Input
-            label="Time"
+            label="Time (optional)"
             type="time"
             value={formData.time}
             onChange={(e) => setFormData({ ...formData, time: e.target.value })}
           />
         </div>
 
-        <Input
-          label="Rate"
-          type="number"
-          step="0.01"
-          value={formData.rate}
-          onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
-          required
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="Rate"
+            type="number"
+            step="0.01"
+            value={formData.rate}
+            onChange={(e) => setFormData({ ...formData, rate: e.target.value })}
+            required
+          />
+          <Input
+            label="Expense %"
+            type="number"
+            step="0.1"
+            min="0"
+            max="100"
+            value={formData.expensePercent}
+            onChange={(e) => setFormData({ ...formData, expensePercent: e.target.value })}
+          />
+        </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Assign Team</label>

@@ -77,6 +77,7 @@ export async function PATCH(
     // Other fields
     if (data.date) updateData.date = new Date(data.date)
     if (data.time !== undefined) updateData.time = data.time || null
+    if (data.priority !== undefined) updateData.priority = parseInt(data.priority)
     if (data.rate !== undefined) updateData.rate = parseFloat(data.rate)
     if (data.expensePercent !== undefined) updateData.expensePercent = parseFloat(data.expensePercent)
     if (data.propertyId) updateData.propertyId = data.propertyId

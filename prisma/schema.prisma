@@ -258,7 +258,8 @@ model TeamMember {
 model Job {
   id              String    @id @default(cuid())
   date            DateTime
-  time            String?   // "9:00 AM"
+  time            String?   // "9:00 AM" (optional, for specific times)
+  priority        Int       @default(5) // 1 = highest priority, 10 = lowest
 
   propertyId      String
   property        Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)

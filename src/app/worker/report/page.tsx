@@ -127,16 +127,17 @@ function ReportIssueContent() {
 
     setIsSubmitting(true)
     try {
-      const response = await fetch(`/api/properties/${selectedPropertyId}/notes`, {
+      const response = await fetch('/api/notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          propertyId: selectedPropertyId,
           type: noteType,
           title: title.trim() || undefined,
           content: content.trim(),
           severity: ['issue', 'damage'].includes(noteType) ? severity : undefined,
           estimatedCost: noteType === 'damage' && estimatedCost ? parseFloat(estimatedCost) : undefined,
-          photos,
+          photos: photos.map(url => ({ url })),
         }),
       })
 
