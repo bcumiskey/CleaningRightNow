@@ -327,7 +327,7 @@ export default function ReportsPage() {
                       Accounts Receivable Aging
                     </span>
                     {arData.summary.overdueCount > 0 && (
-                      <Badge variant="destructive" className="text-xs">
+                      <Badge variant="danger" className="text-xs">
                         {arData.summary.overdueCount} overdue
                       </Badge>
                     )}
