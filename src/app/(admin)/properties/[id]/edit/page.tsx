@@ -159,7 +159,7 @@ const ROOM_OPTIONS = [
   'Other',
 ]
 
-type TabType = 'details' | 'worker' | 'rooms' | 'instructions' | 'photos'
+type TabType = 'details' | 'worker' | 'rooms' | 'inventory' | 'instructions' | 'photos'
 
 export default function PropertyEditPage() {
   const router = useRouter()
@@ -248,6 +248,7 @@ export default function PropertyEditPage() {
     fetchOwners()
     if (!isNew) {
       loadPropertyData()
+      fetchPropertyInventory()
     }
   }, [id, isNew])
 
@@ -476,15 +477,11 @@ export default function PropertyEditPage() {
       const filtered = instructions.filter(i => i.room === room.name)
       setRoomInstructions(prev => ({ ...prev, [room.name]: filtered }))
     }
-
-    // Load inventory for this room
-    if (!roomInventory[room.name]) {
-      await fetchRoomInventory(room.name)
-    }
   }
 
-  // Fetch inventory items for a specific room
-  const fetchRoomInventory = async (roomName: string) => {
+  // Fetch all property inventory (property-wide, not room-specific)
+  const fetchPropertyInventory = async () => {
+    if (isNew) return
     try {
       const [linensRes, suppliesRes] = await Promise.all([
         fetch(`/api/linens/property/${id}`),
@@ -495,45 +492,45 @@ export default function PropertyEditPage() {
 
       if (linensRes.ok) {
         const data = await linensRes.json()
-        const roomLinens = data.byRoom?.[roomName] || []
-        roomLinens.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; onHand?: number }) => {
+        // Get all items from all rooms
+        const allLinens = data.items || []
+        allLinens.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; onHand?: number; room: string }) => {
           inventoryItems.push({
             ...item,
-            room: roomName,
             type: 'linen',
           })
         })
         // Store available items for adding
-        if (data.allItems && availableLinens.length === 0) {
+        if (data.allItems) {
           setAvailableLinens(data.allItems)
         }
       }
 
       if (suppliesRes.ok) {
         const data = await suppliesRes.json()
-        const roomSupplies = data.byRoom?.[roomName] || []
-        roomSupplies.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number }) => {
+        const allSupplies = data.items || []
+        allSupplies.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; room: string }) => {
           inventoryItems.push({
             ...item,
-            room: roomName,
             type: 'supply',
           })
         })
         // Store available items for adding
-        if (data.allItems && availableSupplies.length === 0) {
+        if (data.allItems) {
           setAvailableSupplies(data.allItems)
         }
       }
 
-      setRoomInventory(prev => ({ ...prev, [roomName]: inventoryItems }))
+      // Store all items under "Property" key for consistency
+      setRoomInventory({ Property: inventoryItems })
     } catch (error) {
-      console.error('Failed to fetch room inventory:', error)
+      console.error('Failed to fetch property inventory:', error)
     }
   }
 
-  // Add inventory item to room
+  // Add inventory item to property
   const handleAddInventoryItem = async () => {
-    if (!selectedInventoryItem || !addInventoryRoom || isNew) return
+    if (!selectedInventoryItem || isNew) return
 
     setIsAddingInventory(true)
     try {
@@ -550,7 +547,7 @@ export default function PropertyEditPage() {
           [items]: [{
             itemId: selectedInventoryItem,
             perFlip: parseInt(newPerFlip) || 1,
-            room: addInventoryRoom,
+            room: 'Property', // Property-wide, not room-specific
           }],
         }),
       })
@@ -560,9 +557,8 @@ export default function PropertyEditPage() {
         setShowAddInventoryModal(false)
         setSelectedInventoryItem('')
         setNewPerFlip('1')
-        // Refresh inventory for this room
-        await fetchRoomInventory(addInventoryRoom)
-        fetchRooms()
+        // Refresh property inventory
+        await fetchPropertyInventory()
       } else {
         toast.error('Failed to add inventory item')
       }
@@ -573,7 +569,7 @@ export default function PropertyEditPage() {
     }
   }
 
-  // Delete inventory item from room
+  // Delete inventory item from property
   const handleDeleteInventoryItem = async (item: InventoryItem) => {
     try {
       const apiPath = item.type === 'linen'
@@ -584,11 +580,8 @@ export default function PropertyEditPage() {
 
       if (res.ok) {
         toast.success('Item removed')
-        setRoomInventory(prev => ({
-          ...prev,
-          [item.room]: (prev[item.room] || []).filter(i => !(i.itemId === item.itemId && i.type === item.type)),
-        }))
-        fetchRooms()
+        // Refresh property inventory
+        await fetchPropertyInventory()
       } else {
         toast.error('Failed to remove item')
       }
@@ -984,10 +977,14 @@ export default function PropertyEditPage() {
     )
   }
 
+  // Count total property inventory items
+  const totalInventoryCount = Object.values(roomInventory).flat().length
+
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'details', label: 'Details', icon: <Building size={16} /> },
     { id: 'worker', label: 'Worker Info', icon: <Key size={16} /> },
     { id: 'rooms', label: `Rooms (${rooms.length})`, icon: <Home size={16} /> },
+    { id: 'inventory', label: `Inventory (${totalInventoryCount})`, icon: <Package size={16} /> },
     { id: 'instructions', label: `Instructions (${instructions.length})`, icon: <ListChecks size={16} /> },
     { id: 'photos', label: `Photos (${photos.length})`, icon: <Camera size={16} /> },
   ]
@@ -1024,7 +1021,7 @@ export default function PropertyEditPage() {
           ))}
         </div>
 
-        {isNew && (activeTab === 'rooms' || activeTab === 'instructions' || activeTab === 'photos') && (
+        {isNew && (activeTab === 'rooms' || activeTab === 'inventory' || activeTab === 'instructions' || activeTab === 'photos') && (
           <div className="text-center py-8 text-gray-500">
             Save the property first to add {activeTab}.
           </div>
@@ -1377,7 +1374,7 @@ export default function PropertyEditPage() {
                       {/* Expanded Content */}
                       {isExpanded && (
                         <CardContent className="border-t bg-gray-50 pt-4">
-                          <div className="grid grid-cols-3 gap-6">
+                          <div className="grid grid-cols-2 gap-6">
                             {/* Photos Section */}
                             <div>
                               <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -1447,55 +1444,6 @@ export default function PropertyEditPage() {
                               </div>
                             </div>
 
-                            {/* Inventory Section */}
-                            <div>
-                              <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                                <Package size={16} />
-                                Inventory
-                              </h5>
-
-                              {/* Existing inventory items */}
-                              {(roomInventory[room.name] || []).length > 0 && (
-                                <div className="space-y-2 mb-4">
-                                  {(roomInventory[room.name] || []).map((item) => (
-                                    <div
-                                      key={`${item.type}-${item.itemId}`}
-                                      className="flex items-center gap-2 p-2 bg-white rounded border border-gray-200 group"
-                                    >
-                                      <span className={`text-xs px-1.5 py-0.5 rounded ${item.type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                                        {item.type === 'linen' ? 'L' : 'S'}
-                                      </span>
-                                      <span className="flex-1 text-sm truncate">{item.itemName}</span>
-                                      <span className="text-xs text-gray-500">×{item.perFlip}</span>
-                                      <button
-                                        onClick={() => handleDeleteInventoryItem(item)}
-                                        className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Add inventory button */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="w-full"
-                                onClick={() => {
-                                  setAddInventoryRoom(room.name)
-                                  setSelectedInventoryType('linen')
-                                  setSelectedInventoryItem('')
-                                  setNewPerFlip('1')
-                                  setShowAddInventoryModal(true)
-                                }}
-                              >
-                                <Plus size={14} />
-                                Add Linen/Supply
-                              </Button>
-                            </div>
-
                             {/* Instructions Section */}
                             <div>
                               <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -1556,6 +1504,105 @@ export default function PropertyEditPage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Inventory Tab */}
+        {activeTab === 'inventory' && !isNew && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package size={18} />
+                Property Inventory
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-500 mb-4">
+                Define what linens and supplies are needed for each cleaning of this property.
+                This is your standard list of towels, sheets, bedding, and other items.
+              </p>
+
+              {/* Add button */}
+              <div className="mb-6">
+                <Button
+                  onClick={() => {
+                    setSelectedInventoryType('linen')
+                    setSelectedInventoryItem('')
+                    setNewPerFlip('1')
+                    setShowAddInventoryModal(true)
+                  }}
+                >
+                  <Plus size={16} />
+                  Add Linen or Supply
+                </Button>
+              </div>
+
+              {/* Inventory list grouped by category */}
+              {(roomInventory['Property'] || []).length === 0 ? (
+                <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
+                  <Package size={40} className="mx-auto mb-2 opacity-50" />
+                  <p>No inventory items configured</p>
+                  <p className="text-sm">Add linens and supplies needed for each cleaning</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Group by type */}
+                  {['linen', 'supply'].map(type => {
+                    const items = (roomInventory['Property'] || []).filter(item => item.type === type)
+                    if (items.length === 0) return null
+
+                    // Group by category
+                    const byCategory = items.reduce((acc, item) => {
+                      const cat = item.category || 'Other'
+                      if (!acc[cat]) acc[cat] = []
+                      acc[cat].push(item)
+                      return acc
+                    }, {} as Record<string, InventoryItem[]>)
+
+                    return (
+                      <div key={type}>
+                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {type === 'linen' ? 'Linens' : 'Supplies'}
+                          </span>
+                        </h3>
+                        {Object.entries(byCategory).map(([category, categoryItems]) => (
+                          <div key={category} className="mb-4">
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">{category}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {categoryItems.map((item) => (
+                                <div
+                                  key={`${item.type}-${item.itemId}`}
+                                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 group hover:border-gray-300"
+                                >
+                                  <div className="flex-1">
+                                    <p className="font-medium text-gray-900">{item.itemName}</p>
+                                    {item.itemCode && (
+                                      <p className="text-xs text-gray-500">{item.itemCode}</p>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="px-2 py-1 bg-gray-100 rounded text-sm font-medium">
+                                      ×{item.perFlip}
+                                    </span>
+                                    <button
+                                      onClick={() => handleDeleteInventoryItem(item)}
+                                      className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {/* Instructions Tab */}
@@ -1989,7 +2036,7 @@ export default function PropertyEditPage() {
           setSelectedInventoryItem('')
           setNewPerFlip('1')
         }}
-        title={`Add Inventory to ${addInventoryRoom}`}
+        title="Add Inventory Item"
       >
         <div className="space-y-4">
           <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
