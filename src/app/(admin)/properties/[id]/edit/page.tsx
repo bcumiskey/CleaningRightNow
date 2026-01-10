@@ -139,6 +139,16 @@ interface AvailableItem {
   defaultCost: number
 }
 
+interface CatalogItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  defaultCost: number
+  type: 'linen' | 'supply'
+  perFlip: number // The configured quantity for this property (0 if not configured)
+}
+
 const ROOM_OPTIONS = [
   'Living Room',
   'Kitchen',
@@ -233,16 +243,16 @@ export default function PropertyEditPage() {
   const [isAddingRoomPhoto, setIsAddingRoomPhoto] = useState(false)
   const [isAddingRoomInstruction, setIsAddingRoomInstruction] = useState(false)
 
-  // Room inventory state
+  // Room inventory state (kept for compatibility)
   const [roomInventory, setRoomInventory] = useState<Record<string, InventoryItem[]>>({})
   const [availableLinens, setAvailableLinens] = useState<AvailableItem[]>([])
   const [availableSupplies, setAvailableSupplies] = useState<AvailableItem[]>([])
-  const [showAddInventoryModal, setShowAddInventoryModal] = useState(false)
-  const [addInventoryRoom, setAddInventoryRoom] = useState('')
-  const [selectedInventoryItem, setSelectedInventoryItem] = useState('')
-  const [selectedInventoryType, setSelectedInventoryType] = useState<'linen' | 'supply'>('linen')
-  const [newPerFlip, setNewPerFlip] = useState('1')
-  const [isAddingInventory, setIsAddingInventory] = useState(false)
+
+  // Full catalog state for inventory form
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+  const [catalogQuantities, setCatalogQuantities] = useState<Record<string, number>>({})
+  const [isSavingInventory, setIsSavingInventory] = useState(false)
+  const [inventoryDirty, setInventoryDirty] = useState(false)
 
   useEffect(() => {
     fetchOwners()
@@ -489,83 +499,74 @@ export default function PropertyEditPage() {
       ])
 
       const inventoryItems: InventoryItem[] = []
+      const fullCatalog: CatalogItem[] = []
+      const quantities: Record<string, number> = {}
+
+      // Create a map of configured items for quick lookup
+      const configuredItems: Record<string, number> = {}
 
       if (linensRes.ok) {
         const data = await linensRes.json()
-        // Get all items from all rooms
-        const allLinens = data.items || []
-        allLinens.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; onHand?: number; room: string }) => {
+        // Get configured items (those with perFlip set for this property)
+        const configuredLinens = data.linens || []
+        configuredLinens.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; onHand?: number; room: string }) => {
           inventoryItems.push({
             ...item,
             type: 'linen',
           })
+          configuredItems[`linen-${item.itemId}`] = item.perFlip
         })
-        // Store available items for adding
+
+        // Build full catalog from allItems
         if (data.allItems) {
           setAvailableLinens(data.allItems)
+          data.allItems.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; defaultCost: number }) => {
+            const key = `linen-${item.itemId}`
+            const perFlip = configuredItems[key] || 0
+            fullCatalog.push({
+              ...item,
+              type: 'linen',
+              perFlip,
+            })
+            quantities[key] = perFlip
+          })
         }
       }
 
       if (suppliesRes.ok) {
         const data = await suppliesRes.json()
-        const allSupplies = data.items || []
-        allSupplies.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; room: string }) => {
+        const configuredSupplies = data.supplies || []
+        configuredSupplies.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; room: string }) => {
           inventoryItems.push({
             ...item,
             type: 'supply',
           })
+          configuredItems[`supply-${item.itemId}`] = item.perFlip
         })
-        // Store available items for adding
+
+        // Build full catalog from allItems
         if (data.allItems) {
           setAvailableSupplies(data.allItems)
+          data.allItems.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; defaultCost: number }) => {
+            const key = `supply-${item.itemId}`
+            const perFlip = configuredItems[key] || 0
+            fullCatalog.push({
+              ...item,
+              type: 'supply',
+              perFlip,
+            })
+            quantities[key] = perFlip
+          })
         }
       }
 
       // Store all items under "Property" key for consistency
       setRoomInventory({ Property: inventoryItems })
+      setCatalogItems(fullCatalog)
+      setCatalogQuantities(quantities)
+      setInventoryDirty(false)
     } catch (error) {
       console.error('Failed to fetch property inventory:', error)
-    }
-  }
-
-  // Add inventory item to property
-  const handleAddInventoryItem = async () => {
-    if (!selectedInventoryItem || isNew) return
-
-    setIsAddingInventory(true)
-    try {
-      const apiPath = selectedInventoryType === 'linen'
-        ? `/api/linens/property/${id}`
-        : `/api/supplies/property/${id}`
-
-      const items = selectedInventoryType === 'linen' ? 'linens' : 'supplies'
-
-      const res = await fetch(apiPath, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          [items]: [{
-            itemId: selectedInventoryItem,
-            perFlip: parseInt(newPerFlip) || 1,
-            room: 'Property', // Property-wide, not room-specific
-          }],
-        }),
-      })
-
-      if (res.ok) {
-        toast.success('Inventory item added')
-        setShowAddInventoryModal(false)
-        setSelectedInventoryItem('')
-        setNewPerFlip('1')
-        // Refresh property inventory
-        await fetchPropertyInventory()
-      } else {
-        toast.error('Failed to add inventory item')
-      }
-    } catch (error) {
-      toast.error('Failed to add inventory item')
-    } finally {
-      setIsAddingInventory(false)
     }
   }
 
@@ -587,6 +588,100 @@ export default function PropertyEditPage() {
       }
     } catch (error) {
       toast.error('Failed to remove item')
+    }
+  }
+
+  // Update catalog quantity in form
+  const handleCatalogQuantityChange = (key: string, value: number) => {
+    setCatalogQuantities(prev => ({
+      ...prev,
+      [key]: Math.max(0, value),
+    }))
+    setInventoryDirty(true)
+  }
+
+  // Save all inventory changes
+  const handleSaveInventory = async () => {
+    if (!inventoryDirty || isNew) return
+
+    setIsSavingInventory(true)
+    try {
+      // Separate linens and supplies
+      const linensToSave: { itemId: string; perFlip: number; room: string }[] = []
+      const suppliesToSave: { itemId: string; perFlip: number; room: string }[] = []
+
+      // Get items that have quantity > 0 or had a previous quantity (to handle removals)
+      for (const item of catalogItems) {
+        const key = `${item.type}-${item.itemId}`
+        const newQty = catalogQuantities[key] || 0
+        const oldQty = item.perFlip || 0
+
+        // Only include if there's a quantity or if it was changed from a previous value
+        if (newQty > 0 || oldQty > 0) {
+          if (item.type === 'linen') {
+            linensToSave.push({
+              itemId: item.itemId,
+              perFlip: newQty,
+              room: 'Property',
+            })
+          } else {
+            suppliesToSave.push({
+              itemId: item.itemId,
+              perFlip: newQty,
+              room: 'Property',
+            })
+          }
+        }
+      }
+
+      // Save linens and supplies in parallel
+      const promises: Promise<Response>[] = []
+
+      if (linensToSave.length > 0) {
+        promises.push(
+          fetch(`/api/linens/property/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ linens: linensToSave }),
+          })
+        )
+      }
+
+      if (suppliesToSave.length > 0) {
+        promises.push(
+          fetch(`/api/supplies/property/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ supplies: suppliesToSave }),
+          })
+        )
+      }
+
+      // Also delete items that were set to 0
+      for (const item of catalogItems) {
+        const key = `${item.type}-${item.itemId}`
+        const newQty = catalogQuantities[key] || 0
+        const oldQty = item.perFlip || 0
+
+        if (newQty === 0 && oldQty > 0) {
+          const apiPath = item.type === 'linen'
+            ? `/api/linens/property/${id}?itemId=${item.itemId}&room=Property`
+            : `/api/supplies/property/${id}?itemId=${item.itemId}&room=Property`
+          promises.push(fetch(apiPath, { method: 'DELETE' }))
+        }
+      }
+
+      await Promise.all(promises)
+
+      toast.success('Inventory saved')
+      setInventoryDirty(false)
+      // Refresh to get updated data
+      await fetchPropertyInventory()
+    } catch (error) {
+      console.error('Failed to save inventory:', error)
+      toast.error('Failed to save inventory')
+    } finally {
+      setIsSavingInventory(false)
     }
   }
 
@@ -977,8 +1072,8 @@ export default function PropertyEditPage() {
     )
   }
 
-  // Count total property inventory items
-  const totalInventoryCount = Object.values(roomInventory).flat().length
+  // Count total property inventory items (items with quantity > 0)
+  const totalInventoryCount = Object.values(catalogQuantities).filter(qty => qty > 0).length
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'details', label: 'Details', icon: <Building size={16} /> },
@@ -1509,96 +1604,135 @@ export default function PropertyEditPage() {
         {/* Inventory Tab */}
         {activeTab === 'inventory' && !isNew && (
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Package size={18} />
                 Property Inventory
               </CardTitle>
+              {inventoryDirty && (
+                <Button onClick={handleSaveInventory} isLoading={isSavingInventory}>
+                  <Save size={16} />
+                  Save Changes
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-500 mb-4">
-                Define what linens and supplies are needed for each cleaning of this property.
-                This is your standard list of towels, sheets, bedding, and other items.
+              <p className="text-sm text-gray-500 mb-6">
+                Set the quantity needed for each item per cleaning. Items with 0 quantity are not required for this property.
               </p>
 
-              {/* Add button */}
-              <div className="mb-6">
-                <Button
-                  onClick={() => {
-                    setSelectedInventoryType('linen')
-                    setSelectedInventoryItem('')
-                    setNewPerFlip('1')
-                    setShowAddInventoryModal(true)
-                  }}
-                >
-                  <Plus size={16} />
-                  Add Linen or Supply
-                </Button>
-              </div>
-
-              {/* Inventory list grouped by category */}
-              {(roomInventory['Property'] || []).length === 0 ? (
+              {catalogItems.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
                   <Package size={40} className="mx-auto mb-2 opacity-50" />
-                  <p>No inventory items configured</p>
-                  <p className="text-sm">Add linens and supplies needed for each cleaning</p>
+                  <p>No catalog items found</p>
+                  <p className="text-sm">Add items to the Linens/Supplies catalog first</p>
                 </div>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {/* Group by type */}
                   {['linen', 'supply'].map(type => {
-                    const items = (roomInventory['Property'] || []).filter(item => item.type === type)
-                    if (items.length === 0) return null
+                    const typeItems = catalogItems.filter(item => item.type === type)
+                    if (typeItems.length === 0) return null
 
                     // Group by category
-                    const byCategory = items.reduce((acc, item) => {
+                    const byCategory = typeItems.reduce((acc, item) => {
                       const cat = item.category || 'Other'
                       if (!acc[cat]) acc[cat] = []
                       acc[cat].push(item)
                       return acc
-                    }, {} as Record<string, InventoryItem[]>)
+                    }, {} as Record<string, CatalogItem[]>)
+
+                    // Count items with quantity > 0
+                    const configuredCount = typeItems.filter(item => {
+                      const key = `${item.type}-${item.itemId}`
+                      return (catalogQuantities[key] || 0) > 0
+                    }).length
 
                     return (
                       <div key={type}>
-                        <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-3">
+                          <span className={`text-xs px-2 py-1 rounded ${type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
                             {type === 'linen' ? 'Linens' : 'Supplies'}
                           </span>
+                          <span className="text-sm font-normal text-gray-500">
+                            {configuredCount} of {typeItems.length} items configured
+                          </span>
                         </h3>
-                        {Object.entries(byCategory).map(([category, categoryItems]) => (
-                          <div key={category} className="mb-4">
-                            <h4 className="text-sm font-medium text-gray-600 mb-2">{category}</h4>
+                        {Object.entries(byCategory).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryItems]) => (
+                          <div key={category} className="mb-6">
+                            <h4 className="text-sm font-medium text-gray-700 mb-3 pb-2 border-b">
+                              {category}
+                            </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {categoryItems.map((item) => (
-                                <div
-                                  key={`${item.type}-${item.itemId}`}
-                                  className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 group hover:border-gray-300"
-                                >
-                                  <div className="flex-1">
-                                    <p className="font-medium text-gray-900">{item.itemName}</p>
-                                    {item.itemCode && (
-                                      <p className="text-xs text-gray-500">{item.itemCode}</p>
-                                    )}
+                              {categoryItems.map((item) => {
+                                const key = `${item.type}-${item.itemId}`
+                                const quantity = catalogQuantities[key] || 0
+                                const hasQuantity = quantity > 0
+
+                                return (
+                                  <div
+                                    key={key}
+                                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                                      hasQuantity
+                                        ? 'bg-white border-gray-300 shadow-sm'
+                                        : 'bg-gray-50 border-gray-200'
+                                    }`}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`font-medium truncate ${hasQuantity ? 'text-gray-900' : 'text-gray-500'}`}>
+                                        {item.itemName}
+                                      </p>
+                                      {item.itemCode && (
+                                        <p className="text-xs text-gray-400 truncate">{item.itemCode}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCatalogQuantityChange(key, quantity - 1)}
+                                        disabled={quantity === 0}
+                                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={quantity}
+                                        onChange={(e) => handleCatalogQuantityChange(key, parseInt(e.target.value) || 0)}
+                                        className={`w-12 h-8 text-center border rounded font-medium ${
+                                          hasQuantity
+                                            ? 'border-blue-300 bg-blue-50 text-blue-700'
+                                            : 'border-gray-200 bg-white text-gray-400'
+                                        }`}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCatalogQuantityChange(key, quantity + 1)}
+                                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="px-2 py-1 bg-gray-100 rounded text-sm font-medium">
-                                      ×{item.perFlip}
-                                    </span>
-                                    <button
-                                      onClick={() => handleDeleteInventoryItem(item)}
-                                      className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           </div>
                         ))}
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {/* Save button at bottom if dirty */}
+              {inventoryDirty && catalogItems.length > 0 && (
+                <div className="mt-6 pt-6 border-t flex justify-end">
+                  <Button onClick={handleSaveInventory} isLoading={isSavingInventory}>
+                    <Save size={16} />
+                    Save Inventory Changes
+                  </Button>
                 </div>
               )}
             </CardContent>
@@ -2028,76 +2162,6 @@ export default function PropertyEditPage() {
         </div>
       </Modal>
 
-      {/* Add Inventory Modal */}
-      <Modal
-        isOpen={showAddInventoryModal}
-        onClose={() => {
-          setShowAddInventoryModal(false)
-          setSelectedInventoryItem('')
-          setNewPerFlip('1')
-        }}
-        title="Add Inventory Item"
-      >
-        <div className="space-y-4">
-          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
-            <button
-              onClick={() => setSelectedInventoryType('linen')}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                selectedInventoryType === 'linen'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Linens
-            </button>
-            <button
-              onClick={() => setSelectedInventoryType('supply')}
-              className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                selectedInventoryType === 'supply'
-                  ? 'bg-white text-amber-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              Supplies
-            </button>
-          </div>
-
-          <Select
-            label="Select Item"
-            value={selectedInventoryItem}
-            onChange={(e) => setSelectedInventoryItem(e.target.value)}
-            options={[
-              { value: '', label: 'Choose an item...' },
-              ...(selectedInventoryType === 'linen' ? availableLinens : availableSupplies).map(item => ({
-                value: item.itemId,
-                label: `${item.itemName} (${item.itemCode})`,
-              })),
-            ]}
-          />
-
-          <Input
-            label="Quantity Per Flip"
-            type="number"
-            min="1"
-            value={newPerFlip}
-            onChange={(e) => setNewPerFlip(e.target.value)}
-          />
-
-          <div className="flex justify-end gap-3 pt-4">
-            <Button variant="outline" onClick={() => setShowAddInventoryModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleAddInventoryItem}
-              isLoading={isAddingInventory}
-              disabled={!selectedInventoryItem}
-            >
-              <Plus size={16} />
-              Add Item
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }
