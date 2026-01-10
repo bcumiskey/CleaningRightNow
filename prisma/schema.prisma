@@ -667,6 +667,8 @@ model Room {
   id          String    @id @default(cuid())
   name        String
   propertyId  String?
+  type        String?   // Legacy field
+  beds        String?   // Legacy field - bed configuration
   sortOrder   Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -684,6 +686,9 @@ model SupplyCategory {
 model SupplyItem {
   id          String          @id @default(cuid())
   name        String
+  code        String?         // Legacy field
+  brand       String?         // Legacy field
+  scope       String?         // Legacy field
   categoryId  String
   category    SupplyCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   unitCost    Float           @default(0)
