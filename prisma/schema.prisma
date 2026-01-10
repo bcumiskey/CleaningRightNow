@@ -40,11 +40,13 @@ model Property {
   address             String
   isActive            Boolean  @default(true)
 
-  // Owner (optional - can use legacy fields or Owner relation)
+  // Owner - Primary relationship (preferred for new properties)
   ownerId             String?
   owner               Owner?   @relation(fields: [ownerId], references: [id])
 
-  // Legacy owner fields (for backwards compatibility)
+  // Owner contact fields (required - used for display and invoicing)
+  // These are kept in sync with Owner relation when ownerId is set
+  // For properties without an Owner record, these serve as the primary contact info
   ownerName           String
   ownerEmail          String?
   ownerPhone          String?
@@ -57,9 +59,12 @@ model Property {
   monthlyBillingDay   Int?     // 1, 15, or 31
   autoSendInvoice     Boolean  @default(false)
 
-  // Calendar Integration (deprecated - now managed via Calendar Sources)
-  calendarSource      String?  // "turno" | "google" | "manual" (legacy)
-  icalUrl             String?  // (legacy)
+  // Calendar Integration - DEPRECATED
+  // Use CalendarSource model instead (configured at /settings/calendar)
+  // These fields are kept for backwards compatibility but should not be used
+  // TODO: Remove these fields after data migration is confirmed complete
+  calendarSource      String?  // @deprecated - Use CalendarSource model
+  icalUrl             String?  // @deprecated - Use CalendarSource model
 
   // Keywords for matching calendar events to this property
   keywords            String?  // Comma-separated keywords, e.g., "beach house, smith rental"

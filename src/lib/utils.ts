@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx'
+import { PrismaClient } from '@prisma/client'
 
 export function cn(...inputs: ClassValue[]) {
   return inputs.filter(Boolean).join(' ')
@@ -19,10 +20,6 @@ export function formatDate(date: Date | string): string {
   })
 }
 
-export function formatTime(time: string): string {
-  return time
-}
-
 export function calculateJobPayments(rate: number, expensePercent: number, assignmentCount: number) {
   const expenseAmount = rate * (expensePercent / 100)
   const teamTotal = rate - expenseAmount
@@ -35,7 +32,7 @@ export function calculateJobPayments(rate: number, expensePercent: number, assig
   }
 }
 
-export async function generateInvoiceNumber(prisma: any): Promise<string> {
+export async function generateInvoiceNumber(prisma: PrismaClient): Promise<string> {
   const year = new Date().getFullYear()
   const lastInvoice = await prisma.invoice.findFirst({
     where: { invoiceNumber: { startsWith: `INV-${year}-` } },

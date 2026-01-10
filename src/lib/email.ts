@@ -116,6 +116,11 @@ interface SendPayStatementEmailParams {
   fromName?: string
 }
 
+/**
+ * Send pay statement to a team member via email
+ * Future feature: Add "Email Statement" button to /team/[id]/pay page
+ * Similar to sendInvoiceEmail but for worker pay statements
+ */
 export async function sendPayStatementEmail({
   to,
   workerName,

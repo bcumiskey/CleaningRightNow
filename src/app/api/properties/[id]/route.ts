@@ -3,34 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-interface PropertyNote {
-  id: string
-  propertyId: string
-  addedById: string
-  content: string
-  status: string
-  type: string
-  title: string | null
-  severity: string | null
-  estimatedCost: number | null
-  resolvedById: string | null
-  resolvedAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-}
-
-interface PropertyPhoto {
-  id: string
-  propertyId: string
-  caption: string | null
-  room: string
-  notes: string | null
-  url: string
-  addedById: string
-  sortOrder: number
-  createdAt: Date
-}
-
 // Get a single property with all details
 export async function GET(
   request: NextRequest,
@@ -44,141 +16,47 @@ export async function GET(
 
     const { id } = await params
 
-    // Try Prisma query first
-    try {
-      const property = await prisma.property.findUnique({
-        where: { id },
-      })
-
-      if (!property) {
-        return NextResponse.json({ error: 'Property not found' }, { status: 404 })
-      }
-
-      // Build result object starting with basic property
-      const result: Record<string, unknown> = { ...property }
-
-      // Try to fetch owner separately
-      if (property.ownerId) {
-        try {
-          const owner = await prisma.owner.findUnique({
-            where: { id: property.ownerId },
-          })
-          result.owner = owner
-        } catch {
-          result.owner = null
-        }
-      } else {
-        result.owner = null
-      }
-
-      // Try to fetch notes separately
-      try {
-        const notes = await prisma.propertyNote.findMany({
+    // Use Prisma include to fetch all related data in optimized queries
+    const property = await prisma.property.findUnique({
+      where: { id },
+      include: {
+        owner: true,
+        notes: {
           where: {
-            propertyId: id,
             status: { in: ['active', 'reported_to_owner'] },
           },
           orderBy: { createdAt: 'desc' },
-        })
-
-        const notesWithDetails = await Promise.all((notes as PropertyNote[]).map(async (note: PropertyNote) => {
-          let addedBy = null
-          let photos: unknown[] = []
-
-          try {
-            const teamMember = await prisma.teamMember.findUnique({
-              where: { id: note.addedById },
+          include: {
+            addedBy: {
               select: { name: true },
-            })
-            addedBy = teamMember
-          } catch {
-            // Continue
-          }
-
-          try {
-            photos = await prisma.notePhoto.findMany({
-              where: { noteId: note.id },
+            },
+            photos: {
               orderBy: { sortOrder: 'asc' },
-            })
-          } catch {
-            // Continue
-          }
-
-          return { ...note, addedBy, photos }
-        }))
-
-        result.notes = notesWithDetails
-      } catch {
-        result.notes = []
-      }
-
-      // Try to fetch instructions separately
-      try {
-        const instructions = await prisma.propertyInstruction.findMany({
-          where: { propertyId: id },
+            },
+          },
+        },
+        instructions: {
           orderBy: { sortOrder: 'asc' },
-        })
-        result.instructions = instructions
-      } catch {
-        result.instructions = []
-      }
-
-      // Try to fetch photos separately
-      try {
-        const photos = await prisma.propertyPhoto.findMany({
-          where: { propertyId: id },
+        },
+        photos: {
           orderBy: { sortOrder: 'asc' },
-        })
-
-        const photosWithDetails = await Promise.all((photos as PropertyPhoto[]).map(async (photo: PropertyPhoto) => {
-          let addedBy = null
-          try {
-            const teamMember = await prisma.teamMember.findUnique({
-              where: { id: photo.addedById },
+          include: {
+            addedBy: {
               select: { name: true },
-            })
-            addedBy = teamMember
-          } catch {
-            // Continue
-          }
-          return { ...photo, addedBy }
-        }))
+            },
+          },
+        },
+      },
+    })
 
-        result.photos = photosWithDetails
-      } catch {
-        result.photos = []
-      }
-
-      return NextResponse.json(result)
-    } catch (prismaError) {
-      // Prisma query failed - try raw SQL
-      console.error('Prisma query failed, trying raw SQL:', prismaError)
-
-      try {
-        const properties = await prisma.$queryRaw`
-          SELECT * FROM "Property" WHERE id = ${id}
-        ` as Array<Record<string, unknown>>
-
-        if (properties.length === 0) {
-          return NextResponse.json({ error: 'Property not found' }, { status: 404 })
-        }
-
-        const property = properties[0]
-        return NextResponse.json({
-          ...property,
-          owner: null,
-          notes: [],
-          instructions: [],
-          photos: [],
-        })
-      } catch (rawError) {
-        console.error('Raw SQL also failed:', rawError)
-        throw rawError
-      }
+    if (!property) {
+      return NextResponse.json({ error: 'Property not found' }, { status: 404 })
     }
+
+    return NextResponse.json(property)
   } catch (error) {
     console.error('Property GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch property', details: String(error) }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch property' }, { status: 500 })
   }
 }
 

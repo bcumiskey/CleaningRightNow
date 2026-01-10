@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+
+/**
+ * @deprecated This legacy calendar sync route is deprecated.
+ * Use /api/calendar-sources/sync instead, which provides:
+ * - Centralized calendar source management
+ * - Better property name matching
+ * - Sync status tracking per source
+ * - Support for multiple calendar sources
+ *
+ * The new system is configured at /settings/calendar
+ */
+export async function POST(request: NextRequest) {
+  // Redirect to new endpoint
+  return NextResponse.json({
+    error: 'This endpoint is deprecated. Use /api/calendar-sources/sync instead.',
+    migration: 'Configure calendar sources at /settings/calendar',
+  }, { status: 410 }) // 410 Gone
+}
+
+/**
+ * @deprecated See POST handler above
+ */
+export async function PUT(request: NextRequest) {
+  return NextResponse.json({
+    error: 'This endpoint is deprecated. Use /api/calendar-sources/sync instead.',
+    migration: 'Configure calendar sources at /settings/calendar',
+  }, { status: 410 })
+}
+
+/* Legacy code preserved for reference - remove after confirming migration complete
+
 import prisma from '@/lib/prisma'
 import ical from 'node-ical'
 
@@ -32,7 +63,7 @@ function parseICalEvents(icalData: ical.CalendarResponse): ParsedEvent[] {
   return events
 }
 
-export async function POST(request: NextRequest) {
+async function legacyPost(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
@@ -222,3 +253,5 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to sync calendars' }, { status: 500 })
   }
 }
+
+// End of legacy code */
