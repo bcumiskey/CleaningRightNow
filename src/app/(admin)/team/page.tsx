@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff, Shield, Star, TrendingUp } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -30,6 +31,7 @@ interface TeamMember {
 }
 
 export default function TeamPage() {
+  const router = useRouter()
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -185,10 +187,16 @@ export default function TeamPage() {
               {showInactive ? 'Hide Inactive' : 'Show Inactive'}
             </button>
           </div>
-          <Button onClick={handleAdd}>
-            <Plus size={16} />
-            Add Team Member
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => router.push('/team/payments')}>
+              <DollarSign size={16} />
+              Payment Run
+            </Button>
+            <Button onClick={handleAdd}>
+              <Plus size={16} />
+              Add Team Member
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (

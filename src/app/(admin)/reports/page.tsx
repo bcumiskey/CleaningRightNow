@@ -16,6 +16,7 @@ import {
   ArrowDownRight,
   BarChart3,
   Activity,
+  Download,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -24,6 +25,31 @@ import Select from '@/components/ui/Select'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency, cn } from '@/lib/utils'
 import { format } from 'date-fns'
+
+interface ARData {
+  summary: {
+    totalOutstanding: number
+    invoiceCount: number
+    overdueAmount: number
+    overdueCount: number
+    avgDaysToPayment: number
+  }
+  aging: {
+    current: { amount: number; count: number }
+    days1to30: { amount: number; count: number }
+    days31to60: { amount: number; count: number }
+    days60plus: { amount: number; count: number }
+  }
+  allInvoices: Array<{
+    id: string
+    invoiceNumber: string
+    propertyName: string
+    ownerName: string
+    total: number
+    daysOutstanding: number
+    isOverdue: boolean
+  }>
+}
 
 interface ReportData {
   period: string
@@ -117,14 +143,21 @@ export default function ReportsPage() {
   const router = useRouter()
   const [period, setPeriod] = useState('this_month')
   const [data, setData] = useState<ReportData | null>(null)
+  const [arData, setArData] = useState<ARData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchReportData = useCallback(async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/reports?period=${period}`)
-      if (response.ok) {
-        setData(await response.json())
+      const [reportRes, arRes] = await Promise.all([
+        fetch(`/api/reports?period=${period}`),
+        fetch('/api/reports/accounts-receivable'),
+      ])
+      if (reportRes.ok) {
+        setData(await reportRes.json())
+      }
+      if (arRes.ok) {
+        setArData(await arRes.json())
       }
     } catch (error) {
       console.error('Failed to fetch report data:', error)
@@ -283,6 +316,95 @@ export default function ReportsPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Accounts Receivable Aging */}
+            {arData && arData.summary.invoiceCount > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <AlertCircle size={20} />
+                      Accounts Receivable Aging
+                    </span>
+                    {arData.summary.overdueCount > 0 && (
+                      <Badge variant="destructive" className="text-xs">
+                        {arData.summary.overdueCount} overdue
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {/* Aging Buckets */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-green-50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-green-600 font-medium">Current</p>
+                      <p className="text-xs text-gray-500 mb-1">0-7 days</p>
+                      <p className="text-xl font-bold text-green-700">{formatCurrency(arData.aging.current.amount)}</p>
+                      <p className="text-xs text-gray-500">{arData.aging.current.count} invoices</p>
+                    </div>
+                    <div className="bg-yellow-50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-yellow-600 font-medium">8-30 Days</p>
+                      <p className="text-xs text-gray-500 mb-1">Coming due</p>
+                      <p className="text-xl font-bold text-yellow-700">{formatCurrency(arData.aging.days1to30.amount)}</p>
+                      <p className="text-xs text-gray-500">{arData.aging.days1to30.count} invoices</p>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-orange-600 font-medium">31-60 Days</p>
+                      <p className="text-xs text-gray-500 mb-1">Overdue</p>
+                      <p className="text-xl font-bold text-orange-700">{formatCurrency(arData.aging.days31to60.amount)}</p>
+                      <p className="text-xs text-gray-500">{arData.aging.days31to60.count} invoices</p>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-red-600 font-medium">60+ Days</p>
+                      <p className="text-xs text-gray-500 mb-1">Seriously overdue</p>
+                      <p className="text-xl font-bold text-red-700">{formatCurrency(arData.aging.days60plus.amount)}</p>
+                      <p className="text-xs text-gray-500">{arData.aging.days60plus.count} invoices</p>
+                    </div>
+                  </div>
+
+                  {/* Summary Row */}
+                  <div className="flex flex-wrap gap-4 justify-between items-center text-sm border-t pt-4">
+                    <div>
+                      <span className="text-gray-500">Total Outstanding:</span>
+                      <span className="font-bold text-lg ml-2">{formatCurrency(arData.summary.totalOutstanding)}</span>
+                      <span className="text-gray-500 ml-1">({arData.summary.invoiceCount} invoices)</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Avg Days to Payment:</span>
+                      <span className="font-medium ml-2">{arData.summary.avgDaysToPayment} days</span>
+                    </div>
+                  </div>
+
+                  {/* Overdue Invoices List (if any) */}
+                  {arData.allInvoices.filter(inv => inv.isOverdue).length > 0 && (
+                    <div className="mt-4 border-t pt-4">
+                      <p className="text-sm font-medium text-gray-700 mb-2">Overdue Invoices</p>
+                      <div className="space-y-2 max-h-40 overflow-y-auto">
+                        {arData.allInvoices
+                          .filter(inv => inv.isOverdue)
+                          .slice(0, 5)
+                          .map((inv) => (
+                            <div
+                              key={inv.id}
+                              className="flex items-center justify-between p-2 bg-red-50 rounded cursor-pointer hover:bg-red-100"
+                              onClick={() => router.push(`/invoices/${inv.id}`)}
+                            >
+                              <div>
+                                <p className="text-sm font-medium">{inv.invoiceNumber}</p>
+                                <p className="text-xs text-gray-600">{inv.propertyName} - {inv.ownerName}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-sm font-bold text-red-600">{formatCurrency(inv.total)}</p>
+                                <p className="text-xs text-red-500">{inv.daysOutstanding} days</p>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -667,6 +789,27 @@ export default function ReportsPage() {
                     <p className="text-3xl font-bold">{data.counts.teamMembers}</p>
                     <p className="text-gray-500">Team Members</p>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Year-End Reports Link */}
+            <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
+                      <Download className="text-indigo-600" size={24} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">Year-End Reports</h3>
+                      <p className="text-sm text-gray-600">Export data for your accountant, including 1099 summaries</p>
+                    </div>
+                  </div>
+                  <Button onClick={() => router.push('/reports/year-end')}>
+                    <Download size={16} />
+                    View Exports
+                  </Button>
                 </div>
               </CardContent>
             </Card>

@@ -83,6 +83,7 @@ model Property {
   photos              PropertyPhoto[]
   instructions        PropertyInstruction[]
   recurringSchedules  RecurringSchedule[]
+  expenses            Expense[]
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -234,6 +235,7 @@ model Job {
   assignments     JobAssignment[]
   invoiceItems    InvoiceLineItem[]
   sessions        JobSession[]
+  expenses        Expense[]
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -305,16 +307,38 @@ model Invoice {
   discount        Float     @default(0)
   total           Float
 
-  status          String    @default("draft") // "draft" | "sent" | "paid"
+  status          String    @default("draft") // "draft" | "sent" | "partial" | "paid"
   sentAt          DateTime?
   paidAt          DateTime?
+
+  // Payment tracking (when marked paid)
+  paymentMethod   String?   // "venmo" | "zelle" | "check" | "cash" | "bank_transfer" | "other"
+  paymentReference String?  // Check #, Venmo confirmation, transaction ID, etc.
+  paymentNotes    String?   // Additional notes about payment
 
   notes           String?   // Client-visible notes
 
   lineItems       InvoiceLineItem[]
+  payments        Payment[] // For partial payment tracking
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// Payment records (supports partial payments)
+model Payment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  amount          Float
+  paymentDate     DateTime @default(now())
+  paymentMethod   String   // "venmo" | "zelle" | "check" | "cash" | "bank_transfer" | "other"
+  reference       String?  // Check #, confirmation code, etc.
+  notes           String?
+
+  createdAt       DateTime @default(now())
+  createdById     String?
 }
 
 model InvoiceLineItem {
@@ -343,6 +367,34 @@ model CustomBillingItem {
   category      String   // "service" | "supplies" | "expense" | "other"
   defaultAmount Float?
   createdAt     DateTime @default(now())
+}
+
+// ============================================================
+// EXPENSE TRACKING
+// ============================================================
+
+model Expense {
+  id          String    @id @default(cuid())
+  date        DateTime
+  category    String    // "supplies" | "equipment" | "mileage" | "insurance" | "subscriptions" | "other"
+  description String
+  amount      Float
+  vendor      String?   // Where purchased
+  receiptUrl  String?   // URL to receipt image (Vercel Blob)
+
+  // Optional: link expense to specific property or job
+  propertyId  String?
+  property    Property? @relation(fields: [propertyId], references: [id])
+  jobId       String?
+  job         Job?      @relation(fields: [jobId], references: [id])
+
+  // For mileage expenses
+  miles       Float?    // Number of miles driven
+  mileageRate Float?    // Rate per mile (e.g., 0.70 for 2026 IRS rate)
+
+  notes       String?
+  createdAt   DateTime  @default(now())
+  createdById String?
 }
 
 // ============================================================

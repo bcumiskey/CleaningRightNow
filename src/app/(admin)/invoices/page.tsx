@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileText, Plus, Clock, CheckCircle, Send } from 'lucide-react'
+import { FileText, Plus, Clock, CheckCircle, Send, Calendar } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -74,10 +74,16 @@ export default function InvoicesPage() {
           <h3 className="text-lg font-semibold text-gray-900">
             {invoices.length} Invoice{invoices.length !== 1 && 's'}
           </h3>
-          <Button onClick={() => router.push('/invoices/new')}>
-            <Plus size={16} />
-            Create Invoice
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => router.push('/invoices/monthly-billing')}>
+              <Calendar size={16} />
+              Monthly Billing
+            </Button>
+            <Button onClick={() => router.push('/invoices/new')}>
+              <Plus size={16} />
+              Create Invoice
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (

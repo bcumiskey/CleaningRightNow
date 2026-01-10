@@ -125,6 +125,10 @@ export async function PUT(
             notes: data.notes,
             sentAt: data.status === 'sent' ? new Date() : undefined,
             paidAt: data.status === 'paid' ? new Date() : undefined,
+            // Payment tracking fields
+            paymentMethod: data.paymentMethod,
+            paymentReference: data.paymentReference,
+            paymentNotes: data.paymentNotes,
           },
           include: {
             property: {
@@ -163,6 +167,10 @@ export async function PUT(
         notes: data.notes,
         sentAt: data.status === 'sent' ? new Date() : undefined,
         paidAt: data.status === 'paid' ? new Date() : undefined,
+        // Payment tracking fields
+        paymentMethod: data.paymentMethod,
+        paymentReference: data.paymentReference,
+        paymentNotes: data.paymentNotes,
       },
       include: {
         property: {

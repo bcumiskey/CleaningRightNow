@@ -17,6 +17,7 @@ import {
   LogOut,
   Settings,
   HardHat,
+  Receipt,
 } from 'lucide-react'
 import { signOut } from 'next-auth/react'
 import { cn } from '@/lib/utils'
@@ -30,6 +31,7 @@ const navItems = [
   { href: '/team', label: 'Team', icon: Users },
   { href: '/linens', label: 'Linens & Supplies', icon: Package },
   { href: '/invoices', label: 'Invoicing', icon: FileText },
+  { href: '/expenses', label: 'Expenses', icon: Receipt },
   { href: '/notes', label: 'Notes', icon: StickyNote },
   { href: '/reports', label: 'Reports', icon: TrendingUp },
 ]

@@ -2,12 +2,22 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil, Trash2, Loader2, X, DollarSign } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import Input from '@/components/ui/Input'
 import InvoiceTemplate from '@/components/documents/InvoiceTemplate'
 import toast from 'react-hot-toast'
+
+const PAYMENT_METHODS = [
+  { value: 'venmo', label: 'Venmo' },
+  { value: 'zelle', label: 'Zelle' },
+  { value: 'check', label: 'Check' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'other', label: 'Other' },
+]
 
 interface LineItem {
   id: string
@@ -29,6 +39,10 @@ interface Invoice {
   total: number
   status: string
   notes?: string | null
+  paymentMethod?: string | null
+  paymentReference?: string | null
+  paymentNotes?: string | null
+  paidAt?: string | null
   lineItems: LineItem[]
   property: {
     id: string
@@ -63,6 +77,12 @@ export default function InvoiceViewPage() {
   const [isSending, setIsSending] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Payment dialog state
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [paymentReference, setPaymentReference] = useState('')
+  const [paymentNotes, setPaymentNotes] = useState('')
 
   useEffect(() => {
     if (id) {
@@ -177,7 +197,14 @@ export default function InvoiceViewPage() {
     }
   }
 
-  const handleMarkPaid = async () => {
+  const handleOpenPaymentDialog = () => {
+    setPaymentMethod('')
+    setPaymentReference('')
+    setPaymentNotes('')
+    setShowPaymentDialog(true)
+  }
+
+  const handleSubmitPayment = async () => {
     if (!invoice) return
     setIsUpdating(true)
 
@@ -185,15 +212,22 @@ export default function InvoiceViewPage() {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'paid' }),
+        body: JSON.stringify({
+          status: 'paid',
+          paymentMethod: paymentMethod || null,
+          paymentReference: paymentReference || null,
+          paymentNotes: paymentNotes || null,
+        }),
       })
 
       if (res.ok) {
-        setInvoice({ ...invoice, status: 'paid' })
-        toast.success('Invoice marked as paid')
+        const updatedInvoice = await res.json()
+        setInvoice(updatedInvoice)
+        setShowPaymentDialog(false)
+        toast.success('Payment recorded successfully')
       }
     } catch (error) {
-      toast.error('Failed to update invoice')
+      toast.error('Failed to record payment')
     } finally {
       setIsUpdating(false)
     }
@@ -312,11 +346,10 @@ export default function InvoiceViewPage() {
                 {invoice.status === 'sent' && (
                   <Button
                     variant="success"
-                    onClick={handleMarkPaid}
-                    isLoading={isUpdating}
+                    onClick={handleOpenPaymentDialog}
                   >
-                    <CheckCircle size={16} />
-                    Mark as Paid
+                    <DollarSign size={16} />
+                    Record Payment
                   </Button>
                 )}
 
@@ -370,7 +403,125 @@ export default function InvoiceViewPage() {
             showWatermark={false}
           />
         </div>
+
+        {/* Payment info display for paid invoices */}
+        {invoice.status === 'paid' && (invoice.paymentMethod || invoice.paymentReference) && (
+          <div className="px-6 pb-6 print:hidden">
+            <Card className="max-w-2xl mx-auto">
+              <CardContent className="p-4">
+                <h3 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <CheckCircle size={16} className="text-green-600" />
+                  Payment Recorded
+                </h3>
+                <div className="text-sm text-gray-600 space-y-1">
+                  {invoice.paymentMethod && (
+                    <p><span className="font-medium">Method:</span> {PAYMENT_METHODS.find(m => m.value === invoice.paymentMethod)?.label || invoice.paymentMethod}</p>
+                  )}
+                  {invoice.paymentReference && (
+                    <p><span className="font-medium">Reference:</span> {invoice.paymentReference}</p>
+                  )}
+                  {invoice.paymentNotes && (
+                    <p><span className="font-medium">Notes:</span> {invoice.paymentNotes}</p>
+                  )}
+                  {invoice.paidAt && (
+                    <p><span className="font-medium">Paid:</span> {new Date(invoice.paidAt).toLocaleDateString()}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
+
+      {/* Payment Dialog */}
+      {showPaymentDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 print:hidden">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h2 className="text-lg font-semibold">Record Payment</h2>
+              <button
+                onClick={() => setShowPaymentDialog(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-sm text-gray-600">Invoice</p>
+                <p className="font-medium">{invoice.invoiceNumber}</p>
+                <p className="text-lg font-bold text-green-600">${invoice.total.toFixed(2)}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Method
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {PAYMENT_METHODS.map((method) => (
+                    <button
+                      key={method.value}
+                      type="button"
+                      onClick={() => setPaymentMethod(method.value)}
+                      className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                        paymentMethod === method.value
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {method.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reference (optional)
+                </label>
+                <Input
+                  placeholder="Check #, confirmation code, etc."
+                  value={paymentReference}
+                  onChange={(e) => setPaymentReference(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes (optional)
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={2}
+                  placeholder="Any additional notes about this payment"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 p-4 border-t bg-gray-50">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowPaymentDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="success"
+                className="flex-1"
+                onClick={handleSubmitPayment}
+                isLoading={isUpdating}
+              >
+                <CheckCircle size={16} />
+                Record Payment
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print styles - comprehensive to ensure only invoice prints */}
       <style jsx global>{`
