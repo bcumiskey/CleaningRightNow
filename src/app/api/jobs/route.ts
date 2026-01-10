@@ -33,15 +33,18 @@ export async function GET(request: NextRequest) {
       where: whereClause,
       include: {
         property: {
-          select: { id: true, name: true, address: true },
+          select: { id: true, name: true, address: true, color: true },
         },
         assignments: {
-          include: {
+          select: {
+            id: true,
+            paidAt: true,
+            paymentMethod: true,
             teamMember: { select: { id: true, name: true } },
           },
         },
       },
-      orderBy: [{ date: 'desc' }, { time: 'asc' }],
+      orderBy: [{ date: 'desc' }, { priority: 'asc' }, { time: 'asc' }],
     })
 
     return NextResponse.json(jobs)
@@ -88,6 +91,7 @@ export async function POST(request: NextRequest) {
       data: {
         date: jobDate,
         time: data.time || null,
+        priority: data.priority ?? 5,
         propertyId: data.propertyId,
         rate: data.rate || property.baseRate,
         expensePercent: data.expensePercent ?? property.expensePercent ?? 12,

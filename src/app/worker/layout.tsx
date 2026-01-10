@@ -1,32 +1,101 @@
 'use client'
 
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { Home, Calendar, BookOpen, User, Scan } from 'lucide-react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { Calendar, BookOpen, User, Scan, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/worker', label: 'Today', icon: Home },
+  { href: '/worker', label: 'Schedule', icon: Calendar },
+  { href: '/worker/report', label: 'Report', icon: AlertTriangle },
   { href: '/worker/check-in', label: 'Check In', icon: Scan, highlight: true },
-  { href: '/worker/schedule', label: 'Schedule', icon: Calendar },
   { href: '/worker/reference', label: 'Reference', icon: BookOpen },
   { href: '/worker/account', label: 'Account', icon: User },
 ]
 
-export default function WorkerLayout({ children }: { children: React.ReactNode }) {
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+// Separate component for admin return detection that uses searchParams
+function AdminReturnChecker({ onAdminReturn }: { onAdminReturn: (show: boolean) => void }) {
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const fromAdmin = searchParams.get('from') === 'admin'
+    if (fromAdmin) {
+      sessionStorage.setItem('workerFromAdmin', 'true')
+      onAdminReturn(true)
+    } else {
+      const storedFlag = sessionStorage.getItem('workerFromAdmin')
+      if (storedFlag === 'true') {
+        onAdminReturn(true)
+      }
+    }
+  }, [searchParams, onAdminReturn])
+
+  return null
+}
+
+function WorkerLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [workerName, setWorkerName] = useState<string>('')
+  const [showAdminReturn, setShowAdminReturn] = useState(false)
+
+  useEffect(() => {
+    // Check sessionStorage on mount (for subsequent page loads)
+    const storedFlag = sessionStorage.getItem('workerFromAdmin')
+    if (storedFlag === 'true') {
+      setShowAdminReturn(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    // Fetch worker info for greeting
+    fetch('/api/worker/me')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.name) {
+          setWorkerName(data.name.split(' ')[0])
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const greeting = getGreeting()
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      {/* Suspense-wrapped search params checker */}
+      <Suspense fallback={null}>
+        <AdminReturnChecker onAdminReturn={setShowAdminReturn} />
+      </Suspense>
+
       {/* Header */}
       <header className="bg-emerald-600 text-white px-4 py-4 sticky top-0 z-10">
+        {showAdminReturn && (
+          <Link
+            href="/"
+            onClick={() => sessionStorage.removeItem('workerFromAdmin')}
+            className="flex items-center gap-1 text-emerald-100 hover:text-white text-sm mb-2 -mt-1"
+          >
+            <ArrowLeft size={14} />
+            <span>Return to Admin</span>
+          </Link>
+        )}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-semibold text-lg">Cleaning Right Now</h1>
-            <p className="text-sm text-emerald-100">Worker Portal</p>
+            <h1 className="font-semibold text-lg">
+              {greeting}{workerName ? `, ${workerName}` : ''}
+            </h1>
+            <p className="text-sm text-emerald-100">Cleaning Right Now</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-semibold">
-            W
+          <div className="w-10 h-10 rounded-full bg-emerald-500 flex items-center justify-center font-semibold text-lg">
+            {workerName ? workerName[0].toUpperCase() : 'W'}
           </div>
         </div>
       </header>
@@ -44,7 +113,7 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
           const Icon = item.icon
           const isHighlight = 'highlight' in item && item.highlight
 
-          // Special styling for check-in button
+          // Special styling for check-in button (center, raised)
           if (isHighlight) {
             return (
               <Link
@@ -83,4 +152,8 @@ export default function WorkerLayout({ children }: { children: React.ReactNode }
       </nav>
     </div>
   )
+}
+
+export default function WorkerLayout({ children }: { children: React.ReactNode }) {
+  return <WorkerLayoutContent>{children}</WorkerLayoutContent>
 }

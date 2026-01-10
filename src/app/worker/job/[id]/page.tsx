@@ -17,8 +17,10 @@ import {
   Shield,
   UserX,
   Star,
+  MapPin,
 } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
@@ -61,6 +63,7 @@ interface JobDetail {
     id: string
     name: string
     address: string
+    imageUrl?: string | null
   }
   assignments: TeamAssignment[]
   sessions?: JobSession[]
@@ -153,7 +156,7 @@ export default function WorkerJobDetailPage() {
     return highestRank.length > 0 && highestRank[0].teamMember.id === teamMemberId
   })()
 
-  const handleStartJob = async () => {
+  const handleStartJob = async (method: 'manual' | 'nfc' | 'qr' = 'manual') => {
     if (!teamMemberId) return
 
     try {
@@ -167,7 +170,7 @@ export default function WorkerJobDetailPage() {
       })
 
       if (response.ok) {
-        // Now check in
+        // Now check in with the specified method
         const sessions = await response.json()
         if (sessions[0]) {
           await fetch(`/api/job-sessions/${sessions[0].id}`, {
@@ -176,6 +179,7 @@ export default function WorkerJobDetailPage() {
             body: JSON.stringify({
               status: 'checked_in',
               checkedInAt: new Date().toISOString(),
+              checkInMethod: method,
             }),
           })
         }
@@ -336,30 +340,68 @@ export default function WorkerJobDetailPage() {
   const isCompleted = mySession?.status === 'completed'
 
   return (
-    <div className="p-4 space-y-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.back()}
-          className="p-2 hover:bg-gray-100 rounded-lg"
-        >
-          <ArrowLeft size={24} />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">{job.property.name}</h1>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <Clock size={14} />
-            {format(new Date(job.date), 'EEEE, MMM d')}
-            {job.time && ` at ${job.time}`}
+    <div className="pb-24">
+      {/* Property Photo Header */}
+      {job.property.imageUrl ? (
+        <div className="relative h-48 -mt-4 -mx-4">
+          <Image
+            src={job.property.imageUrl}
+            alt={job.property.name}
+            fill
+            className="object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
+          <button
+            onClick={() => router.back()}
+            className="absolute top-4 left-4 p-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-colors"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          {job.completed && (
+            <div className="absolute top-4 right-4">
+              <Badge variant="success" className="gap-1 bg-green-500/90 text-white">
+                <CheckCircle size={14} />
+                Completed
+              </Badge>
+            </div>
+          )}
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <h1 className="text-2xl font-bold drop-shadow-lg">{job.property.name}</h1>
+            <div className="flex items-center gap-2 text-white/90 text-sm mt-1">
+              <Clock size={14} />
+              {format(new Date(job.date), 'EEEE, MMM d')}
+              {job.time && ` at ${job.time}`}
+            </div>
           </div>
         </div>
-        {job.completed && (
-          <Badge variant="success" className="gap-1">
-            <CheckCircle size={14} />
-            Completed
-          </Badge>
-        )}
-      </div>
+      ) : (
+        <div className="relative h-32 -mt-4 -mx-4 bg-gradient-to-br from-emerald-500 to-emerald-600">
+          <button
+            onClick={() => router.back()}
+            className="absolute top-4 left-4 p-2 bg-white/20 backdrop-blur-sm rounded-full text-white hover:bg-white/30 transition-colors"
+          >
+            <ArrowLeft size={24} />
+          </button>
+          {job.completed && (
+            <div className="absolute top-4 right-4">
+              <Badge variant="success" className="gap-1 bg-green-500/90 text-white">
+                <CheckCircle size={14} />
+                Completed
+              </Badge>
+            </div>
+          )}
+          <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
+            <h1 className="text-2xl font-bold">{job.property.name}</h1>
+            <div className="flex items-center gap-2 text-white/90 text-sm mt-1">
+              <Clock size={14} />
+              {format(new Date(job.date), 'EEEE, MMM d')}
+              {job.time && ` at ${job.time}`}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-4 space-y-4">
 
       {/* Status Card */}
       <Card className={isCheckedIn ? 'border-emerald-500 bg-emerald-50' : ''}>
@@ -390,7 +432,7 @@ export default function WorkerJobDetailPage() {
             <>
               <Clock size={48} className="mx-auto text-gray-400 mb-2" />
               <h2 className="text-xl font-semibold text-gray-700">Not Started</h2>
-              <p className="text-gray-500">Check in at the property to begin</p>
+              <p className="text-gray-500">Tap the button below to start this job</p>
             </>
           )}
         </CardContent>
@@ -515,9 +557,9 @@ export default function WorkerJobDetailPage() {
       {!isCompleted && (
         <div className="fixed bottom-20 left-4 right-4 space-y-2">
           {!isCheckedIn ? (
-            <Button size="lg" className="w-full" onClick={handleStartJob}>
+            <Button size="lg" className="w-full" onClick={() => handleStartJob('manual')}>
               <Play size={20} />
-              Start Job
+              Start Job (Manual Check-in)
             </Button>
           ) : (
             <Button
@@ -760,6 +802,7 @@ export default function WorkerJobDetailPage() {
           </div>
         </div>
       </Modal>
+      </div>
     </div>
   )
 }

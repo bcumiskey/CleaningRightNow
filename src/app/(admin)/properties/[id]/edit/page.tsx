@@ -15,6 +15,12 @@ import {
   User,
   Key,
   DollarSign,
+  Bed,
+  Home,
+  ChevronDown,
+  ChevronUp,
+  Edit3,
+  Package,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -33,6 +39,40 @@ interface Owner {
   defaultBaseRate: number | null
   defaultBillingType: string | null
 }
+
+interface BedConfig {
+  type: string
+  count: number
+}
+
+interface Room {
+  id: string
+  name: string
+  type: string
+  beds: BedConfig[] | null
+  sortOrder: number
+  _count?: {
+    instructions: number
+    photos: number
+    linenRequirements: number
+    supplyRequirements: number
+  }
+  // Expanded data loaded on demand
+  instructions?: Instruction[]
+  photos?: Photo[]
+}
+
+const ROOM_TYPES = [
+  { value: 'bedroom', label: 'Bedroom' },
+  { value: 'bathroom', label: 'Bathroom' },
+  { value: 'kitchen', label: 'Kitchen' },
+  { value: 'living', label: 'Living Room' },
+  { value: 'laundry', label: 'Laundry' },
+  { value: 'outdoor', label: 'Outdoor' },
+  { value: 'other', label: 'Other' },
+]
+
+const BED_TYPES = ['King', 'Queen', 'Full', 'Twin', 'California King', 'Bunk', 'Sofa Bed', 'Crib']
 
 interface LinkedPhoto {
   id: string
@@ -77,6 +117,36 @@ interface Property {
   bedConfig: string | null
   imageUrl: string | null
   keywords: string | null
+  color: string | null
+}
+
+interface InventoryItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  perFlip: number
+  onHand?: number
+  room: string
+  type: 'linen' | 'supply'
+}
+
+interface AvailableItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  defaultCost: number
+}
+
+interface CatalogItem {
+  itemId: string
+  itemName: string
+  itemCode: string
+  category: string
+  defaultCost: number
+  type: 'linen' | 'supply'
+  perFlip: number // The configured quantity for this property (0 if not configured)
 }
 
 const ROOM_OPTIONS = [
@@ -99,7 +169,7 @@ const ROOM_OPTIONS = [
   'Other',
 ]
 
-type TabType = 'details' | 'worker' | 'instructions' | 'photos'
+type TabType = 'details' | 'worker' | 'rooms' | 'inventory' | 'instructions' | 'photos'
 
 export default function PropertyEditPage() {
   const router = useRouter()
@@ -129,6 +199,7 @@ export default function PropertyEditPage() {
     bedConfig: '',
     imageUrl: '',
     keywords: '',
+    color: '',
   })
 
   // Instructions state
@@ -153,10 +224,41 @@ export default function PropertyEditPage() {
   const [editingPhotoNotes, setEditingPhotoNotes] = useState('')
   const [isSavingPhotoNotes, setIsSavingPhotoNotes] = useState(false)
 
+  // Rooms state
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [showRoomModal, setShowRoomModal] = useState(false)
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null)
+  const [newRoomName, setNewRoomName] = useState('')
+  const [newRoomType, setNewRoomType] = useState('bedroom')
+  const [newRoomBeds, setNewRoomBeds] = useState<BedConfig[]>([])
+  const [isSavingRoom, setIsSavingRoom] = useState(false)
+
+  // Room expansion state
+  const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null)
+  const [roomPhotos, setRoomPhotos] = useState<Record<string, Photo[]>>({})
+  const [roomInstructions, setRoomInstructions] = useState<Record<string, Instruction[]>>({})
+  const [roomNewInstruction, setRoomNewInstruction] = useState('')
+  const [roomNewPhotoUrl, setRoomNewPhotoUrl] = useState('')
+  const [roomNewPhotoCaption, setRoomNewPhotoCaption] = useState('')
+  const [isAddingRoomPhoto, setIsAddingRoomPhoto] = useState(false)
+  const [isAddingRoomInstruction, setIsAddingRoomInstruction] = useState(false)
+
+  // Room inventory state (kept for compatibility)
+  const [roomInventory, setRoomInventory] = useState<Record<string, InventoryItem[]>>({})
+  const [availableLinens, setAvailableLinens] = useState<AvailableItem[]>([])
+  const [availableSupplies, setAvailableSupplies] = useState<AvailableItem[]>([])
+
+  // Full catalog state for inventory form
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+  const [catalogQuantities, setCatalogQuantities] = useState<Record<string, number>>({})
+  const [isSavingInventory, setIsSavingInventory] = useState(false)
+  const [inventoryDirty, setInventoryDirty] = useState(false)
+
   useEffect(() => {
     fetchOwners()
     if (!isNew) {
       loadPropertyData()
+      fetchPropertyInventory()
     }
   }, [id, isNew])
 
@@ -173,10 +275,11 @@ export default function PropertyEditPage() {
 
   const loadPropertyData = async () => {
     try {
-      const [propRes, instRes, photoRes] = await Promise.all([
+      const [propRes, instRes, photoRes, roomsRes] = await Promise.all([
         fetch(`/api/properties/${id}`),
         fetch(`/api/properties/${id}/instructions`),
         fetch(`/api/properties/${id}/photos`),
+        fetch(`/api/properties/${id}/rooms`),
       ])
 
       if (propRes.ok) {
@@ -197,6 +300,7 @@ export default function PropertyEditPage() {
           bedConfig: prop.bedConfig || '',
           imageUrl: prop.imageUrl || '',
           keywords: prop.keywords || '',
+          color: prop.color || '',
         })
       } else {
         toast.error('Property not found')
@@ -215,11 +319,497 @@ export default function PropertyEditPage() {
         setPhotos(data.photos || [])
         setPhotosByRoom(data.byRoom || {})
       }
+
+      if (roomsRes.ok) {
+        const data = await roomsRes.json()
+        setRooms(data.rooms || [])
+      }
     } catch (error) {
       console.error('Failed to load property:', error)
       toast.error('Failed to load property')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Room handlers
+  const fetchRooms = async () => {
+    try {
+      const res = await fetch(`/api/properties/${id}/rooms`)
+      if (res.ok) {
+        const data = await res.json()
+        setRooms(data.rooms || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch rooms:', error)
+    }
+  }
+
+  const handleAddRoom = async () => {
+    if (!newRoomName.trim() || isNew) return
+
+    setIsSavingRoom(true)
+    try {
+      const res = await fetch(`/api/properties/${id}/rooms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newRoomName,
+          type: newRoomType,
+          beds: newRoomType === 'bedroom' && newRoomBeds.length > 0 ? newRoomBeds : null,
+        }),
+      })
+
+      if (res.ok) {
+        toast.success('Room added')
+        setShowRoomModal(false)
+        resetRoomForm()
+        fetchRooms()
+      } else {
+        const error = await res.json()
+        toast.error(error.error || 'Failed to add room')
+      }
+    } catch (error) {
+      toast.error('Failed to add room')
+    } finally {
+      setIsSavingRoom(false)
+    }
+  }
+
+  const handleUpdateRoom = async () => {
+    if (!editingRoom) return
+
+    setIsSavingRoom(true)
+    try {
+      const res = await fetch(`/api/properties/${id}/rooms/${editingRoom.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newRoomName,
+          type: newRoomType,
+          beds: newRoomType === 'bedroom' && newRoomBeds.length > 0 ? newRoomBeds : null,
+        }),
+      })
+
+      if (res.ok) {
+        toast.success('Room updated')
+        setShowRoomModal(false)
+        setEditingRoom(null)
+        resetRoomForm()
+        fetchRooms()
+      } else {
+        const error = await res.json()
+        toast.error(error.error || 'Failed to update room')
+      }
+    } catch (error) {
+      toast.error('Failed to update room')
+    } finally {
+      setIsSavingRoom(false)
+    }
+  }
+
+  const handleDeleteRoom = async (roomId: string, force = false) => {
+    try {
+      const url = force
+        ? `/api/properties/${id}/rooms/${roomId}?force=true`
+        : `/api/properties/${id}/rooms/${roomId}`
+      const res = await fetch(url, { method: 'DELETE' })
+
+      if (res.ok) {
+        toast.success('Room deleted')
+        fetchRooms()
+      } else {
+        const error = await res.json()
+        if (error.counts) {
+          const total = Object.values(error.counts as Record<string, number>).reduce((a, b) => a + b, 0)
+          if (confirm(`This room has ${total} linked items (instructions, photos, linens). Delete anyway?`)) {
+            handleDeleteRoom(roomId, true)
+          }
+        } else {
+          toast.error(error.error || 'Failed to delete room')
+        }
+      }
+    } catch (error) {
+      toast.error('Failed to delete room')
+    }
+  }
+
+  const resetRoomForm = () => {
+    setNewRoomName('')
+    setNewRoomType('bedroom')
+    setNewRoomBeds([])
+  }
+
+  const openEditRoom = (room: Room) => {
+    setEditingRoom(room)
+    setNewRoomName(room.name)
+    setNewRoomType(room.type)
+    setNewRoomBeds(room.beds || [])
+    setShowRoomModal(true)
+  }
+
+  const addBedToRoom = () => {
+    setNewRoomBeds([...newRoomBeds, { type: 'King', count: 1 }])
+  }
+
+  const updateBed = (index: number, field: 'type' | 'count', value: string | number) => {
+    const updated = [...newRoomBeds]
+    if (field === 'type') {
+      updated[index].type = value as string
+    } else {
+      updated[index].count = Math.max(1, value as number)
+    }
+    setNewRoomBeds(updated)
+  }
+
+  const removeBed = (index: number) => {
+    setNewRoomBeds(newRoomBeds.filter((_, i) => i !== index))
+  }
+
+  // Room expansion - load photos and instructions for a room
+  const toggleRoomExpansion = async (room: Room) => {
+    if (expandedRoomId === room.id) {
+      setExpandedRoomId(null)
+      return
+    }
+
+    setExpandedRoomId(room.id)
+    setRoomNewInstruction('')
+    setRoomNewPhotoUrl('')
+    setRoomNewPhotoCaption('')
+
+    // Load photos and instructions for this room if not already loaded
+    if (!roomPhotos[room.name]) {
+      const filtered = photos.filter(p => p.room === room.name)
+      setRoomPhotos(prev => ({ ...prev, [room.name]: filtered }))
+    }
+    if (!roomInstructions[room.name]) {
+      const filtered = instructions.filter(i => i.room === room.name)
+      setRoomInstructions(prev => ({ ...prev, [room.name]: filtered }))
+    }
+  }
+
+  // Fetch all property inventory (property-wide, not room-specific)
+  const fetchPropertyInventory = async () => {
+    if (isNew) return
+    try {
+      const [linensRes, suppliesRes] = await Promise.all([
+        fetch(`/api/linens/property/${id}`),
+        fetch(`/api/supplies/property/${id}`),
+      ])
+
+      const inventoryItems: InventoryItem[] = []
+      const fullCatalog: CatalogItem[] = []
+      const quantities: Record<string, number> = {}
+
+      // Create a map of configured items for quick lookup
+      const configuredItems: Record<string, number> = {}
+
+      if (linensRes.ok) {
+        const data = await linensRes.json()
+        // Get configured items (those with perFlip set for this property)
+        const configuredLinens = data.linens || []
+        configuredLinens.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; onHand?: number; room: string }) => {
+          inventoryItems.push({
+            ...item,
+            type: 'linen',
+          })
+          configuredItems[`linen-${item.itemId}`] = item.perFlip
+        })
+
+        // Build full catalog from allItems
+        if (data.allItems) {
+          setAvailableLinens(data.allItems)
+          data.allItems.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; defaultCost: number }) => {
+            const key = `linen-${item.itemId}`
+            const perFlip = configuredItems[key] || 0
+            fullCatalog.push({
+              ...item,
+              type: 'linen',
+              perFlip,
+            })
+            quantities[key] = perFlip
+          })
+        }
+      }
+
+      if (suppliesRes.ok) {
+        const data = await suppliesRes.json()
+        const configuredSupplies = data.supplies || []
+        configuredSupplies.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; perFlip: number; room: string }) => {
+          inventoryItems.push({
+            ...item,
+            type: 'supply',
+          })
+          configuredItems[`supply-${item.itemId}`] = item.perFlip
+        })
+
+        // Build full catalog from allItems
+        if (data.allItems) {
+          setAvailableSupplies(data.allItems)
+          data.allItems.forEach((item: { itemId: string; itemName: string; itemCode: string; category: string; defaultCost: number }) => {
+            const key = `supply-${item.itemId}`
+            const perFlip = configuredItems[key] || 0
+            fullCatalog.push({
+              ...item,
+              type: 'supply',
+              perFlip,
+            })
+            quantities[key] = perFlip
+          })
+        }
+      }
+
+      // Store all items under "Property" key for consistency
+      setRoomInventory({ Property: inventoryItems })
+      setCatalogItems(fullCatalog)
+      setCatalogQuantities(quantities)
+      setInventoryDirty(false)
+    } catch (error) {
+      console.error('Failed to fetch property inventory:', error)
+    }
+  }
+
+  // Delete inventory item from property
+  const handleDeleteInventoryItem = async (item: InventoryItem) => {
+    try {
+      const apiPath = item.type === 'linen'
+        ? `/api/linens/property/${id}?itemId=${item.itemId}&room=${encodeURIComponent(item.room)}`
+        : `/api/supplies/property/${id}?itemId=${item.itemId}&room=${encodeURIComponent(item.room)}`
+
+      const res = await fetch(apiPath, { method: 'DELETE' })
+
+      if (res.ok) {
+        toast.success('Item removed')
+        // Refresh property inventory
+        await fetchPropertyInventory()
+      } else {
+        toast.error('Failed to remove item')
+      }
+    } catch (error) {
+      toast.error('Failed to remove item')
+    }
+  }
+
+  // Update catalog quantity in form
+  const handleCatalogQuantityChange = (key: string, value: number) => {
+    setCatalogQuantities(prev => ({
+      ...prev,
+      [key]: Math.max(0, value),
+    }))
+    setInventoryDirty(true)
+  }
+
+  // Save all inventory changes
+  const handleSaveInventory = async () => {
+    if (!inventoryDirty || isNew) return
+
+    setIsSavingInventory(true)
+    try {
+      // Separate linens and supplies
+      const linensToSave: { itemId: string; perFlip: number; room: string }[] = []
+      const suppliesToSave: { itemId: string; perFlip: number; room: string }[] = []
+
+      // Get items that have quantity > 0 or had a previous quantity (to handle removals)
+      for (const item of catalogItems) {
+        const key = `${item.type}-${item.itemId}`
+        const newQty = catalogQuantities[key] || 0
+        const oldQty = item.perFlip || 0
+
+        // Only include if there's a quantity or if it was changed from a previous value
+        if (newQty > 0 || oldQty > 0) {
+          if (item.type === 'linen') {
+            linensToSave.push({
+              itemId: item.itemId,
+              perFlip: newQty,
+              room: 'Property',
+            })
+          } else {
+            suppliesToSave.push({
+              itemId: item.itemId,
+              perFlip: newQty,
+              room: 'Property',
+            })
+          }
+        }
+      }
+
+      // Save linens and supplies in parallel
+      const promises: Promise<Response>[] = []
+
+      if (linensToSave.length > 0) {
+        promises.push(
+          fetch(`/api/linens/property/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ linens: linensToSave }),
+          })
+        )
+      }
+
+      if (suppliesToSave.length > 0) {
+        promises.push(
+          fetch(`/api/supplies/property/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ supplies: suppliesToSave }),
+          })
+        )
+      }
+
+      // Also delete items that were set to 0
+      for (const item of catalogItems) {
+        const key = `${item.type}-${item.itemId}`
+        const newQty = catalogQuantities[key] || 0
+        const oldQty = item.perFlip || 0
+
+        if (newQty === 0 && oldQty > 0) {
+          const apiPath = item.type === 'linen'
+            ? `/api/linens/property/${id}?itemId=${item.itemId}&room=Property`
+            : `/api/supplies/property/${id}?itemId=${item.itemId}&room=Property`
+          promises.push(fetch(apiPath, { method: 'DELETE' }))
+        }
+      }
+
+      await Promise.all(promises)
+
+      toast.success('Inventory saved')
+      setInventoryDirty(false)
+      // Refresh to get updated data
+      await fetchPropertyInventory()
+    } catch (error) {
+      console.error('Failed to save inventory:', error)
+      toast.error('Failed to save inventory')
+    } finally {
+      setIsSavingInventory(false)
+    }
+  }
+
+  // Add instruction to specific room
+  const handleAddRoomInstruction = async (roomName: string) => {
+    if (!roomNewInstruction.trim() || isNew) return
+
+    setIsAddingRoomInstruction(true)
+    try {
+      const res = await fetch(`/api/properties/${id}/instructions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instruction: roomNewInstruction,
+          room: roomName,
+        }),
+      })
+
+      if (res.ok) {
+        const added = await res.json()
+        // Update local state
+        const updatedInstructions = [...instructions, added]
+        setInstructions(updatedInstructions)
+        rebuildInstructionsByRoom(updatedInstructions)
+        setRoomInstructions(prev => ({
+          ...prev,
+          [roomName]: [...(prev[roomName] || []), added],
+        }))
+        setRoomNewInstruction('')
+        toast.success('Instruction added')
+        // Refresh rooms to update counts
+        fetchRooms()
+      } else {
+        toast.error('Failed to add instruction')
+      }
+    } catch (error) {
+      toast.error('Failed to add instruction')
+    } finally {
+      setIsAddingRoomInstruction(false)
+    }
+  }
+
+  // Delete instruction from room
+  const handleDeleteRoomInstruction = async (instructionId: string, roomName: string) => {
+    try {
+      const res = await fetch(`/api/properties/${id}/instructions?instructionId=${instructionId}`, {
+        method: 'DELETE',
+      })
+
+      if (res.ok) {
+        const filtered = instructions.filter(i => i.id !== instructionId)
+        setInstructions(filtered)
+        rebuildInstructionsByRoom(filtered)
+        setRoomInstructions(prev => ({
+          ...prev,
+          [roomName]: (prev[roomName] || []).filter(i => i.id !== instructionId),
+        }))
+        toast.success('Instruction removed')
+        fetchRooms()
+      }
+    } catch (error) {
+      toast.error('Failed to delete instruction')
+    }
+  }
+
+  // Add photo to specific room
+  const handleAddRoomPhoto = async (roomName: string) => {
+    if (!roomNewPhotoUrl || isNew) {
+      toast.error('Please upload a photo')
+      return
+    }
+
+    setIsAddingRoomPhoto(true)
+    try {
+      const res = await fetch(`/api/properties/${id}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: roomNewPhotoUrl,
+          room: roomName,
+          caption: roomNewPhotoCaption,
+        }),
+      })
+
+      if (res.ok) {
+        const added = await res.json()
+        // Update local state
+        const updatedPhotos = [...photos, added]
+        setPhotos(updatedPhotos)
+        rebuildPhotosByRoom(updatedPhotos)
+        setRoomPhotos(prev => ({
+          ...prev,
+          [roomName]: [...(prev[roomName] || []), added],
+        }))
+        setRoomNewPhotoUrl('')
+        setRoomNewPhotoCaption('')
+        toast.success('Photo added')
+        fetchRooms()
+      } else {
+        toast.error('Failed to add photo')
+      }
+    } catch (error) {
+      toast.error('Failed to add photo')
+    } finally {
+      setIsAddingRoomPhoto(false)
+    }
+  }
+
+  // Delete photo from room
+  const handleDeleteRoomPhoto = async (photoId: string, roomName: string) => {
+    try {
+      const res = await fetch(`/api/properties/${id}/photos?photoId=${photoId}`, {
+        method: 'DELETE',
+      })
+
+      if (res.ok) {
+        const filtered = photos.filter(p => p.id !== photoId)
+        setPhotos(filtered)
+        rebuildPhotosByRoom(filtered)
+        setRoomPhotos(prev => ({
+          ...prev,
+          [roomName]: (prev[roomName] || []).filter(p => p.id !== photoId),
+        }))
+        toast.success('Photo removed')
+        fetchRooms()
+      }
+    } catch (error) {
+      toast.error('Failed to delete photo')
     }
   }
 
@@ -482,9 +1072,14 @@ export default function PropertyEditPage() {
     )
   }
 
+  // Count total property inventory items (items with quantity > 0)
+  const totalInventoryCount = Object.values(catalogQuantities).filter(qty => qty > 0).length
+
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'details', label: 'Details', icon: <Building size={16} /> },
     { id: 'worker', label: 'Worker Info', icon: <Key size={16} /> },
+    { id: 'rooms', label: `Rooms (${rooms.length})`, icon: <Home size={16} /> },
+    { id: 'inventory', label: `Inventory (${totalInventoryCount})`, icon: <Package size={16} /> },
     { id: 'instructions', label: `Instructions (${instructions.length})`, icon: <ListChecks size={16} /> },
     { id: 'photos', label: `Photos (${photos.length})`, icon: <Camera size={16} /> },
   ]
@@ -513,7 +1108,7 @@ export default function PropertyEditPage() {
               key={tab.id}
               variant={activeTab === tab.id ? 'primary' : 'outline'}
               onClick={() => setActiveTab(tab.id)}
-              disabled={isNew && (tab.id === 'instructions' || tab.id === 'photos')}
+              disabled={isNew && (tab.id === 'rooms' || tab.id === 'instructions' || tab.id === 'photos')}
             >
               {tab.icon}
               {tab.label}
@@ -521,7 +1116,7 @@ export default function PropertyEditPage() {
           ))}
         </div>
 
-        {isNew && (activeTab === 'instructions' || activeTab === 'photos') && (
+        {isNew && (activeTab === 'rooms' || activeTab === 'inventory' || activeTab === 'instructions' || activeTab === 'photos') && (
           <div className="text-center py-8 text-gray-500">
             Save the property first to add {activeTab}.
           </div>
@@ -569,6 +1164,44 @@ export default function PropertyEditPage() {
                 <p className="text-xs text-gray-500 -mt-2">
                   Comma-separated keywords to help match calendar events to this property
                 </p>
+
+                {/* Calendar Color Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Calendar Color
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={formData.color || '#3B82F6'}
+                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                      className="w-12 h-10 rounded cursor-pointer border border-gray-300"
+                    />
+                    <div className="flex gap-2 flex-wrap">
+                      {['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, color: c })}
+                          className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${formData.color === c ? 'border-gray-900 scale-110' : 'border-gray-300'}`}
+                          style={{ backgroundColor: c }}
+                        />
+                      ))}
+                    </div>
+                    {formData.color && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, color: '' })}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Color used to display this property on the calendar
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -657,6 +1290,8 @@ export default function PropertyEditPage() {
                       onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
                       options={[
                         { value: 'per_job', label: 'Per Job' },
+                        { value: 'weekly', label: 'Weekly' },
+                        { value: 'biweekly', label: 'Bi-Weekly' },
                         { value: 'monthly', label: 'Monthly' },
                       ]}
                     />
@@ -731,6 +1366,375 @@ export default function PropertyEditPage() {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Rooms Tab */}
+        {activeTab === 'rooms' && !isNew && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Home size={20} />
+                  Room Configuration
+                </h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Click a room to expand and add photos, instructions, and more.
+                </p>
+              </div>
+              <Button onClick={() => {
+                resetRoomForm()
+                setEditingRoom(null)
+                setShowRoomModal(true)
+              }}>
+                <Plus size={16} />
+                Add Room
+              </Button>
+            </div>
+
+            {rooms.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-gray-500">
+                  No rooms defined yet. Add rooms to organize instructions, photos, and linen requirements.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {rooms.map((room) => {
+                  const isExpanded = expandedRoomId === room.id
+                  const currentRoomPhotos = roomPhotos[room.name] || photos.filter(p => p.room === room.name)
+                  const currentRoomInstructions = roomInstructions[room.name] || instructions.filter(i => i.room === room.name)
+
+                  return (
+                    <Card key={room.id} className={isExpanded ? 'ring-2 ring-blue-500' : ''}>
+                      {/* Room Header - Clickable */}
+                      <div
+                        className="p-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                        onClick={() => toggleRoomExpansion(room)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            {isExpanded ? (
+                              <ChevronUp size={20} className="text-gray-400" />
+                            ) : (
+                              <ChevronDown size={20} className="text-gray-400" />
+                            )}
+                            <div>
+                              <h4 className="font-medium text-gray-900">{room.name}</h4>
+                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                                <span className="capitalize">{room.type}</span>
+                                {room.beds && room.beds.length > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <Bed size={12} />
+                                    {room.beds.map(b => `${b.count}x ${b.type}`).join(', ')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {/* Quick stats */}
+                            <div className="flex gap-3 text-xs text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <Camera size={12} />
+                                {room._count?.photos || 0}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <ListChecks size={12} />
+                                {room._count?.instructions || 0}
+                              </span>
+                            </div>
+                            {/* Edit/Delete buttons */}
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openEditRoom(room)}
+                              >
+                                <Edit3 size={14} />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteRoom(room.id)}
+                              >
+                                <Trash2 size={14} className="text-red-500" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <CardContent className="border-t bg-gray-50 pt-4">
+                          <div className="grid grid-cols-2 gap-6">
+                            {/* Photos Section */}
+                            <div>
+                              <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <Camera size={16} />
+                                Photos
+                              </h5>
+
+                              {/* Existing photos */}
+                              {currentRoomPhotos.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 mb-4">
+                                  {currentRoomPhotos.map((photo) => (
+                                    <div
+                                      key={photo.id}
+                                      className="relative group rounded-lg overflow-hidden bg-gray-200"
+                                    >
+                                      <div className="relative h-16 w-full">
+                                        <Image
+                                          src={photo.url}
+                                          alt={photo.caption || room.name}
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      </div>
+                                      {photo.caption && (
+                                        <div className="text-xs p-1 truncate bg-white">
+                                          {photo.caption}
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => handleDeleteRoomPhoto(photo.id, room.name)}
+                                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Add photo inline */}
+                              <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                <ImageUpload
+                                  value={roomNewPhotoUrl}
+                                  onChange={setRoomNewPhotoUrl}
+                                  onRemove={() => setRoomNewPhotoUrl('')}
+                                  folder={`properties/${id}/reference`}
+                                  label="Add photo"
+                                  previewSize="sm"
+                                />
+                                {roomNewPhotoUrl && (
+                                  <div className="mt-2 space-y-2">
+                                    <Input
+                                      placeholder="Caption (optional)"
+                                      value={roomNewPhotoCaption}
+                                      onChange={(e) => setRoomNewPhotoCaption(e.target.value)}
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleAddRoomPhoto(room.name)}
+                                      isLoading={isAddingRoomPhoto}
+                                    >
+                                      <Plus size={14} />
+                                      Save Photo
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Instructions Section */}
+                            <div>
+                              <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                <ListChecks size={16} />
+                                Instructions
+                              </h5>
+
+                              {/* Existing instructions */}
+                              {currentRoomInstructions.length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                  {currentRoomInstructions.map((inst, index) => (
+                                    <div
+                                      key={inst.id}
+                                      className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200 group"
+                                    >
+                                      <span className="text-gray-400 text-sm">{index + 1}.</span>
+                                      <span className="flex-1 text-sm">{inst.instruction}</span>
+                                      <button
+                                        onClick={() => handleDeleteRoomInstruction(inst.id, room.name)}
+                                        className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"
+                                      >
+                                        <Trash2 size={14} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Add instruction inline */}
+                              <div className="flex gap-2">
+                                <Input
+                                  className="flex-1"
+                                  placeholder="Add an instruction..."
+                                  value={roomNewInstruction}
+                                  onChange={(e) => setRoomNewInstruction(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && roomNewInstruction.trim()) {
+                                      handleAddRoomInstruction(room.name)
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAddRoomInstruction(room.name)}
+                                  isLoading={isAddingRoomInstruction}
+                                  disabled={!roomNewInstruction.trim()}
+                                >
+                                  <Plus size={14} />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      )}
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Inventory Tab */}
+        {activeTab === 'inventory' && !isNew && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Package size={18} />
+                Property Inventory
+              </CardTitle>
+              {inventoryDirty && (
+                <Button onClick={handleSaveInventory} isLoading={isSavingInventory}>
+                  <Save size={16} />
+                  Save Changes
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-500 mb-6">
+                Set the quantity needed for each item per cleaning. Items with 0 quantity are not required for this property.
+              </p>
+
+              {catalogItems.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
+                  <Package size={40} className="mx-auto mb-2 opacity-50" />
+                  <p>No catalog items found</p>
+                  <p className="text-sm">Add items to the Linens/Supplies catalog first</p>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {/* Group by type */}
+                  {['linen', 'supply'].map(type => {
+                    const typeItems = catalogItems.filter(item => item.type === type)
+                    if (typeItems.length === 0) return null
+
+                    // Group by category
+                    const byCategory = typeItems.reduce((acc, item) => {
+                      const cat = item.category || 'Other'
+                      if (!acc[cat]) acc[cat] = []
+                      acc[cat].push(item)
+                      return acc
+                    }, {} as Record<string, CatalogItem[]>)
+
+                    // Count items with quantity > 0
+                    const configuredCount = typeItems.filter(item => {
+                      const key = `${item.type}-${item.itemId}`
+                      return (catalogQuantities[key] || 0) > 0
+                    }).length
+
+                    return (
+                      <div key={type}>
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-3">
+                          <span className={`text-xs px-2 py-1 rounded ${type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {type === 'linen' ? 'Linens' : 'Supplies'}
+                          </span>
+                          <span className="text-sm font-normal text-gray-500">
+                            {configuredCount} of {typeItems.length} items configured
+                          </span>
+                        </h3>
+                        {Object.entries(byCategory).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryItems]) => (
+                          <div key={category} className="mb-6">
+                            <h4 className="text-sm font-medium text-gray-700 mb-3 pb-2 border-b">
+                              {category}
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {categoryItems.map((item) => {
+                                const key = `${item.type}-${item.itemId}`
+                                const quantity = catalogQuantities[key] || 0
+                                const hasQuantity = quantity > 0
+
+                                return (
+                                  <div
+                                    key={key}
+                                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
+                                      hasQuantity
+                                        ? 'bg-white border-gray-300 shadow-sm'
+                                        : 'bg-gray-50 border-gray-200'
+                                    }`}
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className={`font-medium truncate ${hasQuantity ? 'text-gray-900' : 'text-gray-500'}`}>
+                                        {item.itemName}
+                                      </p>
+                                      {item.itemCode && (
+                                        <p className="text-xs text-gray-400 truncate">{item.itemCode}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCatalogQuantityChange(key, quantity - 1)}
+                                        disabled={quantity === 0}
+                                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+                                      >
+                                        -
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        value={quantity}
+                                        onChange={(e) => handleCatalogQuantityChange(key, parseInt(e.target.value) || 0)}
+                                        className={`w-12 h-8 text-center border rounded font-medium ${
+                                          hasQuantity
+                                            ? 'border-blue-300 bg-blue-50 text-blue-700'
+                                            : 'border-gray-200 bg-white text-gray-400'
+                                        }`}
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCatalogQuantityChange(key, quantity + 1)}
+                                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Save button at bottom if dirty */}
+              {inventoryDirty && catalogItems.length > 0 && (
+                <div className="mt-6 pt-6 border-t flex justify-end">
+                  <Button onClick={handleSaveInventory} isLoading={isSavingInventory}>
+                    <Save size={16} />
+                    Save Inventory Changes
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -1062,6 +2066,102 @@ export default function PropertyEditPage() {
           </div>
         )}
       </Modal>
+
+      {/* Room Modal */}
+      <Modal
+        isOpen={showRoomModal}
+        onClose={() => {
+          setShowRoomModal(false)
+          setEditingRoom(null)
+          resetRoomForm()
+        }}
+        title={editingRoom ? 'Edit Room' : 'Add Room'}
+      >
+        <div className="space-y-4">
+          <Input
+            label="Room Name"
+            value={newRoomName}
+            onChange={(e) => setNewRoomName(e.target.value)}
+            placeholder="e.g., Master Bedroom, Kitchen"
+          />
+
+          <Select
+            label="Room Type"
+            value={newRoomType}
+            onChange={(e) => setNewRoomType(e.target.value)}
+            options={ROOM_TYPES}
+          />
+
+          {/* Bed Configuration - only for bedrooms */}
+          {newRoomType === 'bedroom' && (
+            <div className="border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <label className="text-sm font-medium text-gray-700">
+                  Bed Configuration
+                </label>
+                <Button size="sm" variant="outline" onClick={addBedToRoom}>
+                  <Plus size={14} />
+                  Add Bed
+                </Button>
+              </div>
+
+              {newRoomBeds.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-2">
+                  No beds configured. Add beds to auto-suggest linen requirements.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {newRoomBeds.map((bed, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <Select
+                        value={bed.type}
+                        onChange={(e) => updateBed(index, 'type', e.target.value)}
+                        options={BED_TYPES.map(t => ({ value: t, label: t }))}
+                        className="flex-1"
+                      />
+                      <Input
+                        type="number"
+                        min={1}
+                        value={bed.count}
+                        onChange={(e) => updateBed(index, 'count', parseInt(e.target.value) || 1)}
+                        className="w-20"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeBed(index)}
+                      >
+                        <Trash2 size={14} className="text-red-500" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRoomModal(false)
+                setEditingRoom(null)
+                resetRoomForm()
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={editingRoom ? handleUpdateRoom : handleAddRoom}
+              isLoading={isSavingRoom}
+              disabled={!newRoomName.trim()}
+            >
+              {editingRoom ? 'Update Room' : 'Add Room'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
     </div>
   )
 }

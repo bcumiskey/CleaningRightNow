@@ -46,17 +46,30 @@ function extractPropertyName(summary: string): string | null {
   return propertyName || null
 }
 
-// Find best matching property by name
+// Find best matching property by name and keywords
 async function findMatchingProperty(
   eventSummary: string,
-  properties: { id: string; name: string }[]
+  properties: { id: string; name: string; keywords: string | null }[]
 ): Promise<{ id: string; name: string } | null> {
   const extractedName = extractPropertyName(eventSummary)
   if (!extractedName) return null
 
   const normalizedExtracted = extractedName.toLowerCase().trim()
+  const originalSummaryLower = eventSummary.toLowerCase().trim()
 
-  // Exact match first
+  // First, check keywords - most reliable match
+  for (const prop of properties) {
+    if (prop.keywords) {
+      const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
+      for (const keyword of keywordList) {
+        if (keyword && (originalSummaryLower.includes(keyword) || normalizedExtracted.includes(keyword))) {
+          return prop
+        }
+      }
+    }
+  }
+
+  // Exact name match
   let match = properties.find(
     p => p.name.toLowerCase().trim() === normalizedExtracted
   )
@@ -149,9 +162,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get all properties for matching
+    // Get all properties for matching (including keywords for better matching)
     const properties = await prisma.property.findMany({
-      select: { id: true, name: true, baseRate: true },
+      select: { id: true, name: true, baseRate: true, keywords: true },
     })
 
     const results: SyncResult[] = []
@@ -204,7 +217,7 @@ export async function POST(request: NextRequest) {
           }
 
           // Get property rate
-          const property = properties.find((p: { id: string; name: string; baseRate: number }) => p.id === matchedProperty.id)
+          const property = properties.find((p: { id: string; name: string; baseRate: number; keywords: string | null }) => p.id === matchedProperty.id)
           const rate = property?.baseRate || 0
 
           // Create the job

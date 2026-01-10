@@ -18,11 +18,11 @@ export async function GET(
       where: { id: params.id },
       include: {
         property: {
-          select: { id: true, name: true, address: true },
+          select: { id: true, name: true, address: true, imageUrl: true },
         },
         assignments: {
           include: {
-            teamMember: { select: { id: true, name: true } },
+            teamMember: { select: { id: true, name: true, rank: true, canSupervise: true } },
           },
         },
       },
@@ -60,15 +60,6 @@ export async function PATCH(
       updateData.completed = data.completed
       updateData.completedAt = data.completed ? new Date() : null
     }
-    if (typeof data.clientPaid === 'boolean') {
-      updateData.clientPaid = data.clientPaid
-      updateData.clientPaidAt = data.clientPaid ? new Date() : null
-      // When client paid is marked, also mark job as completed
-      if (data.clientPaid) {
-        updateData.completed = true
-        updateData.completedAt = new Date()
-      }
-    }
     if (typeof data.teamPaid === 'boolean') {
       updateData.teamPaid = data.teamPaid
       updateData.teamPaidAt = data.teamPaid ? new Date() : null
@@ -77,6 +68,7 @@ export async function PATCH(
     // Other fields
     if (data.date) updateData.date = new Date(data.date)
     if (data.time !== undefined) updateData.time = data.time || null
+    if (data.priority !== undefined) updateData.priority = parseInt(data.priority)
     if (data.rate !== undefined) updateData.rate = parseFloat(data.rate)
     if (data.expensePercent !== undefined) updateData.expensePercent = parseFloat(data.expensePercent)
     if (data.propertyId) updateData.propertyId = data.propertyId
@@ -101,8 +93,8 @@ export async function PATCH(
       },
     })
 
-    // If clientPaid is true and property has per_job billing, create draft invoice
-    if (data.clientPaid && job.property.billingFrequency === 'per_job') {
+    // If job is marked completed and property has per_job billing, create draft invoice
+    if (data.completed && job.property.billingFrequency === 'per_job') {
       // Check if invoice already exists for this job
       const existingInvoiceItem = await prisma.invoiceLineItem.findFirst({
         where: { jobId: job.id },

@@ -2,12 +2,21 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil, Trash2, Loader2 } from 'lucide-react'
+import { ArrowLeft, Printer, Send, CheckCircle, Download, Mail, Pencil, Trash2, Loader2, Check } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import Modal from '@/components/ui/Modal'
 import InvoiceTemplate from '@/components/documents/InvoiceTemplate'
+import { cn, formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
+
+const PAYMENT_METHODS = [
+  { value: 'venmo', label: 'Venmo' },
+  { value: 'zelle', label: 'Zelle' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'other', label: 'Other' },
+]
 
 interface LineItem {
   id: string
@@ -28,6 +37,7 @@ interface Invoice {
   discount: number
   total: number
   status: string
+  paymentMethod?: string | null
   notes?: string | null
   lineItems: LineItem[]
   property: {
@@ -63,6 +73,8 @@ export default function InvoiceViewPage() {
   const [isSending, setIsSending] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('')
 
   useEffect(() => {
     if (id) {
@@ -177,7 +189,7 @@ export default function InvoiceViewPage() {
     }
   }
 
-  const handleMarkPaid = async () => {
+  const handleMarkPaid = async (paymentMethod: string) => {
     if (!invoice) return
     setIsUpdating(true)
 
@@ -185,12 +197,38 @@ export default function InvoiceViewPage() {
       const res = await fetch(`/api/invoices/${invoice.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'paid' }),
+        body: JSON.stringify({ status: 'paid', paymentMethod }),
       })
 
       if (res.ok) {
-        setInvoice({ ...invoice, status: 'paid' })
-        toast.success('Invoice marked as paid')
+        setInvoice({ ...invoice, status: 'paid', paymentMethod })
+        toast.success(`Invoice marked as paid via ${PAYMENT_METHODS.find(p => p.value === paymentMethod)?.label}`)
+        setShowPaymentModal(false)
+        setSelectedPaymentMethod('')
+      }
+    } catch (error) {
+      toast.error('Failed to update invoice')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleClearPayment = async () => {
+    if (!invoice) return
+    setIsUpdating(true)
+
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'sent', paymentMethod: null }),
+      })
+
+      if (res.ok) {
+        setInvoice({ ...invoice, status: 'sent', paymentMethod: null })
+        toast.success('Payment cleared - invoice marked as sent')
+        setShowPaymentModal(false)
+        setSelectedPaymentMethod('')
       }
     } catch (error) {
       toast.error('Failed to update invoice')
@@ -308,16 +346,25 @@ export default function InvoiceViewPage() {
                   </Button>
                 )}
 
-                {/* Mark as Paid - only for sent invoices */}
-                {invoice.status === 'sent' && (
+                {/* Mark as Paid - for draft or sent invoices */}
+                {(invoice.status === 'draft' || invoice.status === 'sent') && (
                   <Button
                     variant="success"
-                    onClick={handleMarkPaid}
-                    isLoading={isUpdating}
+                    onClick={() => setShowPaymentModal(true)}
                   >
                     <CheckCircle size={16} />
                     Mark as Paid
                   </Button>
+                )}
+
+                {/* Show payment method if paid - clickable to edit */}
+                {invoice.status === 'paid' && (
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="px-3 py-1.5 bg-green-100 text-green-800 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
+                  >
+                    Paid via {PAYMENT_METHODS.find(p => p.value === invoice.paymentMethod)?.label || 'Unknown'}
+                  </button>
                 )}
 
                 {/* PDF Download */}
@@ -441,6 +488,81 @@ export default function InvoiceViewPage() {
           }
         }
       `}</style>
+
+      {/* Payment Method Modal */}
+      <Modal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false)
+          setSelectedPaymentMethod('')
+        }}
+        title={invoice?.status === 'paid' ? 'Update Payment' : 'Mark Invoice as Paid'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="text-center pb-4 border-b">
+            <p className="font-medium text-gray-900">{invoice?.invoiceNumber}</p>
+            <p className="text-lg font-semibold text-green-600 mt-1">
+              {invoice && formatCurrency(invoice.total)}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Payment Method
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {PAYMENT_METHODS.map((method) => (
+                <button
+                  key={method.value}
+                  onClick={() => setSelectedPaymentMethod(method.value)}
+                  className={cn(
+                    'p-3 rounded-lg border-2 text-center font-medium transition-colors',
+                    selectedPaymentMethod === method.value
+                      ? 'border-green-600 bg-green-50 text-green-700'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                  )}
+                >
+                  {method.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setShowPaymentModal(false)
+                setSelectedPaymentMethod('')
+              }}
+            >
+              Cancel
+            </Button>
+            {invoice?.status === 'paid' && (
+              <Button
+                variant="outline"
+                className="flex-1 text-red-600 hover:bg-red-50"
+                isLoading={isUpdating}
+                onClick={() => handleClearPayment()}
+              >
+                Clear Payment
+              </Button>
+            )}
+            <Button
+              variant="success"
+              className="flex-1"
+              disabled={!selectedPaymentMethod}
+              isLoading={isUpdating}
+              onClick={() => handleMarkPaid(selectedPaymentMethod)}
+            >
+              <Check size={16} />
+              {invoice?.status === 'paid' ? 'Update' : 'Mark as Paid'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </>
   )
 }
