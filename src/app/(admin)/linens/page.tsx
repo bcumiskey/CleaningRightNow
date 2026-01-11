@@ -34,6 +34,11 @@ interface Property {
   name: string
 }
 
+interface Owner {
+  id: string
+  name: string
+}
+
 interface PropertyItem {
   itemId: string
   itemName: string
@@ -114,6 +119,8 @@ export default function LinensPage() {
   const [isLoadingSupplies, setIsLoadingSupplies] = useState(true)
 
   const [properties, setProperties] = useState<Property[]>([])
+  const [owners, setOwners] = useState<Owner[]>([])
+  const [ownerFilter, setOwnerFilter] = useState<string>('all') // 'all' | ownerId
 
   // Catalog editing states
   const [editingCategory, setEditingCategory] = useState<string | null>(null)
@@ -149,7 +156,19 @@ export default function LinensPage() {
     fetchLinenCategories()
     fetchSupplyCategories()
     fetchProperties()
+    fetchOwners()
   }, [])
+
+  const fetchOwners = async () => {
+    try {
+      const response = await fetch('/api/owners')
+      if (response.ok) {
+        setOwners(await response.json())
+      }
+    } catch (error) {
+      console.error('Failed to fetch owners:', error)
+    }
+  }
 
   const fetchLinenCategories = async () => {
     try {
@@ -252,13 +271,18 @@ export default function LinensPage() {
   }
 
   // Item CRUD
-  const handleAddItem = async (data: { categoryId: string; name: string; code: string; brand?: string }) => {
+  const handleAddItem = async (data: { categoryId: string; name: string; code: string; brand?: string; scope?: string; ownerId?: string }) => {
     const apiPath = catalogSubTab === 'linens' ? '/api/linens' : '/api/supplies'
     try {
       const response = await fetch(apiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, unitCost: '0' }),
+        body: JSON.stringify({
+          ...data,
+          unitCost: '0',
+          scope: data.scope || 'global',
+          ownerId: data.scope === 'owner' ? data.ownerId : null,
+        }),
       })
       if (response.ok) {
         toast.success('Item added')
@@ -498,8 +522,22 @@ export default function LinensPage() {
     }
   }, [activeTab])
 
-  const categories = catalogSubTab === 'linens' ? linenCategories : supplyCategories
+  const rawCategories = catalogSubTab === 'linens' ? linenCategories : supplyCategories
   const isLoadingCatalog = catalogSubTab === 'linens' ? isLoadingLinens : isLoadingSupplies
+
+  // Filter items by owner
+  const filterItemsByOwner = (items: Item[]) => {
+    if (ownerFilter === 'all') return items
+    if (ownerFilter === 'global') return items.filter(item => item.scope !== 'owner')
+    return items.filter(item =>
+      item.scope !== 'owner' || item.owner?.id === ownerFilter
+    )
+  }
+
+  const categories = rawCategories.map(category => ({
+    ...category,
+    items: filterItemsByOwner(category.items),
+  }))
 
   const mainTabs = [
     { id: 'catalog' as MainTabType, label: 'Item Catalog', icon: Package },
@@ -565,12 +603,30 @@ export default function LinensPage() {
               </Button>
             </div>
 
-            <p className="text-gray-600 text-sm">
-              {catalogSubTab === 'linens'
-                ? 'Manage your linen catalog (sheets, towels, pillowcases, etc.). These are reusable textiles.'
-                : 'Manage your supply catalog (cleaning products, toiletries, etc.). These are consumable items.'
-              }
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-gray-600 text-sm">
+                {catalogSubTab === 'linens'
+                  ? 'Manage your linen catalog (sheets, towels, pillowcases, etc.). These are reusable textiles.'
+                  : 'Manage your supply catalog (cleaning products, toiletries, etc.). These are consumable items.'
+                }
+              </p>
+              {owners.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Filter by owner:</span>
+                  <select
+                    value={ownerFilter}
+                    onChange={(e) => setOwnerFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value="all">All Items</option>
+                    <option value="global">Global Only</option>
+                    {owners.map(owner => (
+                      <option key={owner.id} value={owner.id}>{owner.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
             {isLoadingCatalog ? (
               <div className="text-center py-12 text-gray-500">Loading...</div>
@@ -1001,8 +1057,9 @@ export default function LinensPage() {
         onClose={() => setShowAddItem(false)}
         onSave={handleAddItem}
         categoryId={addToCategoryId}
-        categories={categories}
+        categories={rawCategories}
         type={catalogSubTab}
+        owners={owners}
       />
     </div>
   )
@@ -1163,20 +1220,21 @@ function AddCategoryModal({ isOpen, onClose, onSave, type }: {
   )
 }
 
-function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type }: {
+function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type, owners }: {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: { categoryId: string; name: string; code: string; brand?: string }) => void
+  onSave: (data: { categoryId: string; name: string; code: string; brand?: string; scope?: string; ownerId?: string }) => void
   categoryId: string
   categories: Category[]
   type: 'linens' | 'supplies'
+  owners: Owner[]
 }) {
-  const [formData, setFormData] = useState({ categoryId: '', name: '', code: '', brand: '' })
+  const [formData, setFormData] = useState({ categoryId: '', name: '', code: '', brand: '', scope: 'global', ownerId: '' })
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ categoryId: categoryId || categories[0]?.id || '', name: '', code: '', brand: '' })
+      setFormData({ categoryId: categoryId || categories[0]?.id || '', name: '', code: '', brand: '', scope: 'global', ownerId: '' })
     }
   }, [isOpen, categoryId, categories])
 
@@ -1221,6 +1279,44 @@ function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type }:
             onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
             placeholder="e.g., Method, Mrs. Meyer's"
           />
+        )}
+        {owners.length > 0 && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Owner-Specific?</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="scope"
+                  checked={formData.scope === 'global'}
+                  onChange={() => setFormData({ ...formData, scope: 'global', ownerId: '' })}
+                />
+                <span className="text-sm">Available to all</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="scope"
+                  checked={formData.scope === 'owner'}
+                  onChange={() => setFormData({ ...formData, scope: 'owner' })}
+                />
+                <span className="text-sm">Owner-specific</span>
+              </label>
+            </div>
+            {formData.scope === 'owner' && (
+              <select
+                value={formData.ownerId}
+                onChange={(e) => setFormData({ ...formData, ownerId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                required
+              >
+                <option value="">Select owner...</option>
+                {owners.map(owner => (
+                  <option key={owner.id} value={owner.id}>{owner.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
         )}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
