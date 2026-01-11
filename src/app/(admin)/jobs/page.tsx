@@ -397,10 +397,8 @@ function JobsPageContent() {
 
       if (response.ok) {
         fetchJobs()
-        if (field === 'completed' && value) {
-          toast.success('Job marked complete! Invoice created.')
-        } else if (field === 'completed' && !value) {
-          toast.success('Job marked incomplete')
+        if (field === 'clientPaid' && value) {
+          toast.success('Job completed! Draft invoice created.')
         } else if (field === 'teamPaid' && value) {
           toast.success('Team marked as paid')
         } else {
@@ -663,17 +661,16 @@ function JobsPageContent() {
                                 )}
                               </div>
 
-                              {/* Status Controls */}
+                              {/* Payment Controls */}
                               <div className="flex items-center gap-4 border-l pl-4">
-                                {/* Job Completion */}
                                 <label className="flex flex-col items-center cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    checked={job.completed}
-                                    onChange={(e) => handleStatusChange(job.id, 'completed', e.target.checked)}
+                                    checked={job.clientPaid}
+                                    onChange={(e) => handleStatusChange(job.id, 'clientPaid', e.target.checked)}
                                     className="w-5 h-5 text-green-600 rounded mb-1"
                                   />
-                                  <span className="text-xs text-gray-500">Complete</span>
+                                  <span className="text-xs text-gray-500">Client</span>
                                 </label>
                                 {/* Team Payment - shows method selector or paid status */}
                                 <div className="flex flex-col items-center">
