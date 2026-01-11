@@ -52,7 +52,7 @@ interface Job {
   teamPaid: boolean
   teamPaidAt: string | null
   source: string
-  property: { id: string; name: string }
+  property: { id: string; name: string; color: string | null }
   assignments: JobAssignment[]
 }
 
@@ -591,27 +591,53 @@ function JobsPageContent() {
                 <div className="space-y-2">
                   {jobsByDate[dateKey].map(job => {
                     const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+                    // Get background color style based on property color
+                    const getJobStyle = () => {
+                      if (job.property.color) {
+                        return {
+                          backgroundColor: job.completed
+                            ? `${job.property.color}40` // 25% opacity for completed
+                            : `${job.property.color}20`, // 12% opacity for pending
+                          borderColor: job.property.color,
+                          borderWidth: '1px',
+                          borderStyle: 'solid' as const,
+                        }
+                      }
+                      return undefined
+                    }
                     return (
                       <Card
                         key={job.id}
                         id={`job-${job.id}`}
                         className={cn(
                           'transition-all',
-                          job.completed ? 'bg-green-50 border-green-200' : 'bg-white'
+                          !job.property.color && (job.completed ? 'bg-green-50 border-green-200' : 'bg-white')
                         )}
+                        style={getJobStyle()}
                       >
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
                             {/* Left: Property & Time */}
                             <div className="flex items-center gap-4">
-                              <div className={cn(
-                                'w-12 h-12 rounded-lg flex items-center justify-center',
-                                job.completed ? 'bg-green-200' : 'bg-blue-100'
-                              )}>
+                              <div
+                                className={cn(
+                                  'w-12 h-12 rounded-lg flex items-center justify-center',
+                                  !job.property.color && (job.completed ? 'bg-green-200' : 'bg-blue-100')
+                                )}
+                                style={job.property.color ? { backgroundColor: `${job.property.color}30` } : undefined}
+                              >
                                 {job.completed ? (
-                                  <Check className="text-green-700" size={24} />
+                                  <Check
+                                    className={!job.property.color ? 'text-green-700' : ''}
+                                    style={job.property.color ? { color: job.property.color } : undefined}
+                                    size={24}
+                                  />
                                 ) : (
-                                  <MapPin className="text-blue-600" size={24} />
+                                  <MapPin
+                                    className={!job.property.color ? 'text-blue-600' : ''}
+                                    style={job.property.color ? { color: job.property.color } : undefined}
+                                    size={24}
+                                  />
                                 )}
                               </div>
                               <div>

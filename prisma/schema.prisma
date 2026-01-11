@@ -587,16 +587,17 @@ model User {
 // ============================================================
 
 model CompanySettings {
-  id              String    @id @default("default")
-  companyName     String    @default("Cleaning Right Now")
-  address         String?
-  phone           String?
-  email           String?
-  website         String?
-  logoUrl         String?   // URL to company logo
-  invoiceFooter   String?   // Custom footer text for invoices
-  invoiceTerms    String?   // Payment terms text
-  updatedAt       DateTime  @updatedAt
+  id                    String    @id @default("default")
+  companyName           String    @default("Cleaning Right Now")
+  address               String?
+  phone                 String?
+  email                 String?
+  website               String?
+  logoUrl               String?   // URL to company logo
+  invoiceFooter         String?   // Custom footer text for invoices
+  invoiceTerms          String?   // Payment terms text
+  linenTargetMultiplier Int       @default(2) // Number of flips worth of linens to keep on hand
+  updatedAt             DateTime  @updatedAt
 }
 
 // ============================================================

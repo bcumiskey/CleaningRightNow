@@ -19,6 +19,7 @@ interface CompanySettings {
   logoUrl: string | null
   invoiceFooter: string | null
   invoiceTerms: string | null
+  linenTargetMultiplier: number
 }
 
 export default function SettingsPage() {
@@ -32,6 +33,7 @@ export default function SettingsPage() {
     logoUrl: '',
     invoiceFooter: '',
     invoiceTerms: '',
+    linenTargetMultiplier: 2,
   })
   const [expensePercentage, setExpensePercentage] = useState('12')
   const [isLoading, setIsLoading] = useState(true)
@@ -55,6 +57,7 @@ export default function SettingsPage() {
           logoUrl: data.logoUrl || '',
           invoiceFooter: data.invoiceFooter || '',
           invoiceTerms: data.invoiceTerms || '',
+          linenTargetMultiplier: data.linenTargetMultiplier ?? 2,
         })
       }
     } catch (error) {
@@ -240,6 +243,20 @@ export default function SettingsPage() {
               <p className="text-sm text-gray-500 mt-1">
                 This percentage is deducted from job rates for business expenses before calculating
                 team payments.
+              </p>
+            </div>
+            <div className="max-w-xs">
+              <Input
+                label="Linen Target (Flips)"
+                type="number"
+                min="1"
+                max="10"
+                value={settings.linenTargetMultiplier.toString()}
+                onChange={(e) => setSettings({ ...settings, linenTargetMultiplier: parseInt(e.target.value) || 2 })}
+                placeholder="2"
+              />
+              <p className="text-sm text-gray-500 mt-1">
+                Low inventory alerts trigger when stock falls below this many flips worth of linens.
               </p>
             </div>
           </CardContent>

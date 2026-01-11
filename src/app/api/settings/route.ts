@@ -57,6 +57,7 @@ export async function PUT(request: NextRequest) {
         logoUrl: data.logoUrl,
         invoiceFooter: data.invoiceFooter,
         invoiceTerms: data.invoiceTerms,
+        linenTargetMultiplier: data.linenTargetMultiplier !== undefined ? parseInt(data.linenTargetMultiplier) : undefined,
       },
       create: {
         id: 'default',
@@ -68,6 +69,7 @@ export async function PUT(request: NextRequest) {
         logoUrl: data.logoUrl,
         invoiceFooter: data.invoiceFooter,
         invoiceTerms: data.invoiceTerms,
+        linenTargetMultiplier: data.linenTargetMultiplier ? parseInt(data.linenTargetMultiplier) : 2,
       },
     })
 
