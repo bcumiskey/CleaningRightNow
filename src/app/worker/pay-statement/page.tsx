@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense, useCallback } from 'react'
+import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Printer } from 'lucide-react'
 import Button from '@/components/ui/Button'
@@ -58,9 +58,11 @@ function PayStatementContent() {
   const [isLoading, setIsLoading] = useState(true)
 
   const monthParam = searchParams.get('month')
-  const currentMonth = monthParam
-    ? parse(monthParam, 'yyyy-MM', new Date())
-    : new Date()
+
+  // Memoize to prevent infinite re-renders - Date objects are recreated each render
+  const currentMonth = useMemo(() => {
+    return monthParam ? parse(monthParam, 'yyyy-MM', new Date()) : new Date()
+  }, [monthParam])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
