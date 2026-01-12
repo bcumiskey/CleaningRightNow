@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { format, isToday, parseISO } from 'date-fns'
+import { format, isToday, parseISO, addDays, isBefore, startOfDay, isAfter } from 'date-fns'
 import toast from 'react-hot-toast'
 
 // Feature flag for supervisor mode - set to true when ready to enable
@@ -81,6 +81,7 @@ export default function WorkerJobDetailPage() {
   const [job, setJob] = useState<JobDetail | null>(null)
   const [mySession, setMySession] = useState<JobSession | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasBlockingJob, setHasBlockingJob] = useState(false)
   const [showStartModal, setShowStartModal] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [showAbsentModal, setShowAbsentModal] = useState(false)
@@ -124,6 +125,25 @@ export default function WorkerJobDetailPage() {
             (s: JobSession) => s.teamMemberId === teamMemberId
           )
           setMySession(mySessionData || null)
+        }
+
+        // Check for blocking jobs at the same property between now and job date
+        const jobDate = parseISO(jobData.date)
+        const today = startOfDay(new Date())
+
+        if (isAfter(jobDate, today)) {
+          // Job is in the future, check for blocking jobs
+          const blockingRes = await fetch(
+            `/api/worker/jobs?propertyId=${jobData.property.id}&startDate=${format(today, 'yyyy-MM-dd')}&endDate=${format(jobDate, 'yyyy-MM-dd')}`
+          )
+          if (blockingRes.ok) {
+            const blockingJobs = await blockingRes.json()
+            // Filter out the current job and check if any remain
+            const hasBlocker = blockingJobs.some((j: { id: string }) => j.id !== jobId)
+            setHasBlockingJob(hasBlocker)
+          }
+        } else {
+          setHasBlockingJob(false)
         }
       }
     } catch (error) {
@@ -563,41 +583,70 @@ export default function WorkerJobDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Action Buttons - Only show for today's jobs */}
-      {!isCompleted && job && isToday(parseISO(job.date)) && (
-        <div className="fixed bottom-20 left-4 right-4 space-y-2">
-          {!isCheckedIn ? (
-            <Button size="lg" className="w-full" onClick={() => setShowStartModal(true)}>
-              <Play size={20} />
-              Start Job
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              variant="primary"
-              className="w-full bg-green-600 hover:bg-green-700"
-              onClick={() => setShowCompleteModal(true)}
-            >
-              <CheckCircle size={20} />
-              Complete Job
-            </Button>
-          )}
-        </div>
-      )}
+      {/* Action Buttons - Show for jobs that can be started */}
+      {!isCompleted && job && (() => {
+        const jobDate = parseISO(job.date)
+        const today = startOfDay(new Date())
+        const twoDaysFromNow = addDays(today, 2)
+        const isWithinStartWindow = !isBefore(jobDate, today) && isBefore(jobDate, addDays(twoDaysFromNow, 1))
+        const canStart = isWithinStartWindow && !hasBlockingJob
 
-      {/* Future job notice */}
-      {!isCompleted && job && !isToday(parseISO(job.date)) && (
-        <div className="fixed bottom-20 left-4 right-4">
-          <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-gray-600 text-sm">
-              This job is scheduled for {format(parseISO(job.date), 'EEEE, MMMM d')}.
-            </p>
-            <p className="text-gray-500 text-xs mt-1">
-              You can start this job on the day it&apos;s scheduled.
-            </p>
-          </div>
-        </div>
-      )}
+        if (canStart) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4 space-y-2">
+              {!isCheckedIn ? (
+                <Button size="lg" className="w-full" onClick={() => setShowStartModal(true)}>
+                  <Play size={20} />
+                  Start Job
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  variant="primary"
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  onClick={() => setShowCompleteModal(true)}
+                >
+                  <CheckCircle size={20} />
+                  Complete Job
+                </Button>
+              )}
+            </div>
+          )
+        }
+
+        // Show appropriate message for jobs that can't be started yet
+        if (hasBlockingJob) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+                <p className="text-amber-700 text-sm font-medium">
+                  There&apos;s another job at this property first
+                </p>
+                <p className="text-amber-600 text-xs mt-1">
+                  Complete the earlier job before starting this one.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        if (isAfter(jobDate, twoDaysFromNow)) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4">
+              <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-gray-600 text-sm">
+                  This job is scheduled for {format(jobDate, 'EEEE, MMMM d')}.
+                </p>
+                <p className="text-gray-500 text-xs mt-1">
+                  You can start this job up to 2 days before.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        return null
+      })()}
 
       {/* Start Job Confirmation Modal */}
       <Modal
