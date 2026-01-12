@@ -13,7 +13,7 @@ import {
   Square,
   Camera,
   AlertCircle,
-  AlertTriangle,
+  Sparkles,
   Navigation,
   Shield,
   UserX,
@@ -723,16 +723,16 @@ export default function WorkerJobDetailPage() {
       <Modal
         isOpen={showLateStartModal}
         onClose={() => setShowLateStartModal(false)}
-        title="Hold Up..."
+        title="Running a Bit Behind?"
         size="md"
       >
         <div className="space-y-4">
           <div className="text-center py-4">
             <div className="w-16 h-16 bg-amber-100 rounded-full mx-auto flex items-center justify-center mb-4">
-              <AlertCircle size={32} className="text-amber-600" />
+              <Clock size={32} className="text-amber-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Wait a second...
+              Better late than never!
             </h3>
             <p className="text-gray-600">
               This job was scheduled for{' '}
@@ -741,7 +741,7 @@ export default function WorkerJobDetailPage() {
               </span>
             </p>
             <p className="text-gray-500 mt-2 text-sm">
-              Are you sure you want to start it now?
+              Ready to knock it out now?
             </p>
           </div>
 
@@ -751,42 +751,41 @@ export default function WorkerJobDetailPage() {
               className="flex-1"
               onClick={() => setShowLateStartModal(false)}
             >
-              Nevermind
+              Not Yet
             </Button>
             <Button
-              variant="outline"
-              className="flex-1 border-amber-500 text-amber-700 hover:bg-amber-50"
+              className="flex-1"
               onClick={() => {
                 setShowLateStartModal(false)
                 setShowLateStartConfirm2(true)
               }}
             >
-              Yes, Continue
+              Let&apos;s Do It
             </Button>
           </div>
         </div>
       </Modal>
 
-      {/* Late Start - Second Confirmation Modal (with funny message) */}
+      {/* Late Start - Second Confirmation Modal (playful) */}
       <Modal
         isOpen={showLateStartConfirm2}
         onClose={() => setShowLateStartConfirm2(false)}
-        title="Are You Really Sure?"
+        title="One More Thing..."
         size="md"
       >
         <div className="space-y-4">
           <div className="text-center py-4">
-            <div className="w-16 h-16 bg-orange-100 rounded-full mx-auto flex items-center justify-center mb-4">
-              <AlertTriangle size={32} className="text-orange-600" />
+            <div className="w-16 h-16 bg-emerald-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <Sparkles size={32} className="text-emerald-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Okay, but just so you know...
+              Are you <span className="italic">sure</span> you&apos;re sure?
             </h3>
             <p className="text-gray-600">
-              The boss sees <span className="italic">everything</span>. Starting this job late will be logged.
+              Just double-checking... you know how it is!
             </p>
-            <p className="text-gray-500 mt-3 text-sm bg-gray-100 rounded-lg p-3">
-              If there&apos;s a good reason for the delay, no worries! Just make sure to add a note when you&apos;re done.
+            <p className="text-gray-500 mt-3 text-sm bg-gray-50 rounded-lg p-3">
+              Life happens. If there was a delay, feel free to add a quick note when you wrap up.
             </p>
           </div>
 
@@ -796,10 +795,10 @@ export default function WorkerJobDetailPage() {
               className="flex-1"
               onClick={() => setShowLateStartConfirm2(false)}
             >
-              Cancel
+              Go Back
             </Button>
             <Button
-              className="flex-1 bg-orange-600 hover:bg-orange-700"
+              className="flex-1"
               onClick={() => {
                 setShowLateStartConfirm2(false)
                 handleStartJob('manual')
@@ -807,7 +806,7 @@ export default function WorkerJobDetailPage() {
               isLoading={isSubmitting}
             >
               <Play size={16} />
-              Start Anyway
+              Start Now
             </Button>
           </div>
         </div>
