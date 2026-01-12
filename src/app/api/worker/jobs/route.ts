@@ -22,8 +22,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
     const propertyId = searchParams.get('propertyId')
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const whereClause: Record<string, any> = {}
+    const whereClause: Record<string, unknown> = {}
     if (startDate) {
       whereClause.date = { ...whereClause.date as object, gte: new Date(startDate) }
     }
