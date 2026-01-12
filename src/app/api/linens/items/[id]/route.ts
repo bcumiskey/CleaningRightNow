@@ -26,11 +26,13 @@ export async function PATCH(
       name?: string
       code?: string
       categoryId?: string
+      unitCost?: number
     } = {}
 
     if (data.name) updateData.name = data.name
     if (data.code) updateData.code = data.code
     if (data.categoryId) updateData.categoryId = data.categoryId
+    if (data.unitCost !== undefined) updateData.unitCost = parseFloat(data.unitCost) || 0
 
     const item = await prisma.linenItem.update({
       where: { id },
