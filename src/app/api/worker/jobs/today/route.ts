@@ -23,8 +23,7 @@ export async function GET() {
     const end = endOfDay(today)
 
     // Build where clause - workers only see their assigned jobs
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const whereClause: Record<string, any> = {
+    const whereClause: Record<string, unknown> = {
       date: { gte: start, lte: end },
     }
 
