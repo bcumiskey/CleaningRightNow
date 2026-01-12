@@ -471,15 +471,20 @@ function JobsPageContent() {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))
   }
 
-  // Group jobs by date (use getDateKey to avoid timezone issues)
-  const jobsByDate = jobs.reduce((acc, job) => {
-    const dateKey = getDateKey(job.date)
-    if (!acc[dateKey]) acc[dateKey] = []
-    acc[dateKey].push(job)
-    return acc
-  }, {} as Record<string, Job[]>)
+  // Card shuffle: pending jobs first (sorted by date), then completed jobs (sorted by date)
+  const pendingJobs = jobs
+    .filter(job => !job.completed)
+    .sort((a, b) => {
+      // Sort by date first
+      const dateCompare = getDateKey(a.date).localeCompare(getDateKey(b.date))
+      if (dateCompare !== 0) return dateCompare
+      // Then by priority
+      return a.priority - b.priority
+    })
 
-  const sortedDates = Object.keys(jobsByDate).sort()
+  const completedJobs = jobs
+    .filter(job => job.completed)
+    .sort((a, b) => getDateKey(a.date).localeCompare(getDateKey(b.date)))
 
   const activeSchedules = schedules.filter(s => s.isActive)
 
@@ -604,179 +609,55 @@ function JobsPageContent() {
           </Card>
         ) : (
           <div className="space-y-6">
-            {sortedDates.map(dateKey => (
-              <div key={dateKey}>
-                <h4 className="text-sm font-semibold text-gray-500 mb-3 px-1">
-                  {format(parseLocalDate(dateKey), 'EEEE, MMMM d')}
+            {/* Pending Jobs Section */}
+            {pendingJobs.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 px-1 flex items-center gap-2">
+                  <Clock size={14} />
+                  Upcoming Work ({pendingJobs.length})
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  {jobsByDate[dateKey].map(job => {
-                    const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
-                    // Get background color style based on property color
-                    const getJobStyle = () => {
-                      if (job.property.color) {
-                        return {
-                          backgroundColor: job.completed
-                            ? `${job.property.color}40` // 25% opacity for completed
-                            : `${job.property.color}15`, // 9% opacity for pending
-                          borderColor: job.property.color,
-                          borderWidth: '2px',
-                          borderStyle: 'solid' as const,
-                        }
-                      }
-                      return undefined
-                    }
-                    return (
-                      <Card
-                        key={job.id}
-                        id={`job-${job.id}`}
-                        className={cn(
-                          'transition-all hover:shadow-md',
-                          !job.property.color && (job.completed ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200')
-                        )}
-                        style={getJobStyle()}
-                      >
-                        <CardContent className="p-4">
-                          {/* Header with property and actions */}
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                                  !job.property.color && (job.completed ? 'bg-green-200' : 'bg-blue-100')
-                                )}
-                                style={job.property.color ? { backgroundColor: `${job.property.color}30` } : undefined}
-                              >
-                                {job.completed ? (
-                                  <Check
-                                    className={!job.property.color ? 'text-green-700' : ''}
-                                    style={job.property.color ? { color: job.property.color } : undefined}
-                                    size={20}
-                                  />
-                                ) : (
-                                  <MapPin
-                                    className={!job.property.color ? 'text-blue-600' : ''}
-                                    style={job.property.color ? { color: job.property.color } : undefined}
-                                    size={20}
-                                  />
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <h3 className="font-semibold text-gray-900 truncate">{job.property.name}</h3>
-                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                  <span className={`px-1.5 py-0.5 rounded font-medium ${
-                                    job.priority <= 2 ? 'bg-red-100 text-red-700' :
-                                    job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
-                                    job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
-                                    'bg-blue-100 text-blue-700'
-                                  }`}>
-                                    P{job.priority}
-                                  </span>
-                                  {job.time && (
-                                    <span className="flex items-center gap-1">
-                                      <Clock size={12} />
-                                      {job.time}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-0.5">
-                              <button
-                                onClick={() => handleEdit(job)}
-                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                              >
-                                <Pencil size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(job.id)}
-                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Team */}
-                          <div className="flex items-center gap-2 mb-3 min-h-[28px]">
-                            <Users size={14} className="text-gray-400 flex-shrink-0" />
-                            {job.assignments.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {job.assignments.map(a => (
-                                  <Badge key={a.teamMember.id} variant="info" className="text-xs">
-                                    {a.teamMember.name}
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-gray-400">Unassigned</span>
-                            )}
-                          </div>
-
-                          {/* Footer with payment and status */}
-                          <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                            <div>
-                              <div className="font-semibold text-gray-900">{formatCurrency(job.rate)}</div>
-                              {job.assignments.length > 0 && (
-                                <div className="text-xs text-gray-500">
-                                  {formatCurrency(payments.perPerson)} each
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Status Controls */}
-                            <div className="flex items-center gap-3">
-                              {/* Job Completion */}
-                              <label className="flex flex-col items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={job.completed}
-                                  onChange={(e) => handleStatusChange(job.id, 'completed', e.target.checked)}
-                                  className="w-5 h-5 text-green-600 rounded mb-0.5"
-                                />
-                                <span className="text-[10px] text-gray-500">Done</span>
-                              </label>
-                              {/* Team Payment */}
-                              <div className="flex flex-col items-center">
-                                {job.teamPaid ? (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedJobForTeamPayment(job)
-                                      setShowTeamPaymentModal(true)
-                                    }}
-                                    className="flex flex-col items-center group"
-                                  >
-                                    <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center mb-0.5">
-                                      <Check size={14} className="text-white" />
-                                    </div>
-                                    <span className="text-[10px] text-blue-600 group-hover:underline">
-                                      {job.assignments[0]?.paymentMethod
-                                        ? PAYMENT_METHODS.find(p => p.value === job.assignments[0]?.paymentMethod)?.label || 'Paid'
-                                        : 'Paid'}
-                                    </span>
-                                  </button>
-                                ) : (
-                                  <button
-                                    onClick={() => {
-                                      setSelectedJobForTeamPayment(job)
-                                      setShowTeamPaymentModal(true)
-                                    }}
-                                    className="flex flex-col items-center group"
-                                  >
-                                    <div className="w-5 h-5 border-2 border-gray-300 rounded group-hover:border-blue-400 mb-0.5" />
-                                    <span className="text-[10px] text-gray-500 group-hover:text-blue-600">Team</span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
+                <div className="space-y-2">
+                  {pendingJobs.map(job => (
+                    <JobCard
+                      key={job.id}
+                      job={job}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onStatusChange={handleStatusChange}
+                      onTeamPayment={(job) => {
+                        setSelectedJobForTeamPayment(job)
+                        setShowTeamPaymentModal(true)
+                      }}
+                    />
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* Completed Jobs Section */}
+            {completedJobs.length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-gray-500 mb-3 px-1 flex items-center gap-2">
+                  <Check size={14} />
+                  Completed ({completedJobs.length})
+                </h4>
+                <div className="space-y-2">
+                  {completedJobs.map(job => (
+                    <JobCard
+                      key={job.id}
+                      job={job}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onStatusChange={handleStatusChange}
+                      onTeamPayment={(job) => {
+                        setSelectedJobForTeamPayment(job)
+                        setShowTeamPaymentModal(true)
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
           </>
@@ -1030,6 +911,161 @@ function JobsPageContent() {
         )}
       </Modal>
     </div>
+  )
+}
+
+// JobCard component for full-width bar layout
+interface JobCardProps {
+  job: Job
+  onEdit: (job: Job) => void
+  onDelete: (jobId: string) => void
+  onStatusChange: (jobId: string, field: string, value: boolean) => void
+  onTeamPayment: (job: Job) => void
+}
+
+function JobCard({ job, onEdit, onDelete, onStatusChange, onTeamPayment }: JobCardProps) {
+  const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+
+  // Get background color style based on property color - more visible now
+  const getJobStyle = () => {
+    if (job.property.color) {
+      return {
+        backgroundColor: job.completed
+          ? `${job.property.color}25` // More visible for completed
+          : `${job.property.color}18`, // More visible for pending
+        borderLeftColor: job.property.color,
+        borderLeftWidth: '4px',
+        borderLeftStyle: 'solid' as const,
+      }
+    }
+    return undefined
+  }
+
+  return (
+    <Card
+      id={`job-${job.id}`}
+      className={cn(
+        'transition-all hover:shadow-md',
+        !job.property.color && (job.completed ? 'bg-green-50 border-l-4 border-l-green-500' : 'bg-white border-l-4 border-l-blue-500')
+      )}
+      style={getJobStyle()}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-center gap-4">
+          {/* Date */}
+          <div className="text-center min-w-[60px]">
+            <div className="text-xs text-gray-500 uppercase">{format(parseLocalDate(job.date), 'EEE')}</div>
+            <div className="text-xl font-bold text-gray-900">{format(parseLocalDate(job.date), 'd')}</div>
+            <div className="text-xs text-gray-500">{format(parseLocalDate(job.date), 'MMM')}</div>
+          </div>
+
+          {/* Divider */}
+          <div className="h-12 w-px bg-gray-200" />
+
+          {/* Property & Time */}
+          <div className="flex-grow min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-gray-900 truncate">{job.property.name}</h3>
+              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                job.priority <= 2 ? 'bg-red-100 text-red-700' :
+                job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
+                job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
+                'bg-blue-100 text-blue-700'
+              }`}>
+                P{job.priority}
+              </span>
+              {job.time && (
+                <span className="flex items-center gap-1 text-xs text-gray-500">
+                  <Clock size={12} />
+                  {job.time}
+                </span>
+              )}
+            </div>
+            {/* Team */}
+            <div className="flex items-center gap-2 mt-1">
+              <Users size={12} className="text-gray-400" />
+              {job.assignments.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {job.assignments.map(a => (
+                    <Badge key={a.teamMember.id} variant="info" className="text-xs py-0">
+                      {a.teamMember.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-gray-400">Unassigned</span>
+              )}
+            </div>
+          </div>
+
+          {/* Payment Info */}
+          <div className="text-right min-w-[80px]">
+            <div className="font-semibold text-gray-900">{formatCurrency(job.rate)}</div>
+            {job.assignments.length > 0 && (
+              <div className="text-xs text-gray-500">
+                {formatCurrency(payments.perPerson)} ea
+              </div>
+            )}
+          </div>
+
+          {/* Status Controls */}
+          <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
+            {/* Job Completion */}
+            <label className="flex flex-col items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={job.completed}
+                onChange={(e) => onStatusChange(job.id, 'completed', e.target.checked)}
+                className="w-5 h-5 text-green-600 rounded mb-0.5"
+              />
+              <span className="text-[10px] text-gray-500">Done</span>
+            </label>
+            {/* Team Payment */}
+            <div className="flex flex-col items-center">
+              {job.teamPaid ? (
+                <button
+                  onClick={() => onTeamPayment(job)}
+                  className="flex flex-col items-center group"
+                >
+                  <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center mb-0.5">
+                    <Check size={14} className="text-white" />
+                  </div>
+                  <span className="text-[10px] text-blue-600 group-hover:underline">
+                    {job.assignments[0]?.paymentMethod
+                      ? PAYMENT_METHODS.find(p => p.value === job.assignments[0]?.paymentMethod)?.label || 'Paid'
+                      : 'Paid'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => onTeamPayment(job)}
+                  className="flex flex-col items-center group"
+                >
+                  <div className="w-5 h-5 border-2 border-gray-300 rounded group-hover:border-blue-400 mb-0.5" />
+                  <span className="text-[10px] text-gray-500 group-hover:text-blue-600">Team</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => onEdit(job)}
+              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              onClick={() => onDelete(job.id)}
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
