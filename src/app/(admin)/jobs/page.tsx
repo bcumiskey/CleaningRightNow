@@ -21,6 +21,7 @@ import {
   Play,
   Pause,
   Building,
+  History,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -556,10 +557,14 @@ function JobsPageContent() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4 flex items-center justify-center">
-              <Button onClick={() => { setEditingJob(null); setShowModal(true) }} className="w-full">
+            <CardContent className="p-4 flex items-center gap-2">
+              <Button onClick={() => { setEditingJob(null); setShowModal(true) }} className="flex-1">
                 <Plus size={16} />
                 Add Job
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/team')}>
+                <History size={16} />
+                Pay History
               </Button>
             </CardContent>
           </Card>
