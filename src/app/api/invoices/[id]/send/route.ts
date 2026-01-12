@@ -45,6 +45,32 @@ export async function POST(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
+    // Check invoice status - prevent sending paid/voided invoices
+    if (invoice.status === 'paid') {
+      return NextResponse.json(
+        { error: 'Cannot send a paid invoice. Create a new invoice if needed.' },
+        { status: 400 }
+      )
+    }
+
+    if (invoice.status === 'voided') {
+      return NextResponse.json(
+        { error: 'Cannot send a voided invoice' },
+        { status: 400 }
+      )
+    }
+
+    // Idempotency check - prevent duplicate sends within 5 minutes
+    if (invoice.sentAt) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+      if (invoice.sentAt > fiveMinutesAgo) {
+        return NextResponse.json(
+          { error: 'Invoice was already sent recently. Please wait before sending again.' },
+          { status: 429 }
+        )
+      }
+    }
+
     if (!invoice.property.ownerEmail) {
       return NextResponse.json(
         { error: 'Property owner has no email address configured' },
