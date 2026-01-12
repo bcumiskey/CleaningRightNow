@@ -2,6 +2,48 @@ import { Resend } from 'resend'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
+// Generic email sending function
+interface SendEmailParams {
+  to: string | string[]
+  subject: string
+  html: string
+  fromEmail?: string
+  fromName?: string
+}
+
+export async function sendEmail({
+  to,
+  subject,
+  html,
+  fromEmail = 'notifications@cleaningrightnow.com',
+  fromName = 'Cleaning Right Now',
+}: SendEmailParams) {
+  if (!resend) {
+    console.warn('Email not configured - RESEND_API_KEY not set')
+    return { success: false, error: 'Email service not configured' }
+  }
+
+  try {
+    const toAddresses = Array.isArray(to) ? to : [to]
+    const { data, error } = await resend.emails.send({
+      from: `${fromName} <${fromEmail}>`,
+      to: toAddresses,
+      subject,
+      html,
+    })
+
+    if (error) {
+      console.error('Email send error:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, messageId: data?.id }
+  } catch (error) {
+    console.error('Email send error:', error)
+    return { success: false, error: 'Failed to send email' }
+  }
+}
+
 interface SendInvoiceEmailParams {
   to: string
   invoiceNumber: string
