@@ -288,12 +288,10 @@ function CheckInPageContent() {
             </div>
 
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              {checkInResult.job.time && (
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Clock size={16} />
-                  <span>{checkInResult.job.time}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-gray-600">
+                <Clock size={16} />
+                <span>{checkInResult.job.time || 'Flexible'}</span>
+              </div>
               <div className="flex items-center gap-2 text-gray-600">
                 <Users size={16} />
                 <span>
