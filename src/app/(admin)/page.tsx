@@ -194,10 +194,10 @@ export default function DashboardPage() {
                           <div>
                             <div className="font-medium text-gray-900">{job.property.name}</div>
                             <div className="text-sm text-gray-500">
-                              {job.time || 'No time set'}
+                              {job.time && <span>{job.time}</span>}
                               {job.assignments.length > 0 && (
-                                <span className="ml-2">
-                                  • {job.assignments.map((a) => a.teamMember.name).join(', ')}
+                                <span className={job.time ? 'ml-2' : ''}>
+                                  {job.time && '• '}{job.assignments.map((a) => a.teamMember.name).join(', ')}
                                 </span>
                               )}
                             </div>

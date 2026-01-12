@@ -85,7 +85,7 @@ export default function WorkerSchedulePage() {
                     </div>
                     <div className="flex-1">
                       <div className="font-medium text-gray-900">{job.property.name}</div>
-                      <div className="text-sm text-gray-500">{job.time || 'No time set'}</div>
+                      {job.time && <div className="text-sm text-gray-500">{job.time}</div>}
                     </div>
                     {job.completed ? (
                       <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">

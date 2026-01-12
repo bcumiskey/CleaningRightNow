@@ -78,15 +78,12 @@ export default function WorkerSchedulePage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-gray-900 truncate">{job.property.name}</div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              {job.time && (
-                <span className="flex items-center gap-1">
-                  <Clock size={12} />
-                  {job.time}
-                </span>
-              )}
-              {!job.time && <span>No time set</span>}
-            </div>
+            {job.time && (
+              <div className="flex items-center gap-1 text-sm text-gray-500">
+                <Clock size={12} />
+                {job.time}
+              </div>
+            )}
             {job._activeNotes && job._activeNotes > 0 && (
               <div className="flex items-center gap-1 text-xs text-amber-600 mt-1">
                 <AlertCircle size={12} />
