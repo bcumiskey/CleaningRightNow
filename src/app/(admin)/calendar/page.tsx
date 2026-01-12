@@ -10,7 +10,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Select from '@/components/ui/Select'
 import Input from '@/components/ui/Input'
-import { cn, getDateKey, formatCurrency } from '@/lib/utils'
+import { cn, getDateKey } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
 interface Job {
@@ -478,6 +478,7 @@ export default function CalendarPage() {
           isOpen={showJobModal}
           onClose={() => setShowJobModal(false)}
           title={`Add Job - ${selectedDate ? format(new Date(selectedDate + 'T12:00:00'), 'MMMM d, yyyy') : ''}`}
+          draggable
         >
           <div className="space-y-4">
             <Select

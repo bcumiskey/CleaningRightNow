@@ -7,7 +7,14 @@ import { startOfDay, endOfDay } from 'date-fns'
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session) {
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { id?: string; role?: string; teamMemberId?: string }
+
+    // Workers must have a teamMemberId
+    if (!sessionUser.teamMemberId && sessionUser.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -15,10 +22,20 @@ export async function GET() {
     const start = startOfDay(today)
     const end = endOfDay(today)
 
+    // Build where clause - workers only see their assigned jobs
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const whereClause: Record<string, any> = {
+      date: { gte: start, lte: end },
+    }
+
+    if (sessionUser.teamMemberId) {
+      whereClause.assignments = {
+        some: { teamMemberId: sessionUser.teamMemberId }
+      }
+    }
+
     const jobs = await prisma.job.findMany({
-      where: {
-        date: { gte: start, lte: end },
-      },
+      where: whereClause,
       include: {
         property: {
           select: { id: true, name: true, address: true },

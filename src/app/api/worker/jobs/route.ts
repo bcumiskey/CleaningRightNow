@@ -6,7 +6,14 @@ import prisma from '@/lib/prisma'
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session) {
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const sessionUser = session.user as { id?: string; role?: string; teamMemberId?: string }
+
+    // Workers must have a teamMemberId
+    if (!sessionUser.teamMemberId && sessionUser.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -15,7 +22,8 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get('endDate')
     const propertyId = searchParams.get('propertyId')
 
-    const whereClause: Record<string, unknown> = {}
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const whereClause: Record<string, any> = {}
     if (startDate) {
       whereClause.date = { ...whereClause.date as object, gte: new Date(startDate) }
     }
@@ -24,6 +32,13 @@ export async function GET(request: NextRequest) {
     }
     if (propertyId) {
       whereClause.propertyId = propertyId
+    }
+
+    // Workers only see jobs they are assigned to
+    if (sessionUser.teamMemberId) {
+      whereClause.assignments = {
+        some: { teamMemberId: sessionUser.teamMemberId }
+      }
     }
 
     const jobs = await prisma.job.findMany({
