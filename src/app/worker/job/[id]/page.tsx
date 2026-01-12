@@ -25,7 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { format } from 'date-fns'
+import { format, isToday, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
 
 // Feature flag for supervisor mode - set to true when ready to enable
@@ -81,6 +81,7 @@ export default function WorkerJobDetailPage() {
   const [job, setJob] = useState<JobDetail | null>(null)
   const [mySession, setMySession] = useState<JobSession | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showStartModal, setShowStartModal] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [showAbsentModal, setShowAbsentModal] = useState(false)
   const [showRatingModal, setShowRatingModal] = useState(false)
@@ -164,6 +165,7 @@ export default function WorkerJobDetailPage() {
   const handleStartJob = async (method: 'manual' | 'nfc' | 'qr' = 'manual') => {
     if (!teamMemberId) return
 
+    setIsSubmitting(true)
     try {
       const response = await fetch('/api/job-sessions', {
         method: 'POST',
@@ -188,11 +190,14 @@ export default function WorkerJobDetailPage() {
             }),
           })
         }
-        toast.success('Job started!')
+        toast.success("Let's do this! Job started.")
+        setShowStartModal(false)
         fetchJob()
       }
     } catch (error) {
       toast.error('Failed to start job')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -558,11 +563,11 @@ export default function WorkerJobDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
-      {!isCompleted && (
+      {/* Action Buttons - Only show for today's jobs */}
+      {!isCompleted && job && isToday(parseISO(job.date)) && (
         <div className="fixed bottom-20 left-4 right-4 space-y-2">
           {!isCheckedIn ? (
-            <Button size="lg" className="w-full" onClick={() => handleStartJob('manual')}>
+            <Button size="lg" className="w-full" onClick={() => setShowStartModal(true)}>
               <Play size={20} />
               Start Job
             </Button>
@@ -580,27 +585,86 @@ export default function WorkerJobDetailPage() {
         </div>
       )}
 
+      {/* Future job notice */}
+      {!isCompleted && job && !isToday(parseISO(job.date)) && (
+        <div className="fixed bottom-20 left-4 right-4">
+          <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
+            <p className="text-gray-600 text-sm">
+              This job is scheduled for {format(parseISO(job.date), 'EEEE, MMMM d')}.
+            </p>
+            <p className="text-gray-500 text-xs mt-1">
+              You can start this job on the day it&apos;s scheduled.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Start Job Confirmation Modal */}
+      <Modal
+        isOpen={showStartModal}
+        onClose={() => setShowStartModal(false)}
+        title="Ready to Start?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <Play size={32} className="text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Let&apos;s knock this out!
+            </h3>
+            <p className="text-gray-600">
+              Starting your shift at <span className="font-medium">{job?.property.name}</span>
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowStartModal(false)}
+            >
+              Not Yet
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => handleStartJob('manual')}
+              isLoading={isSubmitting}
+            >
+              <Play size={16} />
+              Start Now
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Complete Job Modal */}
       <Modal
         isOpen={showCompleteModal}
         onClose={() => setShowCompleteModal(false)}
-        title="Complete Job"
+        title="Nice Work!"
         size="md"
       >
         <div className="space-y-4">
-          <p className="text-gray-600">
-            Add any notes about the property condition or work performed.
-          </p>
+          <div className="text-center pb-2">
+            <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-3">
+              <CheckCircle size={32} className="text-green-600" />
+            </div>
+            <p className="text-gray-600">
+              Before you wrap up, did you double-check everything?
+            </p>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes (optional)
+              Any notes for the team? (optional)
             </label>
             <textarea
               value={completionNotes}
               onChange={(e) => setCompletionNotes(e.target.value)}
-              placeholder="Any issues, special situations, or notes for the next cleaner..."
-              rows={4}
+              placeholder="Anything to note for next time, special situations, or kudos..."
+              rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -608,7 +672,7 @@ export default function WorkerJobDetailPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
             <AlertCircle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-amber-700">
-              For damage or issues, use the property reference page to add a detailed note with photos.
+              Found damage or an issue? Use the Report tab to document it with photos.
             </p>
           </div>
 
@@ -618,7 +682,7 @@ export default function WorkerJobDetailPage() {
               className="flex-1"
               onClick={() => setShowCompleteModal(false)}
             >
-              Cancel
+              Go Back
             </Button>
             <Button
               className="flex-1 bg-green-600 hover:bg-green-700"
@@ -626,7 +690,7 @@ export default function WorkerJobDetailPage() {
               isLoading={isSubmitting}
             >
               <CheckCircle size={16} />
-              Complete
+              All Done!
             </Button>
           </div>
         </div>
