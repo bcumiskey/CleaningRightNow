@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths } from 'date-fns'
-import { ChevronLeft, ChevronRight, RefreshCw, Settings } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, Settings, Plus } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -19,12 +19,56 @@ interface Job {
   property: { name: string; color: string | null }
 }
 
+interface HoverPreview {
+  day: Date
+  jobs: Job[]
+  x: number
+  y: number
+}
+
 export default function CalendarPage() {
   const router = useRouter()
   const [currentMonth, setCurrentMonth] = useState(new Date())
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [hoverPreview, setHoverPreview] = useState<HoverPreview | null>(null)
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Handle date click - go to jobs page with date pre-selected
+  const handleDateClick = (date: Date) => {
+    const formattedDate = format(date, 'yyyy-MM-dd')
+    router.push(`/jobs?newJob=true&date=${formattedDate}`)
+  }
+
+  // Handle hover with 2 second delay
+  const handleDayHover = useCallback((e: React.MouseEvent, day: Date, dayJobs: Job[]) => {
+    if (dayJobs.length === 0) return
+
+    // Clear any existing timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+    }
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoverPreview({
+        day,
+        jobs: dayJobs,
+        x: rect.left + rect.width / 2,
+        y: rect.bottom + 8,
+      })
+    }, 2000) // 2 second delay
+  }, [])
+
+  const handleDayLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+      hoverTimeoutRef.current = null
+    }
+    setHoverPreview(null)
+  }, [])
 
   useEffect(() => {
     fetchJobs()
@@ -137,9 +181,16 @@ export default function CalendarPage() {
         {/* Header with Sync Button */}
         <div className="flex justify-between items-center mb-4">
           <p className="text-sm text-gray-500">
-            Jobs from calendars, recurring schedules, or added manually
+            Click any date to add a job. Jobs from calendars, recurring schedules, or added manually.
           </p>
           <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => router.push('/jobs?newJob=true')}
+            >
+              <Plus size={16} />
+              Add Job
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -205,9 +256,12 @@ export default function CalendarPage() {
                 return (
                   <div
                     key={day.toISOString()}
+                    onClick={() => handleDateClick(day)}
+                    onMouseEnter={(e) => handleDayHover(e, day, dayJobs)}
+                    onMouseLeave={handleDayLeave}
                     className={cn(
-                      'bg-white p-2 min-h-[100px]',
-                      isToday && 'bg-blue-50'
+                      'bg-white p-2 min-h-[100px] cursor-pointer hover:bg-gray-50 transition-colors',
+                      isToday && 'bg-blue-50 hover:bg-blue-100'
                     )}
                   >
                     <div
@@ -254,6 +308,55 @@ export default function CalendarPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Hover Preview Tooltip */}
+        {hoverPreview && (
+          <div
+            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-3 min-w-[200px] max-w-[300px]"
+            style={{
+              left: `${hoverPreview.x}px`,
+              top: `${hoverPreview.y}px`,
+              transform: 'translateX(-50%)',
+            }}
+            onMouseEnter={() => {
+              // Keep preview open when hovering over it
+              if (hoverTimeoutRef.current) {
+                clearTimeout(hoverTimeoutRef.current)
+              }
+            }}
+            onMouseLeave={handleDayLeave}
+          >
+            <div className="text-sm font-semibold text-gray-900 mb-2 border-b pb-2">
+              {format(hoverPreview.day, 'EEEE, MMMM d')}
+            </div>
+            <div className="space-y-2">
+              {hoverPreview.jobs.map((job) => {
+                const colorStyle = getJobColorStyle(job)
+                return (
+                  <div
+                    key={job.id}
+                    className={cn(
+                      'p-2 rounded text-sm cursor-pointer hover:ring-2 hover:ring-blue-400',
+                      !colorStyle && (job.completed
+                        ? 'bg-green-50 text-green-700'
+                        : 'bg-blue-50 text-blue-700')
+                    )}
+                    style={colorStyle}
+                    onClick={() => router.push(`/jobs?highlight=${job.id}`)}
+                  >
+                    <div className="font-medium">
+                      {job.completed && <span className="opacity-60">✓ </span>}
+                      {job.property.name}
+                    </div>
+                    {job.time && (
+                      <div className="text-xs opacity-75">{job.time}</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

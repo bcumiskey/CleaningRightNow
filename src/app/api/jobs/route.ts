@@ -70,7 +70,18 @@ export async function POST(request: NextRequest) {
     if (!data.date) {
       return NextResponse.json({ error: 'Date is required' }, { status: 400 })
     }
-    const jobDate = new Date(data.date)
+    // Parse date string as local date (not UTC) to avoid timezone shift
+    // Input: "2026-01-12" -> Should be Jan 12 at midnight local time
+    const dateParts = data.date.split('-')
+    if (dateParts.length !== 3) {
+      return NextResponse.json({ error: 'Invalid date format. Use YYYY-MM-DD' }, { status: 400 })
+    }
+    const jobDate = new Date(
+      parseInt(dateParts[0]), // year
+      parseInt(dateParts[1]) - 1, // month (0-indexed)
+      parseInt(dateParts[2]), // day
+      12, 0, 0 // noon local time to avoid any date boundary issues
+    )
     if (isNaN(jobDate.getTime())) {
       return NextResponse.json({ error: 'Invalid date format' }, { status: 400 })
     }

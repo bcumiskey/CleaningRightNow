@@ -66,7 +66,18 @@ export async function PATCH(
     }
 
     // Other fields
-    if (data.date) updateData.date = new Date(data.date)
+    if (data.date) {
+      // Parse date string as local date (not UTC) to avoid timezone shift
+      const dateParts = data.date.split('-')
+      if (dateParts.length === 3) {
+        updateData.date = new Date(
+          parseInt(dateParts[0]),
+          parseInt(dateParts[1]) - 1,
+          parseInt(dateParts[2]),
+          12, 0, 0
+        )
+      }
+    }
     if (data.time !== undefined) updateData.time = data.time || null
     if (data.priority !== undefined) updateData.priority = parseInt(data.priority)
     if (data.rate !== undefined) updateData.rate = parseFloat(data.rate)

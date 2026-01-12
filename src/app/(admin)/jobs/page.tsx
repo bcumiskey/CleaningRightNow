@@ -144,6 +144,8 @@ function JobsPageContent() {
   const searchParams = useSearchParams()
   const highlightId = searchParams.get('highlight')
   const tabParam = searchParams.get('tab')
+  const newJobParam = searchParams.get('newJob')
+  const dateParam = searchParams.get('date')
 
   const [activeTab, setActiveTab] = useState<'jobs' | 'recurring'>(
     tabParam === 'recurring' ? 'recurring' : 'jobs'
@@ -189,6 +191,20 @@ function JobsPageContent() {
       }, 100)
     }
   }, [highlightId, jobs])
+
+  // State for pre-selected date from calendar
+  const [preselectedDate, setPreselectedDate] = useState<string | null>(null)
+
+  // Open new job modal if coming from calendar
+  useEffect(() => {
+    if (newJobParam === 'true') {
+      setPreselectedDate(dateParam)
+      setEditingJob(null)
+      setShowModal(true)
+      // Clear the URL params
+      router.replace('/jobs')
+    }
+  }, [newJobParam, dateParam, router])
 
   const fetchJobs = async () => {
     try {
@@ -890,11 +906,12 @@ function JobsPageContent() {
 
       <JobModal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditingJob(null) }}
+        onClose={() => { setShowModal(false); setEditingJob(null); setPreselectedDate(null) }}
         onSave={handleSave}
         properties={properties}
         teamMembers={teamMembers}
         editingJob={editingJob}
+        preselectedDate={preselectedDate}
       />
 
       <ScheduleModal
@@ -1021,13 +1038,13 @@ interface JobModalProps {
   properties: Property[]
   teamMembers: TeamMember[]
   editingJob: Job | null
+  preselectedDate?: string | null
 }
 
-function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob }: JobModalProps) {
+function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob, preselectedDate }: JobModalProps) {
   const [formData, setFormData] = useState({
     propertyId: '',
     date: format(new Date(), 'yyyy-MM-dd'),
-    time: '',
     priority: '5',
     rate: '',
     expensePercent: '12',
@@ -1042,7 +1059,6 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
         setFormData({
           propertyId: editingJob.property.id,
           date: format(new Date(editingJob.date), 'yyyy-MM-dd'),
-          time: editingJob.time || '',
           priority: editingJob.priority?.toString() || '5',
           rate: editingJob.rate.toString(),
           expensePercent: editingJob.expensePercent?.toString() || '12',
@@ -1052,8 +1068,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
       } else {
         setFormData({
           propertyId: '',
-          date: format(new Date(), 'yyyy-MM-dd'),
-          time: '',
+          date: preselectedDate || format(new Date(), 'yyyy-MM-dd'),
           priority: '5',
           rate: '',
           expensePercent: '12',
@@ -1062,7 +1077,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
         })
       }
     }
-  }, [isOpen, editingJob])
+  }, [isOpen, editingJob, preselectedDate])
 
   const handlePropertyChange = (propertyId: string) => {
     const property = properties.find((p) => p.id === propertyId)
@@ -1106,7 +1121,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           required
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label="Date"
             type="date"
@@ -1119,12 +1134,6 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
             value={formData.priority}
             onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
             options={PRIORITY_OPTIONS}
-          />
-          <Input
-            label="Time (optional)"
-            type="time"
-            value={formData.time}
-            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
           />
         </div>
 
