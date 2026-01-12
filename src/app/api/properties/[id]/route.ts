@@ -221,6 +221,7 @@ export async function PATCH(
       bedConfig?: string | null
       imageUrl?: string | null
       keywords?: string | null
+      color?: string | null
     }
     const updateData: UpdateData = {}
 
@@ -243,6 +244,7 @@ export async function PATCH(
     if (data.bedConfig !== undefined) updateData.bedConfig = data.bedConfig || null
     if (data.imageUrl !== undefined) updateData.imageUrl = data.imageUrl || null
     if (data.keywords !== undefined) updateData.keywords = data.keywords || null
+    if (data.color !== undefined) updateData.color = data.color || null
 
     const property = await prisma.property.update({
       where: { id },
