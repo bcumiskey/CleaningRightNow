@@ -194,6 +194,7 @@ export default function PropertyEditPage() {
     expensePercent: '12',
     billingType: 'per_job',
     billingFrequency: 'per_job',
+    autoSendInvoice: false,
     accessCode: '',
     accessNotes: '',
     bedConfig: '',
@@ -295,6 +296,7 @@ export default function PropertyEditPage() {
           expensePercent: prop.expensePercent?.toString() || '12',
           billingType: prop.billingType,
           billingFrequency: prop.billingFrequency || 'per_job',
+          autoSendInvoice: prop.autoSendInvoice || false,
           accessCode: prop.accessCode || '',
           accessNotes: prop.accessNotes || '',
           bedConfig: prop.bedConfig || '',
@@ -1285,27 +1287,29 @@ export default function PropertyEditPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Select
-                      label="Billing Type"
-                      value={formData.billingType}
-                      onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
-                      options={[
-                        { value: 'per_job', label: 'Per Job' },
-                        { value: 'weekly', label: 'Weekly' },
-                        { value: 'biweekly', label: 'Bi-Weekly' },
-                        { value: 'monthly', label: 'Monthly' },
-                      ]}
-                    />
-                    <Select
                       label="Invoice Frequency"
                       value={formData.billingFrequency}
-                      onChange={(e) => setFormData({ ...formData, billingFrequency: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, billingFrequency: e.target.value, billingType: e.target.value })}
                       options={[
-                        { value: 'per_job', label: 'Per Job' },
+                        { value: 'per_job', label: 'Per Job (immediate)' },
                         { value: 'weekly', label: 'Weekly' },
                         { value: 'biweekly', label: 'Bi-Weekly' },
-                        { value: 'monthly', label: 'Monthly' },
+                        { value: 'monthly_1st', label: 'Monthly (1st)' },
+                        { value: 'monthly_15th', label: 'Monthly (15th)' },
+                        { value: 'monthly_end', label: 'Monthly (End of Month)' },
                       ]}
                     />
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-2 cursor-pointer pb-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.autoSendInvoice}
+                          onChange={(e) => setFormData({ ...formData, autoSendInvoice: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">Auto-send invoices</span>
+                      </label>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
