@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { sendEmail } from '@/lib/email'
 
+// Escape HTML special characters to prevent XSS in emails
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { name, email, message } = await request.json()
@@ -31,19 +41,24 @@ export async function POST(request: NextRequest) {
     const adminEmails = admins.map(a => a.email).filter(Boolean)
 
     if (adminEmails.length > 0) {
+      // Escape user input to prevent XSS in email
+      const safeName = escapeHtml(name)
+      const safeEmail = escapeHtml(email)
+      const safeMessage = message ? escapeHtml(message) : ''
+
       await sendEmail({
         to: adminEmails,
-        subject: `[${companyName}] New Access Request from ${name}`,
+        subject: `[${companyName}] New Access Request from ${safeName}`,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1e40af;">New Team Member Access Request</h2>
 
-            <p>Someone has requested access to ${companyName}:</p>
+            <p>Someone has requested access to ${escapeHtml(companyName)}:</p>
 
             <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0;"><strong>Name:</strong> ${name}</p>
-              <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${email}</p>
-              ${message ? `<p style="margin: 0;"><strong>Message:</strong> ${message}</p>` : ''}
+              <p style="margin: 0 0 10px 0;"><strong>Name:</strong> ${safeName}</p>
+              <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${safeEmail}</p>
+              ${safeMessage ? `<p style="margin: 0;"><strong>Message:</strong> ${safeMessage}</p>` : ''}
             </div>
 
             <p>To approve this request, log in and add them as a team member:</p>
