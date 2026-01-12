@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
+    const propertyId = searchParams.get('propertyId')
 
     const whereClause: Record<string, unknown> = {}
     if (startDate) {
@@ -20,6 +21,9 @@ export async function GET(request: NextRequest) {
     }
     if (endDate) {
       whereClause.date = { ...whereClause.date as object, lte: new Date(endDate) }
+    }
+    if (propertyId) {
+      whereClause.propertyId = propertyId
     }
 
     const jobs = await prisma.job.findMany({

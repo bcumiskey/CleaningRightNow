@@ -160,39 +160,31 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    console.log('Properties POST - Session:', session?.user)
 
     if (!session) {
-      console.log('Properties POST - No session')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Only admins can create properties
     const sessionUser = session.user as { role?: string }
     if (sessionUser.role !== 'admin') {
-      console.log('Properties POST - Not admin, role:', sessionUser.role)
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const data = await request.json()
-    console.log('Properties POST - Data received:', JSON.stringify(data, null, 2))
 
     // Validate required fields
     if (!data.name || typeof data.name !== 'string' || data.name.trim().length === 0) {
-      console.log('Properties POST - Validation failed: name')
       return NextResponse.json({ error: 'Property name is required' }, { status: 400 })
     }
     if (!data.address || typeof data.address !== 'string' || data.address.trim().length === 0) {
-      console.log('Properties POST - Validation failed: address')
       return NextResponse.json({ error: 'Property address is required' }, { status: 400 })
     }
     if (!data.ownerName || typeof data.ownerName !== 'string' || data.ownerName.trim().length === 0) {
-      console.log('Properties POST - Validation failed: ownerName')
       return NextResponse.json({ error: 'Owner name is required' }, { status: 400 })
     }
     const baseRate = parseFloat(data.baseRate)
     if (isNaN(baseRate) || baseRate <= 0) {
-      console.log('Properties POST - Validation failed: baseRate', data.baseRate, baseRate)
       return NextResponse.json({ error: 'Base rate must be a positive number' }, { status: 400 })
     }
 
@@ -223,7 +215,6 @@ export async function POST(request: NextRequest) {
       imageUrl: data.imageUrl || null,
       keywords: data.keywords || null,
     }
-    console.log('Properties POST - Creating with:', JSON.stringify(createData, null, 2))
 
     const property = await prisma.property.create({
       data: createData,
@@ -232,7 +223,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(property)
   } catch (error) {
     console.error('Properties POST error:', error)
-    console.error('Properties POST error stack:', error instanceof Error ? error.stack : 'No stack')
 
     // Handle Prisma unique constraint errors
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {

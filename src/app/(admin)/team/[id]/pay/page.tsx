@@ -194,7 +194,7 @@ export default function WorkerPayPage() {
 
   return (
     <div className="min-h-screen">
-      <AdminHeader title={earningsData?.worker.name || 'Worker Pay'} />
+      <AdminHeader title={earningsData?.worker.name || 'Team Member Pay'} />
 
       <div className="p-6">
         <Button variant="outline" onClick={() => router.push('/team')} className="mb-6">
@@ -367,7 +367,7 @@ export default function WorkerPayPage() {
         ) : (
           <Card>
             <CardContent className="text-center py-12">
-              <p className="text-gray-500">Worker not found</p>
+              <p className="text-gray-500">Team member not found</p>
             </CardContent>
           </Card>
         )}

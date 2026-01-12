@@ -1,14 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Package, Plus, Building, ShoppingCart, Save, Pencil, Trash2, X, Check, Sparkles } from 'lucide-react'
+import { Package, Plus, ShoppingCart, Pencil, Trash2, X, Check, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Modal from '@/components/ui/Modal'
-import Badge from '@/components/ui/Badge'
 import EmptyState from '@/components/ui/EmptyState'
 import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -29,34 +28,9 @@ interface Item {
   owner?: { id: string; name: string }
 }
 
-interface Property {
+interface Owner {
   id: string
   name: string
-}
-
-interface PropertyItem {
-  itemId: string
-  itemName: string
-  itemCode: string
-  brand?: string
-  category: string
-  defaultCost: number
-  perFlip: number
-  unitCost: number | null
-  onHand?: number
-  room: string
-}
-
-interface AvailableItem {
-  itemId: string
-  itemName: string
-  itemCode: string
-  brand?: string
-  category: string
-  defaultCost: number
-  onHand?: number
-  scope?: string
-  ownerName?: string
 }
 
 interface ShoppingItem {
@@ -77,29 +51,8 @@ interface ShoppingItem {
   totalCost: number
 }
 
-type MainTabType = 'catalog' | 'property' | 'shopping'
+type MainTabType = 'catalog' | 'shopping'
 type CatalogSubTabType = 'linens' | 'supplies'
-
-const ROOM_OPTIONS = [
-  'General',
-  'Living Room',
-  'Kitchen',
-  'Master Bedroom',
-  'Bedroom 2',
-  'Bedroom 3',
-  'Bedroom 4',
-  'Master Bathroom',
-  'Bathroom 2',
-  'Bathroom 3',
-  'Dining Room',
-  'Patio/Deck',
-  'Pool Area',
-  'Garage',
-  'Laundry Room',
-  'Entry',
-  'Hallway',
-  'Other',
-]
 
 export default function LinensPage() {
   const [activeTab, setActiveTab] = useState<MainTabType>('catalog')
@@ -113,31 +66,34 @@ export default function LinensPage() {
   const [supplyCategories, setSupplyCategories] = useState<Category[]>([])
   const [isLoadingSupplies, setIsLoadingSupplies] = useState(true)
 
-  const [properties, setProperties] = useState<Property[]>([])
+  const [owners, setOwners] = useState<Owner[]>([])
+  const [ownerFilter, setOwnerFilter] = useState<string>('all') // 'all' | ownerId
 
   // Catalog editing states
   const [editingCategory, setEditingCategory] = useState<string | null>(null)
   const [editingCategoryName, setEditingCategoryName] = useState('')
   const [editingItem, setEditingItem] = useState<string | null>(null)
-  const [editingItemData, setEditingItemData] = useState({ name: '', code: '', brand: '' })
+  const [editingItemData, setEditingItemData] = useState({ name: '', code: '', brand: '', unitCost: '' })
 
   // Modal states
   const [showAddItem, setShowAddItem] = useState(false)
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [addToCategoryId, setAddToCategoryId] = useState<string>('')
 
-  // Property tab state
-  const [propertySubTab, setPropertySubTab] = useState<CatalogSubTabType>('linens')
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('')
-  const [propertyLinens, setPropertyLinens] = useState<PropertyItem[]>([])
-  const [propertyLinensByRoom, setPropertyLinensByRoom] = useState<Record<string, PropertyItem[]>>({})
-  const [propertySupplies, setPropertySupplies] = useState<PropertyItem[]>([])
-  const [propertySuppliesByRoom, setPropertySuppliesByRoom] = useState<Record<string, PropertyItem[]>>({})
-  const [availableLinens, setAvailableLinens] = useState<AvailableItem[]>([])
-  const [availableSupplies, setAvailableSupplies] = useState<AvailableItem[]>([])
-  const [isLoadingProperty, setIsLoadingProperty] = useState(false)
-  const [hasChanges, setHasChanges] = useState(false)
-  const [showAddItemModal, setShowAddItemModal] = useState(false)
+  // Expanded categories state
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(categoryId)) {
+        next.delete(categoryId)
+      } else {
+        next.add(categoryId)
+      }
+      return next
+    })
+  }
 
   // Shopping list state
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([])
@@ -148,8 +104,19 @@ export default function LinensPage() {
   useEffect(() => {
     fetchLinenCategories()
     fetchSupplyCategories()
-    fetchProperties()
+    fetchOwners()
   }, [])
+
+  const fetchOwners = async () => {
+    try {
+      const response = await fetch('/api/owners')
+      if (response.ok) {
+        setOwners(await response.json())
+      }
+    } catch (error) {
+      console.error('Failed to fetch owners:', error)
+    }
+  }
 
   const fetchLinenCategories = async () => {
     try {
@@ -174,17 +141,6 @@ export default function LinensPage() {
       console.error('Failed to fetch supplies:', error)
     } finally {
       setIsLoadingSupplies(false)
-    }
-  }
-
-  const fetchProperties = async () => {
-    try {
-      const response = await fetch('/api/properties')
-      if (response.ok) {
-        setProperties(await response.json())
-      }
-    } catch (error) {
-      console.error('Failed to fetch properties:', error)
     }
   }
 
@@ -252,13 +208,18 @@ export default function LinensPage() {
   }
 
   // Item CRUD
-  const handleAddItem = async (data: { categoryId: string; name: string; code: string; brand?: string }) => {
+  const handleAddItem = async (data: { categoryId: string; name: string; code: string; brand?: string; scope?: string; ownerId?: string }) => {
     const apiPath = catalogSubTab === 'linens' ? '/api/linens' : '/api/supplies'
     try {
       const response = await fetch(apiPath, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, unitCost: '0' }),
+        body: JSON.stringify({
+          ...data,
+          unitCost: '0',
+          scope: data.scope || 'global',
+          ownerId: data.scope === 'owner' ? data.ownerId : null,
+        }),
       })
       if (response.ok) {
         toast.success('Item added')
@@ -282,7 +243,10 @@ export default function LinensPage() {
       const response = await fetch(apiPath, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingItemData),
+        body: JSON.stringify({
+          ...editingItemData,
+          unitCost: editingItemData.unitCost ? parseFloat(editingItemData.unitCost) : 0,
+        }),
       })
       if (response.ok) {
         toast.success('Item updated')
@@ -314,165 +278,6 @@ export default function LinensPage() {
     }
   }
 
-  // Property tab functions
-  const fetchPropertyData = async (propertyId: string) => {
-    if (!propertyId) return
-    setIsLoadingProperty(true)
-    try {
-      const [linensRes, suppliesRes] = await Promise.all([
-        fetch(`/api/linens/property/${propertyId}`),
-        fetch(`/api/supplies/property/${propertyId}`),
-      ])
-
-      if (linensRes.ok) {
-        const data = await linensRes.json()
-        setPropertyLinens(data.linens || [])
-        setPropertyLinensByRoom(data.byRoom || {})
-        setAvailableLinens(data.allItems || [])
-      }
-
-      if (suppliesRes.ok) {
-        const data = await suppliesRes.json()
-        setPropertySupplies(data.supplies || [])
-        setPropertySuppliesByRoom(data.byRoom || {})
-        setAvailableSupplies(data.allItems || [])
-      }
-
-      setHasChanges(false)
-    } catch (error) {
-      console.error('Failed to fetch property data:', error)
-      toast.error('Failed to load property data')
-    } finally {
-      setIsLoadingProperty(false)
-    }
-  }
-
-  const handleSelectProperty = (propertyId: string) => {
-    setSelectedPropertyId(propertyId)
-    if (propertyId) {
-      fetchPropertyData(propertyId)
-    } else {
-      setPropertyLinens([])
-      setPropertyLinensByRoom({})
-      setPropertySupplies([])
-      setPropertySuppliesByRoom({})
-      setAvailableLinens([])
-      setAvailableSupplies([])
-    }
-  }
-
-  const updatePropertyItem = (itemId: string, room: string, field: 'perFlip' | 'onHand' | 'unitCost', value: string, type: 'linens' | 'supplies') => {
-    const setter = type === 'linens' ? setPropertyLinens : setPropertySupplies
-    const byRoomSetter = type === 'linens' ? setPropertyLinensByRoom : setPropertySuppliesByRoom
-
-    setter(prev =>
-      prev.map(item =>
-        item.itemId === itemId && item.room === room
-          ? { ...item, [field]: field === 'unitCost' ? (value ? parseFloat(value) : null) : (parseInt(value) || 0) }
-          : item
-      )
-    )
-    byRoomSetter(prev => {
-      const newByRoom = { ...prev }
-      if (newByRoom[room]) {
-        newByRoom[room] = newByRoom[room].map(item =>
-          item.itemId === itemId
-            ? { ...item, [field]: field === 'unitCost' ? (value ? parseFloat(value) : null) : (parseInt(value) || 0) }
-            : item
-        )
-      }
-      return newByRoom
-    })
-    setHasChanges(true)
-  }
-
-  const handleAddItemToRoom = async (itemId: string, room: string, perFlip: number, type: 'linens' | 'supplies') => {
-    if (!selectedPropertyId) return
-    const apiPath = type === 'linens'
-      ? `/api/linens/property/${selectedPropertyId}`
-      : `/api/supplies/property/${selectedPropertyId}`
-    const bodyKey = type === 'linens' ? 'linens' : 'supplies'
-
-    try {
-      const response = await fetch(apiPath, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          [bodyKey]: [{ itemId, room, perFlip }],
-        }),
-      })
-      if (response.ok) {
-        toast.success(`${type === 'linens' ? 'Linen' : 'Supply'} added to room`)
-        fetchPropertyData(selectedPropertyId)
-      } else {
-        toast.error('Failed to add item')
-      }
-    } catch (error) {
-      toast.error('Failed to add item')
-    }
-  }
-
-  const handleDeleteItemFromRoom = async (itemId: string, room: string, type: 'linens' | 'supplies') => {
-    if (!selectedPropertyId) return
-    const apiPath = type === 'linens'
-      ? `/api/linens/property/${selectedPropertyId}?itemId=${itemId}&room=${encodeURIComponent(room)}`
-      : `/api/supplies/property/${selectedPropertyId}?itemId=${itemId}&room=${encodeURIComponent(room)}`
-
-    try {
-      const response = await fetch(apiPath, { method: 'DELETE' })
-      if (response.ok) {
-        toast.success('Item removed from room')
-        fetchPropertyData(selectedPropertyId)
-      } else {
-        toast.error('Failed to remove item')
-      }
-    } catch (error) {
-      toast.error('Failed to remove item')
-    }
-  }
-
-  const savePropertyChanges = async () => {
-    if (!selectedPropertyId) return
-    try {
-      const [linensRes, suppliesRes] = await Promise.all([
-        fetch(`/api/linens/property/${selectedPropertyId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            linens: propertyLinens.map(l => ({
-              itemId: l.itemId,
-              perFlip: l.perFlip,
-              onHand: l.onHand,
-              unitCost: l.unitCost,
-              room: l.room,
-            })),
-          }),
-        }),
-        fetch(`/api/supplies/property/${selectedPropertyId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            supplies: propertySupplies.map(s => ({
-              itemId: s.itemId,
-              perFlip: s.perFlip,
-              unitCost: s.unitCost,
-              room: s.room,
-            })),
-          }),
-        }),
-      ])
-
-      if (linensRes.ok && suppliesRes.ok) {
-        toast.success('Saved')
-        setHasChanges(false)
-      } else {
-        toast.error('Failed to save some changes')
-      }
-    } catch (error) {
-      toast.error('Failed to save')
-    }
-  }
-
   // Shopping list
   const fetchShoppingList = async () => {
     const flips = parseInt(targetFlips) || 5
@@ -498,12 +303,25 @@ export default function LinensPage() {
     }
   }, [activeTab])
 
-  const categories = catalogSubTab === 'linens' ? linenCategories : supplyCategories
+  const rawCategories = catalogSubTab === 'linens' ? linenCategories : supplyCategories
   const isLoadingCatalog = catalogSubTab === 'linens' ? isLoadingLinens : isLoadingSupplies
+
+  // Filter items by owner
+  const filterItemsByOwner = (items: Item[]) => {
+    if (ownerFilter === 'all') return items
+    if (ownerFilter === 'global') return items.filter(item => item.scope !== 'owner')
+    return items.filter(item =>
+      item.scope !== 'owner' || item.owner?.id === ownerFilter
+    )
+  }
+
+  const categories = rawCategories.map(category => ({
+    ...category,
+    items: filterItemsByOwner(category.items),
+  }))
 
   const mainTabs = [
     { id: 'catalog' as MainTabType, label: 'Item Catalog', icon: Package },
-    { id: 'property' as MainTabType, label: 'Property Setup', icon: Building },
     { id: 'shopping' as MainTabType, label: 'Shopping List', icon: ShoppingCart },
   ]
 
@@ -565,12 +383,30 @@ export default function LinensPage() {
               </Button>
             </div>
 
-            <p className="text-gray-600 text-sm">
-              {catalogSubTab === 'linens'
-                ? 'Manage your linen catalog (sheets, towels, pillowcases, etc.). These are reusable textiles.'
-                : 'Manage your supply catalog (cleaning products, toiletries, etc.). These are consumable items.'
-              }
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-gray-600 text-sm">
+                {catalogSubTab === 'linens'
+                  ? 'Manage your linen catalog (sheets, towels, pillowcases, etc.). These are reusable textiles.'
+                  : 'Manage your supply catalog (cleaning products, toiletries, etc.). These are consumable items.'
+                }
+              </p>
+              {owners.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Filter by owner:</span>
+                  <select
+                    value={ownerFilter}
+                    onChange={(e) => setOwnerFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+                  >
+                    <option value="all">All Items</option>
+                    <option value="global">Global Only</option>
+                    {owners.map(owner => (
+                      <option key={owner.id} value={owner.id}>{owner.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
             {isLoadingCatalog ? (
               <div className="text-center py-12 text-gray-500">Loading...</div>
@@ -587,48 +423,66 @@ export default function LinensPage() {
                 </CardContent>
               </Card>
             ) : (
-              categories.map(category => (
+              categories.map(category => {
+                const isExpanded = expandedCategories.has(category.id)
+                return (
                 <Card key={category.id}>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    {editingCategory === category.id ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={editingCategoryName}
-                          onChange={(e) => setEditingCategoryName(e.target.value)}
-                          className="w-48"
-                          autoFocus
-                        />
-                        <Button size="sm" onClick={() => handleUpdateCategory(category.id)}>
-                          <Check size={14} />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingCategory(null)}>
-                          <X size={14} />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                        <button
-                          onClick={() => {
-                            setEditingCategory(category.id)
-                            setEditingCategoryName(category.name)
-                          }}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    )}
+                  <CardHeader
+                    className="flex flex-row items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => toggleCategory(category.id)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isExpanded ? (
+                        <ChevronDown size={20} className="text-gray-500" />
+                      ) : (
+                        <ChevronRight size={20} className="text-gray-500" />
+                      )}
+                      {editingCategory === category.id ? (
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <Input
+                            value={editingCategoryName}
+                            onChange={(e) => setEditingCategoryName(e.target.value)}
+                            className="w-48"
+                            autoFocus
+                          />
+                          <Button size="sm" onClick={() => handleUpdateCategory(category.id)}>
+                            <Check size={14} />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingCategory(null)}>
+                            <X size={14} />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="font-semibold text-gray-900">{category.name}</h3>
+                          <span className="text-sm text-gray-500">({category.items.length} items)</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingCategory(category.id)
+                              setEditingCategoryName(category.name)
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteCategory(category.id)
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setAddToCategoryId(category.id)
                         setShowAddItem(true)
                       }}
@@ -637,6 +491,7 @@ export default function LinensPage() {
                       Add Item
                     </Button>
                   </CardHeader>
+                  {isExpanded && (
                   <CardContent className="p-0">
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b">
@@ -648,6 +503,7 @@ export default function LinensPage() {
                           {catalogSubTab === 'supplies' && (
                             <th className="text-left px-6 py-3 text-xs font-medium text-gray-500 uppercase">Brand</th>
                           )}
+                          <th className="text-right px-6 py-3 text-xs font-medium text-gray-500 uppercase">Unit Cost</th>
                           <th className="w-24"></th>
                         </tr>
                       </thead>
@@ -681,6 +537,19 @@ export default function LinensPage() {
                                   </td>
                                 )}
                                 <td className="px-6 py-2">
+                                  <div className="relative w-24">
+                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={editingItemData.unitCost}
+                                      onChange={(e) => setEditingItemData({ ...editingItemData, unitCost: e.target.value })}
+                                      className="w-full pl-5"
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-6 py-2">
                                   <div className="flex gap-1">
                                     <Button size="sm" onClick={() => handleUpdateItem(item.id)}>
                                       <Check size={14} />
@@ -705,12 +574,13 @@ export default function LinensPage() {
                                 {catalogSubTab === 'supplies' && (
                                   <td className="px-6 py-3 text-gray-500 text-sm">{item.brand || '-'}</td>
                                 )}
+                                <td className="px-6 py-3 text-right text-gray-700">{formatCurrency(item.unitCost)}</td>
                                 <td className="px-6 py-3">
                                   <div className="flex gap-1 opacity-0 group-hover:opacity-100">
                                     <button
                                       onClick={() => {
                                         setEditingItem(item.id)
-                                        setEditingItemData({ name: item.name, code: item.code, brand: item.brand || '' })
+                                        setEditingItemData({ name: item.name, code: item.code, brand: item.brand || '', unitCost: item.unitCost?.toString() || '0' })
                                       }}
                                       className="p-1 text-gray-400 hover:text-gray-600"
                                     >
@@ -730,7 +600,7 @@ export default function LinensPage() {
                         ))}
                         {category.items.length === 0 && (
                           <tr>
-                            <td colSpan={catalogSubTab === 'supplies' ? 4 : 3} className="px-6 py-8 text-center text-gray-500">
+                            <td colSpan={catalogSubTab === 'supplies' ? 5 : 4} className="px-6 py-8 text-center text-gray-500">
                               No items in this category
                             </td>
                           </tr>
@@ -738,159 +608,13 @@ export default function LinensPage() {
                       </tbody>
                     </table>
                   </CardContent>
+                  )}
                 </Card>
-              ))
+              )})
             )}
           </div>
         )}
 
-        {/* Property Setup Tab */}
-        {activeTab === 'property' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <Select
-                  label=""
-                  value={selectedPropertyId}
-                  onChange={(e) => handleSelectProperty(e.target.value)}
-                  options={[
-                    { value: '', label: 'Select a property...' },
-                    ...properties.map(p => ({ value: p.id, label: p.name })),
-                  ]}
-                  className="w-64"
-                />
-                {hasChanges && <Badge variant="warning">Unsaved changes</Badge>}
-              </div>
-              <div className="flex gap-2">
-                {selectedPropertyId && (
-                  <>
-                    <Button variant="outline" onClick={() => setShowAddItemModal(true)}>
-                      <Plus size={16} />
-                      Add Item to Room
-                    </Button>
-                    <Button onClick={savePropertyChanges} disabled={!hasChanges}>
-                      <Save size={16} />
-                      Save Changes
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {selectedPropertyId && (
-              <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-                <button
-                  onClick={() => setPropertySubTab('linens')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    propertySubTab === 'linens'
-                      ? 'bg-white text-blue-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Linens ({propertyLinens.length})
-                </button>
-                <button
-                  onClick={() => setPropertySubTab('supplies')}
-                  className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                    propertySubTab === 'supplies'
-                      ? 'bg-white text-emerald-600 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Supplies ({propertySupplies.length})
-                </button>
-              </div>
-            )}
-
-            {!selectedPropertyId ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">
-                  Select a property to configure its room-based requirements.
-                </CardContent>
-              </Card>
-            ) : isLoadingProperty ? (
-              <Card>
-                <CardContent className="py-12 text-center text-gray-500">Loading...</CardContent>
-              </Card>
-            ) : (
-              <>
-                {/* Linens View */}
-                {propertySubTab === 'linens' && (
-                  propertyLinens.length === 0 ? (
-                    <Card>
-                      <CardContent className="py-12 text-center">
-                        <Package size={48} className="mx-auto mb-4 text-gray-300" />
-                        <h3 className="font-semibold text-gray-900 mb-2">No linens assigned</h3>
-                        <p className="text-gray-500 mb-4">Add linens to specific rooms for this property.</p>
-                        <Button onClick={() => setShowAddItemModal(true)}>
-                          <Plus size={16} />
-                          Add Linen to Room
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="space-y-4">
-                      {Object.entries(propertyLinensByRoom).map(([room, roomItems]) => (
-                        <PropertyRoomCard
-                          key={room}
-                          room={room}
-                          items={roomItems}
-                          type="linens"
-                          showOnHand={true}
-                          onUpdate={(itemId, field, value) => updatePropertyItem(itemId, room, field, value, 'linens')}
-                          onDelete={(itemId) => handleDeleteItemFromRoom(itemId, room, 'linens')}
-                        />
-                      ))}
-                    </div>
-                  )
-                )}
-
-                {/* Supplies View */}
-                {propertySubTab === 'supplies' && (
-                  propertySupplies.length === 0 ? (
-                    <Card>
-                      <CardContent className="py-12 text-center">
-                        <Sparkles size={48} className="mx-auto mb-4 text-gray-300" />
-                        <h3 className="font-semibold text-gray-900 mb-2">No supplies assigned</h3>
-                        <p className="text-gray-500 mb-4">Add supplies to specific rooms for this property.</p>
-                        <Button onClick={() => setShowAddItemModal(true)}>
-                          <Plus size={16} />
-                          Add Supply to Room
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="space-y-4">
-                      {Object.entries(propertySuppliesByRoom).map(([room, roomItems]) => (
-                        <PropertyRoomCard
-                          key={room}
-                          room={room}
-                          items={roomItems}
-                          type="supplies"
-                          showOnHand={false}
-                          onUpdate={(itemId, field, value) => updatePropertyItem(itemId, room, field, value, 'supplies')}
-                          onDelete={(itemId) => handleDeleteItemFromRoom(itemId, room, 'supplies')}
-                        />
-                      ))}
-                    </div>
-                  )
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Add Item to Room Modal */}
-        <AddItemToRoomModal
-          isOpen={showAddItemModal}
-          onClose={() => setShowAddItemModal(false)}
-          onSave={handleAddItemToRoom}
-          availableLinens={availableLinens}
-          availableSupplies={availableSupplies}
-          existingLinens={propertyLinens}
-          existingSupplies={propertySupplies}
-          defaultType={propertySubTab}
-        />
 
         {/* Shopping List Tab */}
         {activeTab === 'shopping' && (
@@ -1001,123 +725,11 @@ export default function LinensPage() {
         onClose={() => setShowAddItem(false)}
         onSave={handleAddItem}
         categoryId={addToCategoryId}
-        categories={categories}
+        categories={rawCategories}
         type={catalogSubTab}
+        owners={owners}
       />
     </div>
-  )
-}
-
-// Property Room Card Component
-function PropertyRoomCard({ room, items, type, showOnHand, onUpdate, onDelete }: {
-  room: string
-  items: PropertyItem[]
-  type: 'linens' | 'supplies'
-  showOnHand: boolean
-  onUpdate: (itemId: string, field: 'perFlip' | 'onHand' | 'unitCost', value: string) => void
-  onDelete: (itemId: string) => void
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between py-3">
-        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-          {type === 'linens' ? <Package size={18} className="text-blue-600" /> : <Sparkles size={18} className="text-emerald-600" />}
-          {room}
-          <span className="text-sm font-normal text-gray-500">
-            ({items.length} {items.length === 1 ? 'item' : 'items'})
-          </span>
-        </h3>
-      </CardHeader>
-      <CardContent className="p-0">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">Item</th>
-              <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-20">Qty/Flip</th>
-              <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-24">Unit Cost</th>
-              {showOnHand && (
-                <>
-                  <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-20">On Hand</th>
-                  <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-16">Flips</th>
-                  <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase w-16">Status</th>
-                </>
-              )}
-              <th className="w-12"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {items.map(item => {
-              const flipsLeft = showOnHand && item.perFlip > 0 ? Math.floor((item.onHand || 0) / item.perFlip) : 0
-              const isLow = showOnHand && item.perFlip > 0 && flipsLeft < 3
-
-              return (
-                <tr key={`${item.itemId}-${room}`} className={isLow ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                  <td className="px-4 py-2">
-                    <div className="font-medium text-sm">{item.itemName}</div>
-                    <div className="text-xs text-gray-500">{item.category}</div>
-                  </td>
-                  <td className="px-4 py-1">
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.perFlip}
-                      onChange={(e) => onUpdate(item.itemId, 'perFlip', e.target.value)}
-                      className="w-full px-2 py-1 border rounded text-center text-sm"
-                    />
-                  </td>
-                  <td className="px-4 py-1">
-                    <div className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.unitCost ?? ''}
-                        onChange={(e) => onUpdate(item.itemId, 'unitCost', e.target.value)}
-                        placeholder={item.defaultCost?.toFixed(2) || '0.00'}
-                        className="w-full px-2 py-1 pl-5 border rounded text-center text-sm"
-                      />
-                    </div>
-                  </td>
-                  {showOnHand && (
-                    <>
-                      <td className="px-4 py-1">
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.onHand || 0}
-                          onChange={(e) => onUpdate(item.itemId, 'onHand', e.target.value)}
-                          className="w-full px-2 py-1 border rounded text-center text-sm"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-center font-medium text-sm">
-                        {flipsLeft}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        {isLow ? (
-                          <Badge variant="danger">Low</Badge>
-                        ) : (
-                          <Badge variant="success">OK</Badge>
-                        )}
-                      </td>
-                    </>
-                  )}
-                  <td className="px-2 py-2">
-                    <button
-                      onClick={() => onDelete(item.itemId)}
-                      className="p-1 text-gray-400 hover:text-red-600"
-                      title="Remove from room"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </CardContent>
-    </Card>
   )
 }
 
@@ -1163,20 +775,21 @@ function AddCategoryModal({ isOpen, onClose, onSave, type }: {
   )
 }
 
-function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type }: {
+function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type, owners }: {
   isOpen: boolean
   onClose: () => void
-  onSave: (data: { categoryId: string; name: string; code: string; brand?: string }) => void
+  onSave: (data: { categoryId: string; name: string; code: string; brand?: string; scope?: string; ownerId?: string }) => void
   categoryId: string
   categories: Category[]
   type: 'linens' | 'supplies'
+  owners: Owner[]
 }) {
-  const [formData, setFormData] = useState({ categoryId: '', name: '', code: '', brand: '' })
+  const [formData, setFormData] = useState({ categoryId: '', name: '', code: '', brand: '', scope: 'global', ownerId: '' })
   const [isSaving, setIsSaving] = useState(false)
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ categoryId: categoryId || categories[0]?.id || '', name: '', code: '', brand: '' })
+      setFormData({ categoryId: categoryId || categories[0]?.id || '', name: '', code: '', brand: '', scope: 'global', ownerId: '' })
     }
   }, [isOpen, categoryId, categories])
 
@@ -1222,6 +835,44 @@ function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type }:
             placeholder="e.g., Method, Mrs. Meyer's"
           />
         )}
+        {owners.length > 0 && (
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-gray-700">Owner-Specific?</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="scope"
+                  checked={formData.scope === 'global'}
+                  onChange={() => setFormData({ ...formData, scope: 'global', ownerId: '' })}
+                />
+                <span className="text-sm">Available to all</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="scope"
+                  checked={formData.scope === 'owner'}
+                  onChange={() => setFormData({ ...formData, scope: 'owner' })}
+                />
+                <span className="text-sm">Owner-specific</span>
+              </label>
+            </div>
+            {formData.scope === 'owner' && (
+              <select
+                value={formData.ownerId}
+                onChange={(e) => setFormData({ ...formData, ownerId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                required
+              >
+                <option value="">Select owner...</option>
+                {owners.map(owner => (
+                  <option key={owner.id} value={owner.id}>{owner.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        )}
         <div className="flex justify-end gap-3">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" isLoading={isSaving}>Add Item</Button>
@@ -1231,147 +882,3 @@ function AddItemModal({ isOpen, onClose, onSave, categoryId, categories, type }:
   )
 }
 
-function AddItemToRoomModal({ isOpen, onClose, onSave, availableLinens, availableSupplies, existingLinens, existingSupplies, defaultType }: {
-  isOpen: boolean
-  onClose: () => void
-  onSave: (itemId: string, room: string, perFlip: number, type: 'linens' | 'supplies') => void
-  availableLinens: AvailableItem[]
-  availableSupplies: AvailableItem[]
-  existingLinens: PropertyItem[]
-  existingSupplies: PropertyItem[]
-  defaultType: 'linens' | 'supplies'
-}) {
-  const [itemType, setItemType] = useState<'linens' | 'supplies'>(defaultType)
-  const [selectedItemId, setSelectedItemId] = useState('')
-  const [selectedRoom, setSelectedRoom] = useState('General')
-  const [perFlip, setPerFlip] = useState('1')
-  const [isSaving, setIsSaving] = useState(false)
-
-  useEffect(() => {
-    if (isOpen) {
-      setItemType(defaultType)
-      setSelectedItemId('')
-      setSelectedRoom('General')
-      setPerFlip('1')
-    }
-  }, [isOpen, defaultType])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedItemId || !selectedRoom) return
-
-    setIsSaving(true)
-    try {
-      await onSave(selectedItemId, selectedRoom, parseInt(perFlip) || 1, itemType)
-      onClose()
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const availableItems = itemType === 'linens' ? availableLinens : availableSupplies
-  const existingItems = itemType === 'linens' ? existingLinens : existingSupplies
-
-  // Filter out items already in the selected room
-  const itemsNotInRoom = availableItems.filter(
-    item => !existingItems.some(l => l.itemId === item.itemId && l.room === selectedRoom)
-  )
-
-  // Group by category
-  const itemsByCategory = itemsNotInRoom.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = []
-    acc[item.category].push(item)
-    return acc
-  }, {} as Record<string, AvailableItem[]>)
-
-  return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Add Item to Room">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
-          <button
-            type="button"
-            onClick={() => { setItemType('linens'); setSelectedItemId('') }}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              itemType === 'linens'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Linen
-          </button>
-          <button
-            type="button"
-            onClick={() => { setItemType('supplies'); setSelectedItemId('') }}
-            className={`flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              itemType === 'supplies'
-                ? 'bg-white text-emerald-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Supply
-          </button>
-        </div>
-
-        <Select
-          label="Room"
-          value={selectedRoom}
-          onChange={(e) => {
-            setSelectedRoom(e.target.value)
-            setSelectedItemId('')
-          }}
-          options={ROOM_OPTIONS.map(room => ({ value: room, label: room }))}
-          required
-        />
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            {itemType === 'linens' ? 'Linen' : 'Supply'} Item
-          </label>
-          <select
-            value={selectedItemId}
-            onChange={(e) => setSelectedItemId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          >
-            <option value="">Select an item...</option>
-            {Object.entries(itemsByCategory).map(([category, items]) => (
-              <optgroup key={category} label={category}>
-                {items.map(item => (
-                  <option key={item.itemId} value={item.itemId}>
-                    {item.itemName} ({item.itemCode})
-                    {item.ownerName && ` - ${item.ownerName}`}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {itemsNotInRoom.length === 0 && (
-            <p className="text-sm text-amber-600 mt-1">
-              All {itemType} are already assigned to {selectedRoom}
-            </p>
-          )}
-        </div>
-
-        <Input
-          label="Quantity per Flip"
-          type="number"
-          min="1"
-          value={perFlip}
-          onChange={(e) => setPerFlip(e.target.value)}
-          required
-        />
-
-        <div className="flex justify-end gap-3 pt-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            type="submit"
-            isLoading={isSaving}
-            disabled={!selectedItemId || itemsNotInRoom.length === 0}
-          >
-            Add to Room
-          </Button>
-        </div>
-      </form>
-    </Modal>
-  )
-}

@@ -112,6 +112,7 @@ interface Property {
   expensePercent: number
   billingType: string
   billingFrequency: string
+  autoSendInvoice: boolean
   accessCode: string | null
   accessNotes: string | null
   bedConfig: string | null
@@ -194,6 +195,7 @@ export default function PropertyEditPage() {
     expensePercent: '12',
     billingType: 'per_job',
     billingFrequency: 'per_job',
+    autoSendInvoice: false,
     accessCode: '',
     accessNotes: '',
     bedConfig: '',
@@ -295,6 +297,7 @@ export default function PropertyEditPage() {
           expensePercent: prop.expensePercent?.toString() || '12',
           billingType: prop.billingType,
           billingFrequency: prop.billingFrequency || 'per_job',
+          autoSendInvoice: prop.autoSendInvoice || false,
           accessCode: prop.accessCode || '',
           accessNotes: prop.accessNotes || '',
           bedConfig: prop.bedConfig || '',
@@ -1077,7 +1080,7 @@ export default function PropertyEditPage() {
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'details', label: 'Details', icon: <Building size={16} /> },
-    { id: 'worker', label: 'Worker Info', icon: <Key size={16} /> },
+    { id: 'worker', label: 'Team Info', icon: <Key size={16} /> },
     { id: 'rooms', label: `Rooms (${rooms.length})`, icon: <Home size={16} /> },
     { id: 'inventory', label: `Inventory (${totalInventoryCount})`, icon: <Package size={16} /> },
     { id: 'instructions', label: `Instructions (${instructions.length})`, icon: <ListChecks size={16} /> },
@@ -1285,27 +1288,29 @@ export default function PropertyEditPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <Select
-                      label="Billing Type"
-                      value={formData.billingType}
-                      onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
-                      options={[
-                        { value: 'per_job', label: 'Per Job' },
-                        { value: 'weekly', label: 'Weekly' },
-                        { value: 'biweekly', label: 'Bi-Weekly' },
-                        { value: 'monthly', label: 'Monthly' },
-                      ]}
-                    />
-                    <Select
                       label="Invoice Frequency"
                       value={formData.billingFrequency}
-                      onChange={(e) => setFormData({ ...formData, billingFrequency: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, billingFrequency: e.target.value, billingType: e.target.value })}
                       options={[
-                        { value: 'per_job', label: 'Per Job' },
+                        { value: 'per_job', label: 'Per Job (immediate)' },
                         { value: 'weekly', label: 'Weekly' },
                         { value: 'biweekly', label: 'Bi-Weekly' },
-                        { value: 'monthly', label: 'Monthly' },
+                        { value: 'monthly_1st', label: 'Monthly (1st)' },
+                        { value: 'monthly_15th', label: 'Monthly (15th)' },
+                        { value: 'monthly_end', label: 'Monthly (End of Month)' },
                       ]}
                     />
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-2 cursor-pointer pb-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.autoSendInvoice}
+                          onChange={(e) => setFormData({ ...formData, autoSendInvoice: e.target.checked })}
+                          className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">Auto-send invoices</span>
+                      </label>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1313,18 +1318,18 @@ export default function PropertyEditPage() {
           </div>
         )}
 
-        {/* Worker Info Tab */}
+        {/* Team Info Tab */}
         {activeTab === 'worker' && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key size={18} />
-                Information Visible to Workers
+                Information Visible to Team
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <p className="text-sm text-gray-500">
-                This information is shown to workers when they view job details or the property reference.
+                This information is shown to team members when they view job details or the property reference.
               </p>
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-4">
@@ -1355,7 +1360,7 @@ export default function PropertyEditPage() {
                     placeholder="2 King, 1 Queen, 2 Twin"
                   />
                   <div className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-blue-900 mb-2">What workers see:</h4>
+                    <h4 className="font-medium text-blue-900 mb-2">What team members see:</h4>
                     <ul className="text-sm text-blue-800 space-y-1">
                       <li>• Property name and address</li>
                       <li>• Access code and notes</li>
@@ -2008,7 +2013,7 @@ export default function PropertyEditPage() {
               rows={4}
               value={newPhotoNotes}
               onChange={(e) => setNewPhotoNotes(e.target.value)}
-              placeholder="Detailed instructions shown when worker clicks on this photo"
+              placeholder="Detailed instructions shown when team member clicks on this photo"
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">

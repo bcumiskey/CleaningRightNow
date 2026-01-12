@@ -92,7 +92,7 @@ export default function AdminSidebar() {
         ))}
       </nav>
 
-      {/* Worker Portal & Settings */}
+      {/* Team Portal & Settings */}
       <div className="border-t border-gray-800">
         <Link
           href="/worker?from=admin"
@@ -104,7 +104,7 @@ export default function AdminSidebar() {
           )}
         >
           <HardHat size={20} />
-          <span>Worker Portal</span>
+          <span>Team Portal</span>
         </Link>
         <Link
           href="/settings"

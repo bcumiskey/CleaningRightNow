@@ -66,7 +66,18 @@ export async function PATCH(
     }
 
     // Other fields
-    if (data.date) updateData.date = new Date(data.date)
+    if (data.date) {
+      // Parse date string as local date (not UTC) to avoid timezone shift
+      const dateParts = data.date.split('-')
+      if (dateParts.length === 3) {
+        updateData.date = new Date(
+          parseInt(dateParts[0]),
+          parseInt(dateParts[1]) - 1,
+          parseInt(dateParts[2]),
+          12, 0, 0
+        )
+      }
+    }
     if (data.time !== undefined) updateData.time = data.time || null
     if (data.priority !== undefined) updateData.priority = parseInt(data.priority)
     if (data.rate !== undefined) updateData.rate = parseFloat(data.rate)
@@ -93,47 +104,140 @@ export async function PATCH(
       },
     })
 
-    // If job is marked completed and property has per_job billing, create draft invoice
-    if (data.completed && job.property.billingFrequency === 'per_job') {
-      // Check if invoice already exists for this job
+    // If job is marked completed, handle invoice creation based on billing frequency
+    if (data.completed) {
+      // Check if this job is already on an invoice
       const existingInvoiceItem = await prisma.invoiceLineItem.findFirst({
         where: { jobId: job.id },
       })
 
       if (!existingInvoiceItem) {
-        // Generate invoice number
-        const lastInvoice = await prisma.invoice.findFirst({
-          orderBy: { invoiceNumber: 'desc' },
-        })
-        const lastNumber = lastInvoice?.invoiceNumber
-          ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, '')) || 0
-          : 0
-        const invoiceNumber = `INV-${String(lastNumber + 1).padStart(5, '0')}`
+        const billingFreq = job.property.billingFrequency || 'per_job'
 
-        // Create draft invoice
-        await prisma.invoice.create({
-          data: {
-            invoiceNumber,
-            propertyId: job.property.id,
-            invoiceDate: new Date(),
-            paymentTerms: 'Due on Receipt',
-            type: 'one_time',
-            subtotal: job.rate,
-            discount: 0,
-            total: job.rate,
-            status: 'draft',
-            lineItems: {
-              create: [{
+        if (billingFreq === 'per_job') {
+          // Per-job billing: Create individual invoice immediately
+          const lastInvoice = await prisma.invoice.findFirst({
+            orderBy: { invoiceNumber: 'desc' },
+          })
+          const lastNumber = lastInvoice?.invoiceNumber
+            ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, '')) || 0
+            : 0
+          const invoiceNumber = `INV-${String(lastNumber + 1).padStart(5, '0')}`
+
+          await prisma.invoice.create({
+            data: {
+              invoiceNumber,
+              propertyId: job.property.id,
+              invoiceDate: new Date(),
+              paymentTerms: 'Due on Receipt',
+              type: 'per_job',
+              subtotal: job.rate,
+              discount: 0,
+              total: job.rate,
+              status: 'draft',
+              lineItems: {
+                create: [{
+                  jobId: job.id,
+                  date: job.date,
+                  description: `Cleaning service - ${job.property.name}`,
+                  amount: job.rate,
+                  itemType: 'cleaning',
+                  sortOrder: 0,
+                }],
+              },
+            },
+          })
+        } else {
+          // Accumulated billing (weekly, biweekly, monthly): Add to existing draft or create new
+          const now = new Date()
+          let billingPeriod = ''
+          let invoiceType = billingFreq
+
+          // Determine billing period label
+          if (billingFreq === 'weekly') {
+            const weekStart = new Date(now)
+            weekStart.setDate(now.getDate() - now.getDay())
+            billingPeriod = `Week of ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+          } else if (billingFreq === 'biweekly') {
+            const weekStart = new Date(now)
+            weekStart.setDate(now.getDate() - now.getDay())
+            billingPeriod = `Bi-weekly ${weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+          } else {
+            // Monthly (monthly_1st, monthly_15th, monthly_end)
+            billingPeriod = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+            invoiceType = 'monthly'
+          }
+
+          // Look for existing draft invoice for this property and billing period
+          const existingDraft = await prisma.invoice.findFirst({
+            where: {
+              propertyId: job.property.id,
+              status: 'draft',
+              type: invoiceType,
+              billingPeriod: billingPeriod,
+            },
+            include: { lineItems: true },
+          })
+
+          if (existingDraft) {
+            // Add line item to existing draft
+            await prisma.invoiceLineItem.create({
+              data: {
+                invoiceId: existingDraft.id,
                 jobId: job.id,
                 date: job.date,
                 description: `Cleaning service - ${job.property.name}`,
                 amount: job.rate,
                 itemType: 'cleaning',
-                sortOrder: 0,
-              }],
-            },
-          },
-        })
+                sortOrder: existingDraft.lineItems.length,
+              },
+            })
+
+            // Update totals
+            const newSubtotal = existingDraft.subtotal + job.rate
+            await prisma.invoice.update({
+              where: { id: existingDraft.id },
+              data: {
+                subtotal: newSubtotal,
+                total: newSubtotal - existingDraft.discount,
+              },
+            })
+          } else {
+            // Create new draft invoice for this billing period
+            const lastInvoice = await prisma.invoice.findFirst({
+              orderBy: { invoiceNumber: 'desc' },
+            })
+            const lastNumber = lastInvoice?.invoiceNumber
+              ? parseInt(lastInvoice.invoiceNumber.replace(/\D/g, '')) || 0
+              : 0
+            const invoiceNumber = `INV-${String(lastNumber + 1).padStart(5, '0')}`
+
+            await prisma.invoice.create({
+              data: {
+                invoiceNumber,
+                propertyId: job.property.id,
+                invoiceDate: new Date(),
+                paymentTerms: 'Due on Receipt',
+                type: invoiceType,
+                billingPeriod: billingPeriod,
+                subtotal: job.rate,
+                discount: 0,
+                total: job.rate,
+                status: 'draft',
+                lineItems: {
+                  create: [{
+                    jobId: job.id,
+                    date: job.date,
+                    description: `Cleaning service - ${job.property.name}`,
+                    amount: job.rate,
+                    itemType: 'cleaning',
+                    sortOrder: 0,
+                  }],
+                },
+              },
+            })
+          }
+        }
       }
     }
 

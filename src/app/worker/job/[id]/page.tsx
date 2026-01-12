@@ -13,6 +13,7 @@ import {
   Square,
   Camera,
   AlertCircle,
+  Sparkles,
   Navigation,
   Shield,
   UserX,
@@ -25,8 +26,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
-import { format } from 'date-fns'
+import { format, isToday, parseISO, addDays, isBefore, startOfDay, isAfter } from 'date-fns'
 import toast from 'react-hot-toast'
+
+// Feature flag for supervisor mode - set to true when ready to enable
+const SUPERVISOR_MODE_ENABLED = false
 
 interface TeamAssignment {
   id: string
@@ -78,6 +82,10 @@ export default function WorkerJobDetailPage() {
   const [job, setJob] = useState<JobDetail | null>(null)
   const [mySession, setMySession] = useState<JobSession | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [hasBlockingJob, setHasBlockingJob] = useState(false)
+  const [showStartModal, setShowStartModal] = useState(false)
+  const [showLateStartModal, setShowLateStartModal] = useState(false)
+  const [showLateStartConfirm2, setShowLateStartConfirm2] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [showAbsentModal, setShowAbsentModal] = useState(false)
   const [showRatingModal, setShowRatingModal] = useState(false)
@@ -121,6 +129,25 @@ export default function WorkerJobDetailPage() {
           )
           setMySession(mySessionData || null)
         }
+
+        // Check for blocking jobs at the same property between now and job date
+        const jobDate = parseISO(jobData.date)
+        const today = startOfDay(new Date())
+
+        if (isAfter(jobDate, today)) {
+          // Job is in the future, check for blocking jobs
+          const blockingRes = await fetch(
+            `/api/worker/jobs?propertyId=${jobData.property.id}&startDate=${format(today, 'yyyy-MM-dd')}&endDate=${format(jobDate, 'yyyy-MM-dd')}`
+          )
+          if (blockingRes.ok) {
+            const blockingJobs = await blockingRes.json()
+            // Filter out the current job and check if any remain
+            const hasBlocker = blockingJobs.some((j: { id: string }) => j.id !== jobId)
+            setHasBlockingJob(hasBlocker)
+          }
+        } else {
+          setHasBlockingJob(false)
+        }
       }
     } catch (error) {
       console.error('Failed to fetch job:', error)
@@ -134,7 +161,9 @@ export default function WorkerJobDetailPage() {
   }, [fetchJob])
 
   // Check if current user is supervisor for this job
+  // Note: Supervisor mode is currently disabled via feature flag
   const isSupervisor = (() => {
+    if (!SUPERVISOR_MODE_ENABLED) return false
     if (!teamMemberId || !job?.assignments) return false
 
     const myAssignment = job.assignments.find(a => a.teamMember.id === teamMemberId)
@@ -159,6 +188,7 @@ export default function WorkerJobDetailPage() {
   const handleStartJob = async (method: 'manual' | 'nfc' | 'qr' = 'manual') => {
     if (!teamMemberId) return
 
+    setIsSubmitting(true)
     try {
       const response = await fetch('/api/job-sessions', {
         method: 'POST',
@@ -183,11 +213,14 @@ export default function WorkerJobDetailPage() {
             }),
           })
         }
-        toast.success('Job started!')
+        toast.success("Let's do this! Job started.")
+        setShowStartModal(false)
         fetchJob()
       }
     } catch (error) {
       toast.error('Failed to start job')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -553,49 +586,258 @@ export default function WorkerJobDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
-      {!isCompleted && (
-        <div className="fixed bottom-20 left-4 right-4 space-y-2">
-          {!isCheckedIn ? (
-            <Button size="lg" className="w-full" onClick={() => handleStartJob('manual')}>
-              <Play size={20} />
-              Start Job (Manual Check-in)
-            </Button>
-          ) : (
+      {/* Action Buttons - Show for jobs that can be started */}
+      {!isCompleted && job && (() => {
+        const jobDate = startOfDay(parseISO(job.date))
+        const today = startOfDay(new Date())
+        const twoDaysAgo = addDays(today, -2)
+
+        // Jobs can only start on scheduled day or UP TO 2 days LATE (not early!)
+        const isScheduledDay = isToday(jobDate)
+        const isLateStart = isBefore(jobDate, today) && !isBefore(jobDate, twoDaysAgo)
+        const isTooLate = isBefore(jobDate, twoDaysAgo)
+        const isFutureJob = isAfter(jobDate, today)
+        const canStart = (isScheduledDay || isLateStart) && !hasBlockingJob
+
+        if (canStart) {
+          const handleStartClick = () => {
+            if (isLateStart) {
+              setShowLateStartModal(true)
+            } else {
+              setShowStartModal(true)
+            }
+          }
+
+          return (
+            <div className="fixed bottom-20 left-4 right-4 space-y-2">
+              {!isCheckedIn ? (
+                <Button size="lg" className="w-full" onClick={handleStartClick}>
+                  <Play size={20} />
+                  Start Job
+                </Button>
+              ) : (
+                <Button
+                  size="lg"
+                  variant="primary"
+                  className="w-full bg-green-600 hover:bg-green-700"
+                  onClick={() => setShowCompleteModal(true)}
+                >
+                  <CheckCircle size={20} />
+                  Complete Job
+                </Button>
+              )}
+            </div>
+          )
+        }
+
+        // Show appropriate message for jobs that can't be started yet
+        if (hasBlockingJob) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
+                <p className="text-amber-700 text-sm font-medium">
+                  There&apos;s another job at this property first
+                </p>
+                <p className="text-amber-600 text-xs mt-1">
+                  Complete the earlier job before starting this one.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        if (isFutureJob) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4">
+              <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
+                <p className="text-gray-600 text-sm">
+                  This job is scheduled for {format(jobDate, 'EEEE, MMMM d')}.
+                </p>
+                <p className="text-gray-500 text-xs mt-1">
+                  You can start on the scheduled day.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        if (isTooLate) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-red-700 text-sm font-medium">
+                  This job was scheduled for {format(jobDate, 'EEEE, MMMM d')}.
+                </p>
+                <p className="text-red-600 text-xs mt-1">
+                  Please contact your supervisor about this job.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        return null
+      })()}
+
+      {/* Start Job Confirmation Modal (Day-of) */}
+      <Modal
+        isOpen={showStartModal}
+        onClose={() => setShowStartModal(false)}
+        title="Ready to Start?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <Play size={32} className="text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Let&apos;s knock this out!
+            </h3>
+            <p className="text-gray-600">
+              Starting your shift at <span className="font-medium">{job?.property.name}</span>
+            </p>
+          </div>
+
+          <div className="flex gap-3">
             <Button
-              size="lg"
-              variant="primary"
-              className="w-full bg-green-600 hover:bg-green-700"
-              onClick={() => setShowCompleteModal(true)}
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowStartModal(false)}
             >
-              <CheckCircle size={20} />
-              Complete Job
+              Not Yet
             </Button>
-          )}
+            <Button
+              className="flex-1"
+              onClick={() => handleStartJob('manual')}
+              isLoading={isSubmitting}
+            >
+              <Play size={16} />
+              Start Now
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
+
+      {/* Late Start - First Confirmation Modal */}
+      <Modal
+        isOpen={showLateStartModal}
+        onClose={() => setShowLateStartModal(false)}
+        title="Running a Bit Behind?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-amber-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <Clock size={32} className="text-amber-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Why put off &apos;til tomorrow...
+            </h3>
+            <p className="text-gray-600">
+              ...what you can do today?
+            </p>
+            <p className="text-gray-500 mt-3 text-sm">
+              This was scheduled for{' '}
+              <span className="font-medium text-amber-700">
+                {job ? format(parseISO(job.date), 'EEEE') : ''}
+              </span>. Better late than never!
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowLateStartModal(false)}
+            >
+              Hmm, Maybe Not
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setShowLateStartModal(false)
+                setShowLateStartConfirm2(true)
+              }}
+            >
+              Let&apos;s Do It
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Late Start - Second Confirmation Modal (playful) */}
+      <Modal
+        isOpen={showLateStartConfirm2}
+        onClose={() => setShowLateStartConfirm2(false)}
+        title="Just Checking..."
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <Sparkles size={32} className="text-emerald-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              You sure about this?
+            </h3>
+            <p className="text-gray-600">
+              No judgement here - life happens!
+            </p>
+            <p className="text-gray-500 mt-3 text-sm bg-gray-50 rounded-lg p-3">
+              Just add a quick note when you&apos;re done so we know what&apos;s up.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowLateStartConfirm2(false)}
+            >
+              Go Back
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setShowLateStartConfirm2(false)
+                handleStartJob('manual')
+              }}
+              isLoading={isSubmitting}
+            >
+              <Play size={16} />
+              Start Now
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Complete Job Modal */}
       <Modal
         isOpen={showCompleteModal}
         onClose={() => setShowCompleteModal(false)}
-        title="Complete Job"
+        title="Nice Work!"
         size="md"
       >
         <div className="space-y-4">
-          <p className="text-gray-600">
-            Add any notes about the property condition or work performed.
-          </p>
+          <div className="text-center pb-2">
+            <div className="w-16 h-16 bg-green-100 rounded-full mx-auto flex items-center justify-center mb-3">
+              <CheckCircle size={32} className="text-green-600" />
+            </div>
+            <p className="text-gray-600">
+              Before you wrap up, did you double-check everything?
+            </p>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes (optional)
+              Any notes for the team? (optional)
             </label>
             <textarea
               value={completionNotes}
               onChange={(e) => setCompletionNotes(e.target.value)}
-              placeholder="Any issues, special situations, or notes for the next cleaner..."
-              rows={4}
+              placeholder="Anything to note for next time, special situations, or kudos..."
+              rows={3}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
@@ -603,7 +845,7 @@ export default function WorkerJobDetailPage() {
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
             <AlertCircle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-sm text-amber-700">
-              For damage or issues, use the property reference page to add a detailed note with photos.
+              Found damage or an issue? Use the Report tab to document it with photos.
             </p>
           </div>
 
@@ -613,7 +855,7 @@ export default function WorkerJobDetailPage() {
               className="flex-1"
               onClick={() => setShowCompleteModal(false)}
             >
-              Cancel
+              Go Back
             </Button>
             <Button
               className="flex-1 bg-green-600 hover:bg-green-700"
@@ -621,7 +863,7 @@ export default function WorkerJobDetailPage() {
               isLoading={isSubmitting}
             >
               <CheckCircle size={16} />
-              Complete
+              All Done!
             </Button>
           </div>
         </div>

@@ -21,6 +21,7 @@ import {
   Play,
   Pause,
   Building,
+  History,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -52,7 +53,7 @@ interface Job {
   teamPaid: boolean
   teamPaidAt: string | null
   source: string
-  property: { id: string; name: string }
+  property: { id: string; name: string; color: string | null }
   assignments: JobAssignment[]
 }
 
@@ -144,6 +145,8 @@ function JobsPageContent() {
   const searchParams = useSearchParams()
   const highlightId = searchParams.get('highlight')
   const tabParam = searchParams.get('tab')
+  const newJobParam = searchParams.get('newJob')
+  const dateParam = searchParams.get('date')
 
   const [activeTab, setActiveTab] = useState<'jobs' | 'recurring'>(
     tabParam === 'recurring' ? 'recurring' : 'jobs'
@@ -189,6 +192,20 @@ function JobsPageContent() {
       }, 100)
     }
   }, [highlightId, jobs])
+
+  // State for pre-selected date from calendar
+  const [preselectedDate, setPreselectedDate] = useState<string | null>(null)
+
+  // Open new job modal if coming from calendar
+  useEffect(() => {
+    if (newJobParam === 'true') {
+      setPreselectedDate(dateParam)
+      setEditingJob(null)
+      setShowModal(true)
+      // Clear the URL params
+      router.replace('/jobs')
+    }
+  }, [newJobParam, dateParam, router])
 
   const fetchJobs = async () => {
     try {
@@ -540,10 +557,14 @@ function JobsPageContent() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-4 flex items-center justify-center">
-              <Button onClick={() => { setEditingJob(null); setShowModal(true) }} className="w-full">
+            <CardContent className="p-4 flex items-center gap-2">
+              <Button onClick={() => { setEditingJob(null); setShowModal(true) }} className="flex-1">
                 <Plus size={16} />
                 Add Job
+              </Button>
+              <Button variant="outline" onClick={() => router.push('/team')}>
+                <History size={16} />
+                Pay History
               </Button>
             </CardContent>
           </Card>
@@ -591,27 +612,53 @@ function JobsPageContent() {
                 <div className="space-y-2">
                   {jobsByDate[dateKey].map(job => {
                     const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+                    // Get background color style based on property color
+                    const getJobStyle = () => {
+                      if (job.property.color) {
+                        return {
+                          backgroundColor: job.completed
+                            ? `${job.property.color}40` // 25% opacity for completed
+                            : `${job.property.color}20`, // 12% opacity for pending
+                          borderColor: job.property.color,
+                          borderWidth: '1px',
+                          borderStyle: 'solid' as const,
+                        }
+                      }
+                      return undefined
+                    }
                     return (
                       <Card
                         key={job.id}
                         id={`job-${job.id}`}
                         className={cn(
                           'transition-all',
-                          job.completed ? 'bg-green-50 border-green-200' : 'bg-white'
+                          !job.property.color && (job.completed ? 'bg-green-50 border-green-200' : 'bg-white')
                         )}
+                        style={getJobStyle()}
                       >
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
                             {/* Left: Property & Time */}
                             <div className="flex items-center gap-4">
-                              <div className={cn(
-                                'w-12 h-12 rounded-lg flex items-center justify-center',
-                                job.completed ? 'bg-green-200' : 'bg-blue-100'
-                              )}>
+                              <div
+                                className={cn(
+                                  'w-12 h-12 rounded-lg flex items-center justify-center',
+                                  !job.property.color && (job.completed ? 'bg-green-200' : 'bg-blue-100')
+                                )}
+                                style={job.property.color ? { backgroundColor: `${job.property.color}30` } : undefined}
+                              >
                                 {job.completed ? (
-                                  <Check className="text-green-700" size={24} />
+                                  <Check
+                                    className={!job.property.color ? 'text-green-700' : ''}
+                                    style={job.property.color ? { color: job.property.color } : undefined}
+                                    size={24}
+                                  />
                                 ) : (
-                                  <MapPin className="text-blue-600" size={24} />
+                                  <MapPin
+                                    className={!job.property.color ? 'text-blue-600' : ''}
+                                    style={job.property.color ? { color: job.property.color } : undefined}
+                                    size={24}
+                                  />
                                 )}
                               </div>
                               <div>
@@ -864,11 +911,12 @@ function JobsPageContent() {
 
       <JobModal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setEditingJob(null) }}
+        onClose={() => { setShowModal(false); setEditingJob(null); setPreselectedDate(null) }}
         onSave={handleSave}
         properties={properties}
         teamMembers={teamMembers}
         editingJob={editingJob}
+        preselectedDate={preselectedDate}
       />
 
       <ScheduleModal
@@ -995,13 +1043,13 @@ interface JobModalProps {
   properties: Property[]
   teamMembers: TeamMember[]
   editingJob: Job | null
+  preselectedDate?: string | null
 }
 
-function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob }: JobModalProps) {
+function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob, preselectedDate }: JobModalProps) {
   const [formData, setFormData] = useState({
     propertyId: '',
     date: format(new Date(), 'yyyy-MM-dd'),
-    time: '',
     priority: '5',
     rate: '',
     expensePercent: '12',
@@ -1016,7 +1064,6 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
         setFormData({
           propertyId: editingJob.property.id,
           date: format(new Date(editingJob.date), 'yyyy-MM-dd'),
-          time: editingJob.time || '',
           priority: editingJob.priority?.toString() || '5',
           rate: editingJob.rate.toString(),
           expensePercent: editingJob.expensePercent?.toString() || '12',
@@ -1026,8 +1073,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
       } else {
         setFormData({
           propertyId: '',
-          date: format(new Date(), 'yyyy-MM-dd'),
-          time: '',
+          date: preselectedDate || format(new Date(), 'yyyy-MM-dd'),
           priority: '5',
           rate: '',
           expensePercent: '12',
@@ -1036,7 +1082,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
         })
       }
     }
-  }, [isOpen, editingJob])
+  }, [isOpen, editingJob, preselectedDate])
 
   const handlePropertyChange = (propertyId: string) => {
     const property = properties.find((p) => p.id === propertyId)
@@ -1080,7 +1126,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           required
         />
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label="Date"
             type="date"
@@ -1093,12 +1139,6 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
             value={formData.priority}
             onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
             options={PRIORITY_OPTIONS}
-          />
-          <Input
-            label="Time (optional)"
-            type="time"
-            value={formData.time}
-            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
           />
         </div>
 

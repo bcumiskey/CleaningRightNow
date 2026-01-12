@@ -31,6 +31,12 @@ export async function GET() {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
 
+    // Get company settings for configurable values
+    const settings = await prisma.companySettings.findUnique({
+      where: { id: 'default' },
+    })
+    const linenTargetMultiplier = settings?.linenTargetMultiplier ?? 2
+
     // 1. SURPRISE BOOKINGS - Jobs created within 2 days of their date
     const recentJobs = await prisma.job.findMany({
       where: {
@@ -198,9 +204,9 @@ export async function GET() {
             (inv: { linenItemId: string }) => inv.linenItemId === req.linenItemId
           )
           const onHand = inventory?.onHand || 0
-          const neededForThreeFlips = req.perFlip * 3 // Alert if less than 3 flips worth
+          const neededForTargetFlips = req.perFlip * linenTargetMultiplier // Alert based on configured target
 
-          if (onHand < neededForThreeFlips && onHand < req.perFlip * 5) {
+          if (onHand < neededForTargetFlips && onHand < req.perFlip * 5) {
             const flipsRemaining = Math.floor(onHand / req.perFlip)
 
             alerts.push({

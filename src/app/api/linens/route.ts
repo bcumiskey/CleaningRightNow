@@ -14,6 +14,11 @@ export async function GET() {
     const categories = await prisma.linenCategory.findMany({
       include: {
         items: {
+          include: {
+            owner: {
+              select: { id: true, name: true },
+            },
+          },
           orderBy: { name: 'asc' },
         },
       },
@@ -78,6 +83,8 @@ export async function POST(request: NextRequest) {
         code: data.code,
         unitCost: parseFloat(data.unitCost) || 0,
         categoryId: data.categoryId,
+        scope: data.scope || 'global',
+        ownerId: data.ownerId || null,
       },
     })
 
