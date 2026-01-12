@@ -13,6 +13,7 @@ import {
   Square,
   Camera,
   AlertCircle,
+  AlertTriangle,
   Navigation,
   Shield,
   UserX,
@@ -83,6 +84,8 @@ export default function WorkerJobDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [hasBlockingJob, setHasBlockingJob] = useState(false)
   const [showStartModal, setShowStartModal] = useState(false)
+  const [showLateStartModal, setShowLateStartModal] = useState(false)
+  const [showLateStartConfirm2, setShowLateStartConfirm2] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
   const [showAbsentModal, setShowAbsentModal] = useState(false)
   const [showRatingModal, setShowRatingModal] = useState(false)
@@ -585,17 +588,30 @@ export default function WorkerJobDetailPage() {
 
       {/* Action Buttons - Show for jobs that can be started */}
       {!isCompleted && job && (() => {
-        const jobDate = parseISO(job.date)
+        const jobDate = startOfDay(parseISO(job.date))
         const today = startOfDay(new Date())
-        const twoDaysFromNow = addDays(today, 2)
-        const isWithinStartWindow = !isBefore(jobDate, today) && isBefore(jobDate, addDays(twoDaysFromNow, 1))
-        const canStart = isWithinStartWindow && !hasBlockingJob
+        const twoDaysAgo = addDays(today, -2)
+
+        // Jobs can only start on scheduled day or UP TO 2 days LATE (not early!)
+        const isScheduledDay = isToday(jobDate)
+        const isLateStart = isBefore(jobDate, today) && !isBefore(jobDate, twoDaysAgo)
+        const isTooLate = isBefore(jobDate, twoDaysAgo)
+        const isFutureJob = isAfter(jobDate, today)
+        const canStart = (isScheduledDay || isLateStart) && !hasBlockingJob
 
         if (canStart) {
+          const handleStartClick = () => {
+            if (isLateStart) {
+              setShowLateStartModal(true)
+            } else {
+              setShowStartModal(true)
+            }
+          }
+
           return (
             <div className="fixed bottom-20 left-4 right-4 space-y-2">
               {!isCheckedIn ? (
-                <Button size="lg" className="w-full" onClick={() => setShowStartModal(true)}>
+                <Button size="lg" className="w-full" onClick={handleStartClick}>
                   <Play size={20} />
                   Start Job
                 </Button>
@@ -630,7 +646,7 @@ export default function WorkerJobDetailPage() {
           )
         }
 
-        if (isAfter(jobDate, twoDaysFromNow)) {
+        if (isFutureJob) {
           return (
             <div className="fixed bottom-20 left-4 right-4">
               <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 text-center">
@@ -638,7 +654,22 @@ export default function WorkerJobDetailPage() {
                   This job is scheduled for {format(jobDate, 'EEEE, MMMM d')}.
                 </p>
                 <p className="text-gray-500 text-xs mt-1">
-                  You can start this job up to 2 days before.
+                  You can start on the scheduled day.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        if (isTooLate) {
+          return (
+            <div className="fixed bottom-20 left-4 right-4">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-red-700 text-sm font-medium">
+                  This job was scheduled for {format(jobDate, 'EEEE, MMMM d')}.
+                </p>
+                <p className="text-red-600 text-xs mt-1">
+                  Please contact your supervisor about this job.
                 </p>
               </div>
             </div>
@@ -648,7 +679,7 @@ export default function WorkerJobDetailPage() {
         return null
       })()}
 
-      {/* Start Job Confirmation Modal */}
+      {/* Start Job Confirmation Modal (Day-of) */}
       <Modal
         isOpen={showStartModal}
         onClose={() => setShowStartModal(false)}
@@ -683,6 +714,100 @@ export default function WorkerJobDetailPage() {
             >
               <Play size={16} />
               Start Now
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Late Start - First Confirmation Modal */}
+      <Modal
+        isOpen={showLateStartModal}
+        onClose={() => setShowLateStartModal(false)}
+        title="Hold Up..."
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-amber-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <AlertCircle size={32} className="text-amber-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Wait a second...
+            </h3>
+            <p className="text-gray-600">
+              This job was scheduled for{' '}
+              <span className="font-medium text-amber-700">
+                {job ? format(parseISO(job.date), 'EEEE, MMMM d') : ''}
+              </span>
+            </p>
+            <p className="text-gray-500 mt-2 text-sm">
+              Are you sure you want to start it now?
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowLateStartModal(false)}
+            >
+              Nevermind
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 border-amber-500 text-amber-700 hover:bg-amber-50"
+              onClick={() => {
+                setShowLateStartModal(false)
+                setShowLateStartConfirm2(true)
+              }}
+            >
+              Yes, Continue
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Late Start - Second Confirmation Modal (with funny message) */}
+      <Modal
+        isOpen={showLateStartConfirm2}
+        onClose={() => setShowLateStartConfirm2(false)}
+        title="Are You Really Sure?"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-orange-100 rounded-full mx-auto flex items-center justify-center mb-4">
+              <AlertTriangle size={32} className="text-orange-600" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Okay, but just so you know...
+            </h3>
+            <p className="text-gray-600">
+              The boss sees <span className="italic">everything</span>. Starting this job late will be logged.
+            </p>
+            <p className="text-gray-500 mt-3 text-sm bg-gray-100 rounded-lg p-3">
+              If there&apos;s a good reason for the delay, no worries! Just make sure to add a note when you&apos;re done.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowLateStartConfirm2(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-orange-600 hover:bg-orange-700"
+              onClick={() => {
+                setShowLateStartConfirm2(false)
+                handleStartJob('manual')
+              }}
+              isLoading={isSubmitting}
+            >
+              <Play size={16} />
+              Start Anyway
             </Button>
           </div>
         </div>
