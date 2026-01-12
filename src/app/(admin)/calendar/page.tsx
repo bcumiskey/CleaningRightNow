@@ -484,15 +484,15 @@ export default function CalendarPage() {
               label="Property"
               value={jobFormData.propertyId}
               onChange={(e) => handlePropertyChange(e.target.value)}
+              options={[
+                { value: '', label: 'Select a property' },
+                ...properties.map((property) => ({
+                  value: property.id,
+                  label: property.name,
+                })),
+              ]}
               required
-            >
-              <option value="">Select a property</option>
-              {properties.map((property) => (
-                <option key={property.id} value={property.id}>
-                  {property.name}
-                </option>
-              ))}
-            </Select>
+            />
 
             <Input
               label="Date"
