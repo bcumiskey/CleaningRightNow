@@ -105,7 +105,7 @@ export default function LoginPage() {
             }`}
           >
             <HardHat size={18} />
-            Worker
+            Team Member
           </button>
         </div>
 
@@ -139,7 +139,7 @@ export default function LoginPage() {
           </label>
 
           <Button type="submit" className="w-full" isLoading={isLoading}>
-            Sign In {loginType === 'worker' ? 'as Worker' : 'as Admin'}
+            Sign In {loginType === 'worker' ? 'as Team Member' : 'as Admin'}
           </Button>
         </form>
 

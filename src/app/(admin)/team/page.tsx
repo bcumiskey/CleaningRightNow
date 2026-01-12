@@ -480,7 +480,7 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
           value={formData.role}
           onChange={(e) => setFormData({ ...formData, role: e.target.value })}
           options={[
-            { value: 'worker', label: 'Worker' },
+            { value: 'worker', label: 'Team Member' },
             { value: 'admin', label: 'Admin' },
           ]}
         />
@@ -583,7 +583,7 @@ function SetPasswordModal({ isOpen, onClose, onSave, memberName }: SetPasswordMo
     <Modal isOpen={isOpen} onClose={onClose} title={`Set Password for ${memberName}`}>
       <form onSubmit={handleSubmit} className="space-y-4">
         <p className="text-sm text-gray-600">
-          Set a password to allow this worker to log in to the worker portal.
+          Set a password to allow this team member to log in to the team portal.
         </p>
 
         <Input

@@ -1079,7 +1079,7 @@ export default function PropertyEditPage() {
 
   const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: 'details', label: 'Details', icon: <Building size={16} /> },
-    { id: 'worker', label: 'Worker Info', icon: <Key size={16} /> },
+    { id: 'worker', label: 'Team Info', icon: <Key size={16} /> },
     { id: 'rooms', label: `Rooms (${rooms.length})`, icon: <Home size={16} /> },
     { id: 'inventory', label: `Inventory (${totalInventoryCount})`, icon: <Package size={16} /> },
     { id: 'instructions', label: `Instructions (${instructions.length})`, icon: <ListChecks size={16} /> },
@@ -1317,18 +1317,18 @@ export default function PropertyEditPage() {
           </div>
         )}
 
-        {/* Worker Info Tab */}
+        {/* Team Info Tab */}
         {activeTab === 'worker' && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Key size={18} />
-                Information Visible to Workers
+                Information Visible to Team
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               <p className="text-sm text-gray-500">
-                This information is shown to workers when they view job details or the property reference.
+                This information is shown to team members when they view job details or the property reference.
               </p>
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-4">
@@ -1359,7 +1359,7 @@ export default function PropertyEditPage() {
                     placeholder="2 King, 1 Queen, 2 Twin"
                   />
                   <div className="p-4 bg-blue-50 rounded-lg">
-                    <h4 className="font-medium text-blue-900 mb-2">What workers see:</h4>
+                    <h4 className="font-medium text-blue-900 mb-2">What team members see:</h4>
                     <ul className="text-sm text-blue-800 space-y-1">
                       <li>• Property name and address</li>
                       <li>• Access code and notes</li>
@@ -2012,7 +2012,7 @@ export default function PropertyEditPage() {
               rows={4}
               value={newPhotoNotes}
               onChange={(e) => setNewPhotoNotes(e.target.value)}
-              placeholder="Detailed instructions shown when worker clicks on this photo"
+              placeholder="Detailed instructions shown when team member clicks on this photo"
             />
           </div>
           <div className="flex justify-end gap-3 pt-4">
