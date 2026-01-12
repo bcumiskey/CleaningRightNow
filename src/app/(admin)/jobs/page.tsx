@@ -953,7 +953,9 @@ function JobCard({ job, onEdit, onDelete, onStatusChange, onTeamPayment }: JobCa
       id={`job-${job.id}`}
       className={cn(
         'transition-all hover:shadow-md',
-        !job.property.color && (job.completed ? 'bg-green-50 border-l-4 border-l-green-500' : 'bg-white border-l-4 border-l-blue-500')
+        job.property.color
+          ? '!bg-transparent border-l-4' // Override Card's bg-white to let inline style show
+          : (job.completed ? 'bg-green-50 border-l-4 border-l-green-500' : 'bg-white border-l-4 border-l-blue-500')
       )}
       style={getJobStyle()}
     >
