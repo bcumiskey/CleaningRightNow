@@ -27,6 +27,7 @@ import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Badge from '@/components/ui/Badge'
 import { format, isToday, parseISO, addDays, isBefore, startOfDay, isAfter } from 'date-fns'
+import { parseLocalDate } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
 // Feature flag for supervisor mode - set to true when ready to enable
@@ -402,7 +403,7 @@ export default function WorkerJobDetailPage() {
             <h1 className="text-2xl font-bold drop-shadow-lg">{job.property.name}</h1>
             <div className="flex items-center gap-2 text-white/90 text-sm mt-1">
               <Clock size={14} />
-              {format(new Date(job.date), 'EEEE, MMM d')}
+              {format(parseLocalDate(job.date), 'EEEE, MMM d')}
               {job.time && ` at ${job.time}`}
             </div>
           </div>
@@ -427,7 +428,7 @@ export default function WorkerJobDetailPage() {
             <h1 className="text-2xl font-bold">{job.property.name}</h1>
             <div className="flex items-center gap-2 text-white/90 text-sm mt-1">
               <Clock size={14} />
-              {format(new Date(job.date), 'EEEE, MMM d')}
+              {format(parseLocalDate(job.date), 'EEEE, MMM d')}
               {job.time && ` at ${job.time}`}
             </div>
           </div>

@@ -6,11 +6,33 @@ import prisma from '@/lib/prisma'
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    if (!session) {
+    if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const sessionUser = session.user as { id?: string; role?: string; teamMemberId?: string }
+
+    // Workers must have a teamMemberId - only show properties they've been assigned to
+    if (!sessionUser.teamMemberId && sessionUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // For workers, only return properties they have been assigned to via jobs
+    // For admins, return all properties
+    const whereClause = sessionUser.teamMemberId
+      ? {
+          jobs: {
+            some: {
+              assignments: {
+                some: { teamMemberId: sessionUser.teamMemberId }
+              }
+            }
+          }
+        }
+      : {}
+
     const properties = await prisma.property.findMany({
+      where: whereClause,
       select: {
         id: true,
         name: true,

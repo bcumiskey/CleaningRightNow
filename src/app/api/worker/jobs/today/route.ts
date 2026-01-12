@@ -37,33 +37,46 @@ export async function GET() {
       where: whereClause,
       include: {
         property: {
-          select: { id: true, name: true, address: true },
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            _count: {
+              select: {
+                notes: { where: { status: 'active' } }
+              }
+            }
+          },
         },
       },
       orderBy: [{ time: 'asc' }, { date: 'asc' }],
     })
 
-    // Add active notes count
-    interface JobData { id: string; date: Date; time: string | null; completed: boolean; property: { id: string; name: string; address: string } }
-    const jobsWithNotes = await Promise.all(
-      jobs.map(async (job: JobData) => {
-        const activeNotes = await prisma.propertyNote.count({
-          where: {
-            propertyId: job.property.id,
-            status: 'active',
-          },
-        })
-
-        return {
-          id: job.id,
-          date: job.date,
-          time: job.time,
-          completed: job.completed,
-          property: job.property,
-          _activeNotes: activeNotes,
-        }
-      })
-    )
+    // Transform to include active notes count (single query, no N+1)
+    interface JobWithProperty {
+      id: string
+      date: Date
+      time: string | null
+      completed: boolean
+      property: {
+        id: string
+        name: string
+        address: string
+        _count: { notes: number }
+      }
+    }
+    const jobsWithNotes = jobs.map((job: JobWithProperty) => ({
+      id: job.id,
+      date: job.date,
+      time: job.time,
+      completed: job.completed,
+      property: {
+        id: job.property.id,
+        name: job.property.name,
+        address: job.property.address,
+      },
+      _activeNotes: job.property._count.notes,
+    }))
 
     return NextResponse.json(jobsWithNotes)
   } catch (error) {
