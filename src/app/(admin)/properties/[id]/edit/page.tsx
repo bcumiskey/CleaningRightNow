@@ -112,6 +112,7 @@ interface Property {
   expensePercent: number
   billingType: string
   billingFrequency: string
+  autoSendInvoice: boolean
   accessCode: string | null
   accessNotes: string | null
   bedConfig: string | null
