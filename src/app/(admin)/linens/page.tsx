@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Package, Plus, ShoppingCart, Pencil, Trash2, X, Check, Sparkles } from 'lucide-react'
+import { Package, Plus, ShoppingCart, Pencil, Trash2, X, Check, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -79,6 +79,21 @@ export default function LinensPage() {
   const [showAddItem, setShowAddItem] = useState(false)
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [addToCategoryId, setAddToCategoryId] = useState<string>('')
+
+  // Expanded categories state
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(categoryId)) {
+        next.delete(categoryId)
+      } else {
+        next.add(categoryId)
+      }
+      return next
+    })
+  }
 
   // Shopping list state
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([])
@@ -408,48 +423,66 @@ export default function LinensPage() {
                 </CardContent>
               </Card>
             ) : (
-              categories.map(category => (
+              categories.map(category => {
+                const isExpanded = expandedCategories.has(category.id)
+                return (
                 <Card key={category.id}>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    {editingCategory === category.id ? (
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={editingCategoryName}
-                          onChange={(e) => setEditingCategoryName(e.target.value)}
-                          className="w-48"
-                          autoFocus
-                        />
-                        <Button size="sm" onClick={() => handleUpdateCategory(category.id)}>
-                          <Check size={14} />
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingCategory(null)}>
-                          <X size={14} />
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                        <button
-                          onClick={() => {
-                            setEditingCategory(category.id)
-                            setEditingCategoryName(category.name)
-                          }}
-                          className="p-1 text-gray-400 hover:text-gray-600"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCategory(category.id)}
-                          className="p-1 text-gray-400 hover:text-red-600"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    )}
+                  <CardHeader
+                    className="flex flex-row items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                    onClick={() => toggleCategory(category.id)}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isExpanded ? (
+                        <ChevronDown size={20} className="text-gray-500" />
+                      ) : (
+                        <ChevronRight size={20} className="text-gray-500" />
+                      )}
+                      {editingCategory === category.id ? (
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                          <Input
+                            value={editingCategoryName}
+                            onChange={(e) => setEditingCategoryName(e.target.value)}
+                            className="w-48"
+                            autoFocus
+                          />
+                          <Button size="sm" onClick={() => handleUpdateCategory(category.id)}>
+                            <Check size={14} />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingCategory(null)}>
+                            <X size={14} />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="font-semibold text-gray-900">{category.name}</h3>
+                          <span className="text-sm text-gray-500">({category.items.length} items)</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingCategory(category.id)
+                              setEditingCategoryName(category.name)
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteCategory(category.id)
+                            }}
+                            className="p-1 text-gray-400 hover:text-red-600"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.stopPropagation()
                         setAddToCategoryId(category.id)
                         setShowAddItem(true)
                       }}
@@ -458,6 +491,7 @@ export default function LinensPage() {
                       Add Item
                     </Button>
                   </CardHeader>
+                  {isExpanded && (
                   <CardContent className="p-0">
                     <table className="w-full">
                       <thead className="bg-gray-50 border-b">
@@ -574,8 +608,9 @@ export default function LinensPage() {
                       </tbody>
                     </table>
                   </CardContent>
+                  )}
                 </Card>
-              ))
+              )})
             )}
           </div>
         )}
