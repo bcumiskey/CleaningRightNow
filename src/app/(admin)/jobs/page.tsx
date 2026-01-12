@@ -926,13 +926,20 @@ interface JobCardProps {
 function JobCard({ job, onEdit, onDelete, onStatusChange, onTeamPayment }: JobCardProps) {
   const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
 
-  // Get background color style based on property color - more visible now
+  // Convert hex color to rgba with opacity
+  const hexToRgba = (hex: string, opacity: number) => {
+    const cleanHex = hex.replace('#', '')
+    const r = parseInt(cleanHex.substring(0, 2), 16)
+    const g = parseInt(cleanHex.substring(2, 4), 16)
+    const b = parseInt(cleanHex.substring(4, 6), 16)
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`
+  }
+
+  // Get background color style based on property color
   const getJobStyle = () => {
     if (job.property.color) {
       return {
-        backgroundColor: job.completed
-          ? `${job.property.color}25` // More visible for completed
-          : `${job.property.color}18`, // More visible for pending
+        backgroundColor: hexToRgba(job.property.color, job.completed ? 0.35 : 0.2),
         borderLeftColor: job.property.color,
         borderLeftWidth: '4px',
         borderLeftStyle: 'solid' as const,
