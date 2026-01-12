@@ -28,6 +28,9 @@ import Badge from '@/components/ui/Badge'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
+// Feature flag for supervisor mode - set to true when ready to enable
+const SUPERVISOR_MODE_ENABLED = false
+
 interface TeamAssignment {
   id: string
   teamMember: {
@@ -134,7 +137,9 @@ export default function WorkerJobDetailPage() {
   }, [fetchJob])
 
   // Check if current user is supervisor for this job
+  // Note: Supervisor mode is currently disabled via feature flag
   const isSupervisor = (() => {
+    if (!SUPERVISOR_MODE_ENABLED) return false
     if (!teamMemberId || !job?.assignments) return false
 
     const myAssignment = job.assignments.find(a => a.teamMember.id === teamMemberId)
@@ -559,7 +564,7 @@ export default function WorkerJobDetailPage() {
           {!isCheckedIn ? (
             <Button size="lg" className="w-full" onClick={() => handleStartJob('manual')}>
               <Play size={20} />
-              Start Job (Manual Check-in)
+              Start Job
             </Button>
           ) : (
             <Button

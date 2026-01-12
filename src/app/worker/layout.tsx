@@ -3,13 +3,12 @@
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Calendar, BookOpen, User, Scan, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { Calendar, BookOpen, User, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/worker', label: 'Schedule', icon: Calendar },
   { href: '/worker/report', label: 'Report', icon: AlertTriangle },
-  { href: '/worker/check-in', label: 'Check In', icon: Scan, highlight: true },
   { href: '/worker/reference', label: 'Reference', icon: BookOpen },
   { href: '/worker/account', label: 'Account', icon: User },
 ]
@@ -104,36 +103,13 @@ function WorkerLayoutContent({ children }: { children: React.ReactNode }) {
       <main>{children}</main>
 
       {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-end py-2 z-10">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around items-center py-2 z-10">
         {navItems.map((item) => {
           const isActive =
             item.href === '/worker'
               ? pathname === '/worker'
               : pathname.startsWith(item.href)
           const Icon = item.icon
-          const isHighlight = 'highlight' in item && item.highlight
-
-          // Special styling for check-in button (center, raised)
-          if (isHighlight) {
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex flex-col items-center gap-1 -mt-4"
-              >
-                <div className={cn(
-                  'w-14 h-14 rounded-full flex items-center justify-center shadow-lg',
-                  isActive ? 'bg-emerald-600' : 'bg-emerald-500 hover:bg-emerald-600'
-                )}>
-                  <Icon size={28} className="text-white" />
-                </div>
-                <span className={cn(
-                  'text-xs font-medium',
-                  isActive ? 'text-emerald-600' : 'text-gray-500'
-                )}>{item.label}</span>
-              </Link>
-            )
-          }
 
           return (
             <Link
