@@ -732,16 +732,16 @@ export default function WorkerJobDetailPage() {
               <Clock size={32} className="text-amber-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Better late than never!
+              Why put off &apos;til tomorrow...
             </h3>
             <p className="text-gray-600">
-              This job was scheduled for{' '}
-              <span className="font-medium text-amber-700">
-                {job ? format(parseISO(job.date), 'EEEE, MMMM d') : ''}
-              </span>
+              ...what you can do today?
             </p>
-            <p className="text-gray-500 mt-2 text-sm">
-              Ready to knock it out now?
+            <p className="text-gray-500 mt-3 text-sm">
+              This was scheduled for{' '}
+              <span className="font-medium text-amber-700">
+                {job ? format(parseISO(job.date), 'EEEE') : ''}
+              </span>. Better late than never!
             </p>
           </div>
 
@@ -751,7 +751,7 @@ export default function WorkerJobDetailPage() {
               className="flex-1"
               onClick={() => setShowLateStartModal(false)}
             >
-              Not Yet
+              Hmm, Maybe Not
             </Button>
             <Button
               className="flex-1"
@@ -770,7 +770,7 @@ export default function WorkerJobDetailPage() {
       <Modal
         isOpen={showLateStartConfirm2}
         onClose={() => setShowLateStartConfirm2(false)}
-        title="One More Thing..."
+        title="Just Checking..."
         size="md"
       >
         <div className="space-y-4">
@@ -779,13 +779,13 @@ export default function WorkerJobDetailPage() {
               <Sparkles size={32} className="text-emerald-600" />
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              Are you <span className="italic">sure</span> you&apos;re sure?
+              You sure about this?
             </h3>
             <p className="text-gray-600">
-              Just double-checking... you know how it is!
+              No judgement here - life happens!
             </p>
             <p className="text-gray-500 mt-3 text-sm bg-gray-50 rounded-lg p-3">
-              Life happens. If there was a delay, feel free to add a quick note when you wrap up.
+              Just add a quick note when you&apos;re done so we know what&apos;s up.
             </p>
           </div>
 
