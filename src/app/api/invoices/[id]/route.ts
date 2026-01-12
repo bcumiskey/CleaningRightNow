@@ -88,22 +88,34 @@ export async function PUT(
           where: { invoiceId: id },
         })
 
-        // Calculate new subtotal from line items
-        const subtotal = data.lineItems.reduce(
-          (sum: number, item: { amount: number }) => sum + (item.amount || 0),
-          0
-        )
-        const discount = data.discount || 0
+        // Validate and calculate new subtotal from line items
+        let subtotal = 0
+        for (const item of data.lineItems) {
+          const amount = parseFloat(String(item.amount)) || 0
+          if (amount < 0) {
+            throw new Error('Line item amounts must be non-negative')
+          }
+          subtotal += amount
+        }
+
+        const discount = parseFloat(String(data.discount)) || 0
+        if (discount < 0) {
+          throw new Error('Discount must be non-negative')
+        }
+        if (discount > subtotal) {
+          throw new Error('Discount cannot exceed subtotal')
+        }
         const total = subtotal - discount
 
         // Create new line items
         for (let i = 0; i < data.lineItems.length; i++) {
           const item = data.lineItems[i]
+          const amount = parseFloat(String(item.amount)) || 0
           await tx.invoiceLineItem.create({
             data: {
               invoiceId: id,
               description: item.description,
-              amount: item.amount || 0,
+              amount: amount,
               itemType: item.itemType || 'service',
               date: item.date ? new Date(item.date) : null,
               jobId: item.jobId || null,

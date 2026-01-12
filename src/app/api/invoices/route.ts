@@ -15,8 +15,12 @@ async function generateInvoiceNumber(): Promise<string> {
 
   let nextNum = 1
   if (lastInvoice) {
-    const lastNum = parseInt(lastInvoice.invoiceNumber.replace(prefix, ''), 10)
-    nextNum = lastNum + 1
+    const numPart = lastInvoice.invoiceNumber.replace(prefix, '')
+    const lastNum = parseInt(numPart, 10)
+    // Guard against NaN from invalid invoice number formats
+    if (!isNaN(lastNum) && lastNum >= 1) {
+      nextNum = lastNum + 1
+    }
   }
 
   return `${prefix}${nextNum.toString().padStart(3, '0')}`
@@ -118,8 +122,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: `Line item ${i + 1}: Description is required` }, { status: 400 })
         }
         const amount = parseFloat(String(item.amount))
-        if (isNaN(amount)) {
-          return NextResponse.json({ error: `Line item ${i + 1}: Invalid amount "${item.amount}"` }, { status: 400 })
+        if (isNaN(amount) || amount < 0) {
+          return NextResponse.json({ error: `Line item ${i + 1}: Amount must be a non-negative number` }, { status: 400 })
         }
         lineItemsToCreate.push({
           date: item.date ? new Date(item.date) : null,
@@ -138,6 +142,9 @@ export async function POST(request: NextRequest) {
       discount = parseFloat(String(data.discount))
       if (isNaN(discount) || discount < 0) {
         return NextResponse.json({ error: 'Discount must be a non-negative number' }, { status: 400 })
+      }
+      if (discount > subtotal) {
+        return NextResponse.json({ error: 'Discount cannot exceed subtotal' }, { status: 400 })
       }
     }
     const total = subtotal - discount
