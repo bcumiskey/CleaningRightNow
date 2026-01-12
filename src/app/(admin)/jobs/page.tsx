@@ -461,7 +461,7 @@ function JobsPageContent() {
   }
 
   const totalRevenue = jobs.reduce((sum, job) => sum + job.rate, 0)
-  const completedJobs = jobs.filter(j => j.completed).length
+  const completedJobsCount = jobs.filter(j => j.completed).length
 
   const prevMonth = () => {
     setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))
@@ -544,7 +544,7 @@ function JobsPageContent() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500">Completed</p>
-                  <p className="text-2xl font-bold text-green-600">{completedJobs}</p>
+                  <p className="text-2xl font-bold text-green-600">{completedJobsCount}</p>
                 </div>
                 <Check className="text-green-500" size={24} />
               </div>
