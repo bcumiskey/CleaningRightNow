@@ -313,8 +313,8 @@ export default function TeamPage() {
                         </p>
                       )}
 
-                      {/* View Pay Button for Workers - only for active */}
-                      {member.isActive && member.role === 'worker' && (
+                      {/* View Pay Button - for all active team members */}
+                      {member.isActive && (
                         <Button
                           size="sm"
                           variant="ghost"

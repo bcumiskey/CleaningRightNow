@@ -23,6 +23,31 @@ export function formatTime(time: string): string {
   return time
 }
 
+/**
+ * Parse a date string (ISO or YYYY-MM-DD) to a local Date object at noon.
+ * This avoids timezone issues where dates shift between days.
+ */
+export function parseLocalDate(dateStr: string): Date {
+  // Extract just the date portion (YYYY-MM-DD) regardless of format
+  const datePart = dateStr.substring(0, 10)
+  const [year, month, day] = datePart.split('-').map(Number)
+  // Create date at noon local time to avoid any day boundary issues
+  return new Date(year, month - 1, day, 12, 0, 0)
+}
+
+/**
+ * Get the YYYY-MM-DD string from any date input
+ */
+export function getDateKey(date: Date | string): string {
+  if (typeof date === 'string') {
+    return date.substring(0, 10)
+  }
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function calculateJobPayments(rate: number, expensePercent: number, assignmentCount: number) {
   const expenseAmount = rate * (expensePercent / 100)
   const teamTotal = rate - expenseAmount
