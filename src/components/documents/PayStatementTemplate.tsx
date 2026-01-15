@@ -231,16 +231,6 @@ export default function PayStatementTemplate({
           </table>
         </div>
 
-        {/* Payment Calculation Explanation */}
-        <div className="bg-gray-50 rounded-lg p-4 mb-8 text-sm text-gray-600">
-          <h4 className="font-semibold text-gray-700 mb-2">How Your Pay is Calculated</h4>
-          <p>
-            For each job, 12% of the job rate goes to business expenses. The remaining 88% is split
-            equally among all workers assigned to that job. Your share for each job is shown in the
-            &ldquo;Your Share&rdquo; column above.
-          </p>
-        </div>
-
         {/* Footer */}
         <div className="border-t border-gray-200 pt-6 text-center">
           <p className="text-sm text-gray-500">

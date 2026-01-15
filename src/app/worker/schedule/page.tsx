@@ -235,7 +235,7 @@ export default function WorkerSchedulePage() {
                           <div className={`text-xs px-1 py-0.5 rounded truncate ${
                             job.completed
                               ? 'bg-green-100 text-green-700'
-                              : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                              : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
                           }`}>
                             {job.property.name}
                           </div>
