@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Mail, CheckCircle, XCircle, Send } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -22,6 +22,19 @@ interface CompanySettings {
   linenTargetMultiplier: number
 }
 
+interface EmailStatus {
+  provider: 'microsoft365' | 'resend' | 'none'
+  configured: boolean
+  senderEmail?: string
+  envVars: {
+    hasAzureTenantId: boolean
+    hasAzureClientId: boolean
+    hasAzureClientSecret: boolean
+    hasM365SenderEmail: boolean
+    hasResendApiKey: boolean
+  }
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<CompanySettings>({
     id: 'default',
@@ -38,10 +51,51 @@ export default function SettingsPage() {
   const [expensePercentage, setExpensePercentage] = useState('12')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<EmailStatus | null>(null)
+  const [testEmail, setTestEmail] = useState('')
+  const [isSendingTest, setIsSendingTest] = useState(false)
 
   useEffect(() => {
     loadSettings()
+    loadEmailStatus()
   }, [])
+
+  const loadEmailStatus = async () => {
+    try {
+      const res = await fetch('/api/email/status')
+      if (res.ok) {
+        const data = await res.json()
+        setEmailStatus(data)
+      }
+    } catch (error) {
+      console.error('Failed to load email status:', error)
+    }
+  }
+
+  const sendTestEmail = async () => {
+    if (!testEmail) {
+      toast.error('Please enter an email address')
+      return
+    }
+    setIsSendingTest(true)
+    try {
+      const res = await fetch('/api/email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: testEmail }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success('Test email sent successfully!')
+      } else {
+        toast.error(data.error || 'Failed to send test email')
+      }
+    } catch (error) {
+      toast.error('Failed to send test email')
+    } finally {
+      setIsSendingTest(false)
+    }
+  }
 
   const loadSettings = async () => {
     try {
@@ -279,6 +333,84 @@ export default function SettingsPage() {
               <ExternalLink size={16} />
               Manage Properties
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Email Integration */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Mail size={20} className="text-gray-400" />
+              <h3 className="font-semibold text-gray-900">Email Integration</h3>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {emailStatus ? (
+              <>
+                <div className="flex items-center gap-3">
+                  {emailStatus.configured ? (
+                    <CheckCircle size={20} className="text-green-500" />
+                  ) : (
+                    <XCircle size={20} className="text-red-500" />
+                  )}
+                  <div>
+                    <p className="font-medium text-gray-900">
+                      {emailStatus.configured
+                        ? `Connected to ${emailStatus.provider === 'microsoft365' ? 'Microsoft 365' : 'Resend'}`
+                        : 'Email not configured'}
+                    </p>
+                    {emailStatus.senderEmail && (
+                      <p className="text-sm text-gray-500">Sending from: {emailStatus.senderEmail}</p>
+                    )}
+                  </div>
+                </div>
+
+                {!emailStatus.configured && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                    <p className="text-sm text-amber-800 font-medium mb-2">Setup Required</p>
+                    <p className="text-sm text-amber-700 mb-3">
+                      Add the following environment variables in Vercel to enable email:
+                    </p>
+                    <div className="space-y-2 text-xs font-mono bg-white rounded p-3 border border-amber-200">
+                      <p className="font-semibold text-gray-700">For Microsoft 365:</p>
+                      <p className={emailStatus.envVars.hasAzureTenantId ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasAzureTenantId ? '✓' : '○'} AZURE_TENANT_ID
+                      </p>
+                      <p className={emailStatus.envVars.hasAzureClientId ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasAzureClientId ? '✓' : '○'} AZURE_CLIENT_ID
+                      </p>
+                      <p className={emailStatus.envVars.hasAzureClientSecret ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasAzureClientSecret ? '✓' : '○'} AZURE_CLIENT_SECRET
+                      </p>
+                      <p className={emailStatus.envVars.hasM365SenderEmail ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasM365SenderEmail ? '✓' : '○'} M365_SENDER_EMAIL
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {emailStatus.configured && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium text-gray-700 mb-2">Send Test Email</p>
+                    <div className="flex gap-2">
+                      <Input
+                        value={testEmail}
+                        onChange={(e) => setTestEmail(e.target.value)}
+                        placeholder="your@email.com"
+                        type="email"
+                        className="flex-1"
+                      />
+                      <Button onClick={sendTestEmail} isLoading={isSendingTest}>
+                        <Send size={16} />
+                        Send Test
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-gray-500">Loading email status...</div>
+            )}
           </CardContent>
         </Card>
 
