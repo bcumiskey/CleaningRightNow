@@ -190,7 +190,23 @@ export async function POST(request: NextRequest) {
         // Process each event
         for (const event of events) {
           // Use checkout (end) date for cleaning jobs
+          // IMPORTANT: iCal all-day events use EXCLUSIVE end dates
+          // e.g., a stay ending May 31st has DTEND = June 1st
+          // We need to subtract one day to get the actual checkout date
           const jobDate = new Date(event.end)
+
+          // Check if this is an all-day event (both start and end at midnight)
+          // All-day events in iCal have dates without time components, which
+          // node-ical parses as midnight (00:00:00)
+          const startHours = event.start.getHours() + event.start.getMinutes() + event.start.getSeconds()
+          const endHours = event.end.getHours() + event.end.getMinutes() + event.end.getSeconds()
+          const isAllDayEvent = startHours === 0 && endHours === 0
+
+          if (isAllDayEvent) {
+            // Subtract one day to get the actual checkout/cleaning date
+            jobDate.setDate(jobDate.getDate() - 1)
+          }
+
           jobDate.setHours(0, 0, 0, 0)
 
           // Skip past events
