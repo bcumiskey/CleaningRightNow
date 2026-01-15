@@ -21,7 +21,7 @@ type ViewMode = 'list' | 'calendar'
 export default function WorkerSchedulePage() {
   const [jobs, setJobs] = useState<ScheduledJob[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [currentMonth, setCurrentMonth] = useState(new Date())
 
   useEffect(() => {

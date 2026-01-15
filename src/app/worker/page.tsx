@@ -113,7 +113,7 @@ export default function WorkerHomePage() {
           )}
 
           {/* All Done Message */}
-          {stats?.todayTotal > 0 && stats?.todayCompleted === stats?.todayTotal && (
+          {stats && stats.todayTotal > 0 && stats.todayCompleted === stats.todayTotal && (
             <Card className="bg-green-50 border-green-200">
               <CardContent className="text-center py-6">
                 <CheckCircle2 className="mx-auto text-green-500 mb-2" size={40} />
