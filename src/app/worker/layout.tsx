@@ -111,6 +111,31 @@ function WorkerLayoutContent({ children }: { children: React.ReactNode }) {
               ? pathname === '/worker'
               : pathname.startsWith(item.href)
           const Icon = item.icon
+          const isReport = item.href === '/worker/report'
+
+          // Special styling for Report button
+          if (isReport) {
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex flex-col items-center gap-1 -mt-4"
+              >
+                <div className={cn(
+                  'w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-colors',
+                  isActive
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-amber-400 text-white hover:bg-amber-500'
+                )}>
+                  <Icon size={26} />
+                </div>
+                <span className={cn(
+                  'text-xs font-medium',
+                  isActive ? 'text-amber-600' : 'text-gray-500'
+                )}>{item.label}</span>
+              </Link>
+            )
+          }
 
           return (
             <Link
