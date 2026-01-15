@@ -10,6 +10,7 @@ interface SyncResult {
   status: 'success' | 'error'
   eventsFound: number
   jobsCreated: number
+  jobsUpdated: number
   jobsSkipped: number
   unmatchedEvents: string[]
   error?: string
@@ -178,6 +179,7 @@ export async function POST(request: NextRequest) {
         status: 'success',
         eventsFound: 0,
         jobsCreated: 0,
+        jobsUpdated: 0,
         jobsSkipped: 0,
         unmatchedEvents: [],
       }
@@ -228,7 +230,27 @@ export async function POST(request: NextRequest) {
           })
 
           if (existingJob) {
-            result.jobsSkipped++
+            // Check if date needs updating (fixes off-by-one errors from previous syncs)
+            const existingDate = new Date(existingJob.date)
+            existingDate.setHours(0, 0, 0, 0)
+
+            if (existingDate.getTime() !== jobDate.getTime()) {
+              // Update job date
+              await prisma.job.update({
+                where: { id: existingJob.id },
+                data: { date: jobDate },
+              })
+
+              // Also update any invoice line items that reference this job
+              await prisma.invoiceLineItem.updateMany({
+                where: { jobId: existingJob.id },
+                data: { date: jobDate },
+              })
+
+              result.jobsUpdated++
+            } else {
+              result.jobsSkipped++
+            }
             continue
           }
 
@@ -281,14 +303,16 @@ export async function POST(request: NextRequest) {
 
     // Summary
     const totalCreated = results.reduce((sum, r) => sum + r.jobsCreated, 0)
+    const totalUpdated = results.reduce((sum, r) => sum + r.jobsUpdated, 0)
     const totalSkipped = results.reduce((sum, r) => sum + r.jobsSkipped, 0)
     const totalUnmatched = results.reduce((sum, r) => sum + r.unmatchedEvents.length, 0)
 
     return NextResponse.json({
       message: `Synced ${sources.length} calendar source(s)`,
       summary: {
-        sourcessynced: sources.length,
+        sourcesSynced: sources.length,
         jobsCreated: totalCreated,
+        jobsUpdated: totalUpdated,
         jobsSkipped: totalSkipped,
         unmatchedEvents: totalUnmatched,
       },
