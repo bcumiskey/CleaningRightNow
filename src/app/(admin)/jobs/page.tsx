@@ -666,24 +666,25 @@ function JobsPageContent() {
         {/* Recurring Schedules Tab */}
         {activeTab === 'recurring' && (
           <>
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
               <div>
                 <p className="text-sm text-gray-500">
                   {activeSchedules.length} active schedule{activeSchedules.length !== 1 && 's'} generating jobs automatically
                 </p>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                 {activeSchedules.length > 0 && (
                   <Button
                     variant="outline"
                     onClick={() => handleGenerateScheduleJobs()}
                     isLoading={isGenerating}
+                    className="w-full sm:w-auto"
                   >
                     <RefreshCw size={16} />
                     Generate All Jobs
                   </Button>
                 )}
-                <Button onClick={() => { setEditingSchedule(null); setShowScheduleModal(true) }}>
+                <Button onClick={() => { setEditingSchedule(null); setShowScheduleModal(true) }} className="w-full sm:w-auto">
                   <Plus size={16} />
                   Add Schedule
                 </Button>
@@ -959,8 +960,111 @@ function JobCard({ job, onEdit, onDelete, onStatusChange, onTeamPayment }: JobCa
       )}
       style={getJobStyle()}
     >
-      <CardContent className="p-4">
-        <div className="flex items-center gap-4">
+      <CardContent className="p-3 sm:p-4">
+        {/* Mobile Layout */}
+        <div className="sm:hidden">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-3">
+              {/* Date */}
+              <div className="text-center min-w-[45px]">
+                <div className="text-[10px] text-gray-500 uppercase">{format(parseLocalDate(job.date), 'EEE')}</div>
+                <div className="text-lg font-bold text-gray-900">{format(parseLocalDate(job.date), 'd')}</div>
+                <div className="text-[10px] text-gray-500">{format(parseLocalDate(job.date), 'MMM')}</div>
+              </div>
+              {/* Property & Team */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h3 className="font-semibold text-gray-900 text-sm">{job.property.name}</h3>
+                  <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
+                    job.priority <= 2 ? 'bg-red-100 text-red-700' :
+                    job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
+                    job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>
+                    P{job.priority}
+                  </span>
+                </div>
+                {job.time && (
+                  <div className="flex items-center gap-1 text-xs text-gray-500 mt-0.5">
+                    <Clock size={10} />
+                    {job.time}
+                  </div>
+                )}
+                <div className="flex items-center gap-1 mt-1">
+                  <Users size={10} className="text-gray-400" />
+                  {job.assignments.length > 0 ? (
+                    <span className="text-xs text-gray-600">
+                      {job.assignments.map(a => a.teamMember.name).join(', ')}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Unassigned</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Actions */}
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => onEdit(job)}
+                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={() => onDelete(job.id)}
+                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+          {/* Bottom row: Payment & Status */}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+            <div className="font-semibold text-gray-900 text-sm">
+              {formatCurrency(job.rate)}
+              {job.assignments.length > 0 && (
+                <span className="text-xs text-gray-500 font-normal ml-1">
+                  ({formatCurrency(payments.perPerson)} ea)
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              {/* Job Completion */}
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={job.completed}
+                  onChange={(e) => onStatusChange(job.id, 'completed', e.target.checked)}
+                  className="w-4 h-4 text-green-600 rounded"
+                />
+                <span className="text-xs text-gray-500">Done</span>
+              </label>
+              {/* Team Payment */}
+              {job.teamPaid ? (
+                <button
+                  onClick={() => onTeamPayment(job)}
+                  className="flex items-center gap-1.5 group"
+                >
+                  <div className="w-4 h-4 bg-blue-600 rounded flex items-center justify-center">
+                    <Check size={12} className="text-white" />
+                  </div>
+                  <span className="text-xs text-blue-600 group-hover:underline">Paid</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => onTeamPayment(job)}
+                  className="flex items-center gap-1.5 group"
+                >
+                  <div className="w-4 h-4 border-2 border-gray-300 rounded group-hover:border-blue-400" />
+                  <span className="text-xs text-gray-500 group-hover:text-blue-600">Team</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Desktop Layout */}
+        <div className="hidden sm:flex items-center gap-4">
           {/* Date */}
           <div className="text-center min-w-[60px]">
             <div className="text-xs text-gray-500 uppercase">{format(parseLocalDate(job.date), 'EEE')}</div>

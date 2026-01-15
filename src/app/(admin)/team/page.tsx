@@ -168,14 +168,14 @@ export default function TeamPage() {
       <AdminHeader title="Team" />
 
       <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <h3 className="text-lg font-semibold text-gray-900">
               {teamMembers.filter(m => m.isActive).length} Active Team Member{teamMembers.filter(m => m.isActive).length !== 1 && 's'}
             </h3>
             <button
               onClick={() => setShowInactive(!showInactive)}
-              className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors ${
+              className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-full transition-colors w-fit ${
                 showInactive
                   ? 'bg-gray-200 text-gray-700'
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -185,7 +185,7 @@ export default function TeamPage() {
               {showInactive ? 'Hide Inactive' : 'Show Inactive'}
             </button>
           </div>
-          <Button onClick={handleAdd}>
+          <Button onClick={handleAdd} className="w-full sm:w-auto">
             <Plus size={16} />
             Add Team Member
           </Button>
