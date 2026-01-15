@@ -3,11 +3,12 @@
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { Calendar, BookOpen, User, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { Calendar, CalendarDays, BookOpen, User, AlertTriangle, ArrowLeft, Home } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { href: '/worker', label: 'Schedule', icon: Calendar },
+  { href: '/worker', label: 'Today', icon: Home },
+  { href: '/worker/schedule', label: 'Schedule', icon: CalendarDays },
   { href: '/worker/report', label: 'Report', icon: AlertTriangle },
   { href: '/worker/reference', label: 'Reference', icon: BookOpen },
   { href: '/worker/account', label: 'Account', icon: User },
