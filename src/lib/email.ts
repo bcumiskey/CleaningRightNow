@@ -1,13 +1,12 @@
 import { Resend } from 'resend'
-import { Client } from '@microsoft/microsoft-graph-client'
-import { ClientSecretCredential } from '@azure/identity'
+import nodemailer from 'nodemailer'
 
 // Email Provider Configuration
-type EmailProvider = 'microsoft365' | 'resend' | 'none'
+type EmailProvider = 'smtp' | 'resend' | 'none'
 
 function getEmailProvider(): EmailProvider {
-  if (process.env.AZURE_TENANT_ID && process.env.AZURE_CLIENT_ID && process.env.AZURE_CLIENT_SECRET) {
-    return 'microsoft365'
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    return 'smtp'
   }
   if (process.env.RESEND_API_KEY) {
     return 'resend'
@@ -18,24 +17,24 @@ function getEmailProvider(): EmailProvider {
 // Resend client
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 
-// Microsoft Graph client
-function getMicrosoftGraphClient(): Client | null {
-  const tenantId = process.env.AZURE_TENANT_ID
-  const clientId = process.env.AZURE_CLIENT_ID
-  const clientSecret = process.env.AZURE_CLIENT_SECRET
+// SMTP transporter (for Microsoft 365 / Office 365)
+function getSmtpTransporter() {
+  const host = process.env.SMTP_HOST
+  const port = parseInt(process.env.SMTP_PORT || '587')
+  const user = process.env.SMTP_USER
+  const pass = process.env.SMTP_PASS
 
-  if (!tenantId || !clientId || !clientSecret) {
+  if (!host || !user || !pass) {
     return null
   }
 
-  const credential = new ClientSecretCredential(tenantId, clientId, clientSecret)
-
-  return Client.initWithMiddleware({
-    authProvider: {
-      getAccessToken: async () => {
-        const token = await credential.getToken('https://graph.microsoft.com/.default')
-        return token.token
-      },
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465, // true for 465, false for other ports
+    auth: {
+      user,
+      pass,
     },
   })
 }
@@ -71,15 +70,15 @@ export async function sendEmail({
 
   const toAddresses = Array.isArray(to) ? to : [to]
 
-  if (provider === 'microsoft365') {
-    return sendViaMicrosoft365({ to: toAddresses, subject, html, fromEmail, fromName, attachments })
+  if (provider === 'smtp') {
+    return sendViaSmtp({ to: toAddresses, subject, html, fromEmail, fromName, attachments })
   }
 
   return sendViaResend({ to: toAddresses, subject, html, fromEmail, fromName, attachments })
 }
 
-// Microsoft 365 email sending
-async function sendViaMicrosoft365({
+// SMTP email sending (Microsoft 365 / Office 365)
+async function sendViaSmtp({
   to,
   subject,
   html,
@@ -94,48 +93,31 @@ async function sendViaMicrosoft365({
   fromName?: string
   attachments: Array<{ filename: string; content: Buffer; contentType?: string }>
 }): Promise<{ success: boolean; error?: string; messageId?: string }> {
-  const client = getMicrosoftGraphClient()
-  if (!client) {
-    return { success: false, error: 'Microsoft Graph client not configured' }
+  const transporter = getSmtpTransporter()
+  if (!transporter) {
+    return { success: false, error: 'SMTP not configured' }
   }
 
-  // The sender email must be a valid mailbox in your M365 tenant
-  const senderEmail = fromEmail || process.env.M365_SENDER_EMAIL || 'noreply@cleaningrightnow.com'
+  // The sender email - use SMTP_USER as default since it's the authenticated account
+  const senderEmail = fromEmail || process.env.SMTP_USER || ''
 
   try {
-    const message = {
+    const info = await transporter.sendMail({
+      from: `"${fromName}" <${senderEmail}>`,
+      to: to.join(', '),
       subject,
-      body: {
-        contentType: 'HTML',
-        content: html,
-      },
-      toRecipients: to.map(email => ({
-        emailAddress: { address: email },
-      })),
-      from: {
-        emailAddress: {
-          address: senderEmail,
-          name: fromName,
-        },
-      },
+      html,
       attachments: attachments.map(att => ({
-        '@odata.type': '#microsoft.graph.fileAttachment',
-        name: att.filename,
+        filename: att.filename,
+        content: att.content,
         contentType: att.contentType || 'application/pdf',
-        contentBytes: att.content.toString('base64'),
       })),
-    }
-
-    // Send mail using the /users/{id}/sendMail endpoint
-    await client.api(`/users/${senderEmail}/sendMail`).post({
-      message,
-      saveToSentItems: true,
     })
 
-    return { success: true, messageId: `m365-${Date.now()}` }
+    return { success: true, messageId: info.messageId }
   } catch (error) {
-    console.error('Microsoft 365 email send error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Failed to send email via Microsoft 365'
+    console.error('SMTP email send error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to send email via SMTP'
     return { success: false, error: errorMessage }
   }
 }
@@ -187,16 +169,32 @@ async function sendViaResend({
 }
 
 // Get current email provider info
-export function getEmailProviderInfo(): { provider: EmailProvider; configured: boolean; senderEmail?: string } {
+export function getEmailProviderInfo(): {
+  provider: EmailProvider
+  configured: boolean
+  senderEmail?: string
+  envVars: {
+    hasSmtpHost: boolean
+    hasSmtpUser: boolean
+    hasSmtpPass: boolean
+    hasResendApiKey: boolean
+  }
+} {
   const provider = getEmailProvider()
   return {
     provider,
     configured: provider !== 'none',
-    senderEmail: provider === 'microsoft365'
-      ? process.env.M365_SENDER_EMAIL
+    senderEmail: provider === 'smtp'
+      ? process.env.SMTP_USER
       : provider === 'resend'
         ? 'notifications@cleaningrightnow.com'
         : undefined,
+    envVars: {
+      hasSmtpHost: !!process.env.SMTP_HOST,
+      hasSmtpUser: !!process.env.SMTP_USER,
+      hasSmtpPass: !!process.env.SMTP_PASS,
+      hasResendApiKey: !!process.env.RESEND_API_KEY,
+    },
   }
 }
 

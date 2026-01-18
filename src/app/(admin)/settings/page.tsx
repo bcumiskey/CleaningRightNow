@@ -23,14 +23,13 @@ interface CompanySettings {
 }
 
 interface EmailStatus {
-  provider: 'microsoft365' | 'resend' | 'none'
+  provider: 'smtp' | 'resend' | 'none'
   configured: boolean
   senderEmail?: string
   envVars: {
-    hasAzureTenantId: boolean
-    hasAzureClientId: boolean
-    hasAzureClientSecret: boolean
-    hasM365SenderEmail: boolean
+    hasSmtpHost: boolean
+    hasSmtpUser: boolean
+    hasSmtpPass: boolean
     hasResendApiKey: boolean
   }
 }
@@ -356,7 +355,7 @@ export default function SettingsPage() {
                   <div>
                     <p className="font-medium text-gray-900">
                       {emailStatus.configured
-                        ? `Connected to ${emailStatus.provider === 'microsoft365' ? 'Microsoft 365' : 'Resend'}`
+                        ? `Connected via ${emailStatus.provider === 'smtp' ? 'SMTP (Microsoft 365)' : 'Resend'}`
                         : 'Email not configured'}
                     </p>
                     {emailStatus.senderEmail && (
@@ -372,18 +371,15 @@ export default function SettingsPage() {
                       Add the following environment variables in Vercel to enable email:
                     </p>
                     <div className="space-y-2 text-xs font-mono bg-white rounded p-3 border border-amber-200">
-                      <p className="font-semibold text-gray-700">For Microsoft 365:</p>
-                      <p className={emailStatus.envVars.hasAzureTenantId ? 'text-green-600' : 'text-gray-500'}>
-                        {emailStatus.envVars.hasAzureTenantId ? '✓' : '○'} AZURE_TENANT_ID
+                      <p className="font-semibold text-gray-700">For Microsoft 365 (SMTP):</p>
+                      <p className={emailStatus.envVars.hasSmtpHost ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasSmtpHost ? '✓' : '○'} SMTP_HOST (smtp.office365.com)
                       </p>
-                      <p className={emailStatus.envVars.hasAzureClientId ? 'text-green-600' : 'text-gray-500'}>
-                        {emailStatus.envVars.hasAzureClientId ? '✓' : '○'} AZURE_CLIENT_ID
+                      <p className={emailStatus.envVars.hasSmtpUser ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasSmtpUser ? '✓' : '○'} SMTP_USER (your email address)
                       </p>
-                      <p className={emailStatus.envVars.hasAzureClientSecret ? 'text-green-600' : 'text-gray-500'}>
-                        {emailStatus.envVars.hasAzureClientSecret ? '✓' : '○'} AZURE_CLIENT_SECRET
-                      </p>
-                      <p className={emailStatus.envVars.hasM365SenderEmail ? 'text-green-600' : 'text-gray-500'}>
-                        {emailStatus.envVars.hasM365SenderEmail ? '✓' : '○'} M365_SENDER_EMAIL
+                      <p className={emailStatus.envVars.hasSmtpPass ? 'text-green-600' : 'text-gray-500'}>
+                        {emailStatus.envVars.hasSmtpPass ? '✓' : '○'} SMTP_PASS (your password)
                       </p>
                     </div>
                   </div>

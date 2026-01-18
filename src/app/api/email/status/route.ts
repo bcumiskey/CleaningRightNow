@@ -16,14 +16,5 @@ export async function GET() {
 
   const providerInfo = getEmailProviderInfo()
 
-  return NextResponse.json({
-    ...providerInfo,
-    envVars: {
-      hasAzureTenantId: !!process.env.AZURE_TENANT_ID,
-      hasAzureClientId: !!process.env.AZURE_CLIENT_ID,
-      hasAzureClientSecret: !!process.env.AZURE_CLIENT_SECRET,
-      hasM365SenderEmail: !!process.env.M365_SENDER_EMAIL,
-      hasResendApiKey: !!process.env.RESEND_API_KEY,
-    },
-  })
+  return NextResponse.json(providerInfo)
 }
