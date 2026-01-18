@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
           <div style="background-color: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 20px; margin: 24px 0;">
             <p style="color: #047857; font-size: 14px; margin: 0;">Email Provider:</p>
             <p style="color: #065f46; font-size: 18px; font-weight: bold; margin: 8px 0 0 0;">
-              ${providerInfo.provider === 'microsoft365' ? 'Microsoft 365' : 'Resend'}
+              ${providerInfo.provider === 'smtp' ? 'SMTP (Microsoft 365)' : providerInfo.provider === 'resend' ? 'Resend' : 'None'}
             </p>
           </div>
 
