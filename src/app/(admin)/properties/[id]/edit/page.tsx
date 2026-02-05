@@ -267,6 +267,9 @@ export default function PropertyEditPage() {
   const [editingRoomInstructionId, setEditingRoomInstructionId] = useState<string | null>(null)
   const [editingRoomInstructionText, setEditingRoomInstructionText] = useState('')
 
+  // Room linens edit mode (collapsed vs expanded)
+  const [roomLinensEditMode, setRoomLinensEditMode] = useState<Record<string, boolean>>({})
+
   // Room inventory state (kept for compatibility)
   const [roomInventory, setRoomInventory] = useState<Record<string, InventoryItem[]>>({})
   const [availableLinens, setAvailableLinens] = useState<AvailableItem[]>([])
@@ -575,6 +578,8 @@ export default function PropertyEditPage() {
       if (res.ok) {
         toast.success('Linens saved')
         setRoomLinensDirty(prev => ({ ...prev, [roomId]: false }))
+        // Collapse the edit mode after saving
+        setRoomLinensEditMode(prev => ({ ...prev, [roomId]: false }))
         // Refresh rooms to update counts
         fetchRooms()
         // Also refresh property inventory to reflect changes
@@ -1799,98 +1804,158 @@ export default function PropertyEditPage() {
 
                             {/* Row 2: Linens Section */}
                             <div className="border-t pt-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h5 className="font-medium text-gray-900 flex items-center gap-2">
-                                  <Package size={16} />
-                                  Linens in this Room
-                                </h5>
-                                {roomLinensDirty[room.id] && (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleSaveRoomLinens(room.id)}
-                                    isLoading={isSavingRoomLinens}
-                                  >
-                                    <Save size={14} />
-                                    Save Linens
-                                  </Button>
-                                )}
-                              </div>
+                              {(() => {
+                                const isEditMode = roomLinensEditMode[room.id] || false
+                                const roomQtys = roomLinenQuantities[room.id] || {}
+                                const configuredItems = (roomLinensData[room.id] || []).flatMap(cat =>
+                                  cat.items.filter(item => (roomQtys[item.id] || 0) > 0).map(item => ({
+                                    ...item,
+                                    quantity: roomQtys[item.id] || 0,
+                                  }))
+                                )
 
-                              {!roomLinensData[room.id] ? (
-                                <div className="text-sm text-gray-500 py-4 text-center">
-                                  Loading linens...
-                                </div>
-                              ) : roomLinensData[room.id].length === 0 ? (
-                                <div className="text-sm text-gray-500 py-4 text-center bg-white rounded border border-dashed border-gray-300">
-                                  No linen items in catalog. Add items in the Linens page first.
-                                </div>
-                              ) : (
-                                <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-                                  {roomLinensData[room.id].map((category) => {
-                                    const categoryQuantities = roomLinenQuantities[room.id] || {}
-                                    const hasAnyQuantity = category.items.some(
-                                      item => (categoryQuantities[item.id] || 0) > 0
-                                    )
+                                return (
+                                  <>
+                                    <div className="flex items-center justify-between mb-3">
+                                      <h5 className="font-medium text-gray-900 flex items-center gap-2">
+                                        <Package size={16} />
+                                        Linens in this Room
+                                        {configuredItems.length > 0 && !isEditMode && (
+                                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                            {configuredItems.length} items
+                                          </span>
+                                        )}
+                                      </h5>
+                                      <div className="flex gap-2">
+                                        {isEditMode && roomLinensDirty[room.id] && (
+                                          <Button
+                                            size="sm"
+                                            onClick={() => handleSaveRoomLinens(room.id)}
+                                            isLoading={isSavingRoomLinens}
+                                          >
+                                            <Save size={14} />
+                                            Save
+                                          </Button>
+                                        )}
+                                        {isEditMode && !roomLinensDirty[room.id] && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setRoomLinensEditMode(prev => ({ ...prev, [room.id]: false }))}
+                                          >
+                                            Done
+                                          </Button>
+                                        )}
+                                        {!isEditMode && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => setRoomLinensEditMode(prev => ({ ...prev, [room.id]: true }))}
+                                          >
+                                            <Edit3 size={14} />
+                                            Edit
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
 
-                                    return (
-                                      <div key={category.id}>
-                                        <h6 className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
-                                          {category.name}
-                                        </h6>
-                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                                          {category.items.map((item) => {
-                                            const quantity = categoryQuantities[item.id] || 0
-                                            const hasQuantity = quantity > 0
-
-                                            return (
+                                    {!roomLinensData[room.id] ? (
+                                      <div className="text-sm text-gray-500 py-4 text-center">
+                                        Loading linens...
+                                      </div>
+                                    ) : roomLinensData[room.id].length === 0 ? (
+                                      <div className="text-sm text-gray-500 py-4 text-center bg-white rounded border border-dashed border-gray-300">
+                                        No linen items in catalog. Add items in the Linens page first.
+                                      </div>
+                                    ) : !isEditMode ? (
+                                      /* Collapsed View - Simple list of configured items */
+                                      configuredItems.length === 0 ? (
+                                        <div className="text-sm text-gray-500 py-4 text-center bg-white rounded border border-dashed border-gray-300">
+                                          No linens configured. Click Edit to add linens.
+                                        </div>
+                                      ) : (
+                                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                                          <div className="flex flex-wrap gap-2">
+                                            {configuredItems.map((item) => (
                                               <div
                                                 key={item.id}
-                                                className={`flex items-center gap-2 p-2 rounded border transition-colors ${
-                                                  hasQuantity
-                                                    ? 'bg-blue-50 border-blue-200'
-                                                    : 'bg-gray-50 border-gray-200'
-                                                }`}
+                                                className="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5 text-sm"
                                               >
-                                                <span className={`flex-1 text-sm truncate ${hasQuantity ? 'text-gray-900' : 'text-gray-500'}`}>
-                                                  {item.name}
-                                                </span>
-                                                <div className="flex items-center gap-1">
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleRoomLinenChange(room.id, item.id, quantity - 1)}
-                                                    disabled={quantity === 0}
-                                                    className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 text-xs"
-                                                  >
-                                                    -
-                                                  </button>
-                                                  <input
-                                                    type="number"
-                                                    min="0"
-                                                    value={quantity}
-                                                    onChange={(e) => handleRoomLinenChange(room.id, item.id, parseInt(e.target.value) || 0)}
-                                                    className={`w-10 h-6 text-center text-sm border rounded ${
-                                                      hasQuantity
-                                                        ? 'border-blue-300 bg-blue-100 text-blue-700'
-                                                        : 'border-gray-200 bg-white text-gray-400'
-                                                    }`}
-                                                  />
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleRoomLinenChange(room.id, item.id, quantity + 1)}
-                                                    className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs"
-                                                  >
-                                                    +
-                                                  </button>
-                                                </div>
+                                                <span className="text-gray-700">{item.name}</span>
+                                                <span className="font-bold text-blue-600">×{item.quantity}</span>
                                               </div>
-                                            )
-                                          })}
+                                            ))}
+                                          </div>
                                         </div>
+                                      )
+                                    ) : (
+                                      /* Edit Mode - Full editor */
+                                      <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+                                        {roomLinensData[room.id].map((category) => {
+                                          const categoryQuantities = roomLinenQuantities[room.id] || {}
+
+                                          return (
+                                            <div key={category.id}>
+                                              <h6 className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
+                                                {category.name}
+                                              </h6>
+                                              <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                                                {category.items.map((item) => {
+                                                  const quantity = categoryQuantities[item.id] || 0
+                                                  const hasQuantity = quantity > 0
+
+                                                  return (
+                                                    <div
+                                                      key={item.id}
+                                                      className={`flex items-center gap-2 p-2 rounded border transition-colors ${
+                                                        hasQuantity
+                                                          ? 'bg-blue-50 border-blue-200'
+                                                          : 'bg-gray-50 border-gray-200'
+                                                      }`}
+                                                    >
+                                                      <span className={`flex-1 text-sm truncate ${hasQuantity ? 'text-gray-900' : 'text-gray-500'}`}>
+                                                        {item.name}
+                                                      </span>
+                                                      <div className="flex items-center gap-1">
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleRoomLinenChange(room.id, item.id, quantity - 1)}
+                                                          disabled={quantity === 0}
+                                                          className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 text-xs"
+                                                        >
+                                                          -
+                                                        </button>
+                                                        <input
+                                                          type="number"
+                                                          min="0"
+                                                          value={quantity}
+                                                          onChange={(e) => handleRoomLinenChange(room.id, item.id, parseInt(e.target.value) || 0)}
+                                                          className={`w-10 h-6 text-center text-sm border rounded ${
+                                                            hasQuantity
+                                                              ? 'border-blue-300 bg-blue-100 text-blue-700'
+                                                              : 'border-gray-200 bg-white text-gray-400'
+                                                          }`}
+                                                        />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleRoomLinenChange(room.id, item.id, quantity + 1)}
+                                                          className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs"
+                                                        >
+                                                          +
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  )
+                                                })}
+                                              </div>
+                                            </div>
+                                          )
+                                        })}
                                       </div>
-                                    )
-                                  })}
-                                </div>
-                              )}
+                                    )}
+                                  </>
+                                )
+                              })()}
                             </div>
                           </div>
                         </CardContent>
