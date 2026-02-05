@@ -245,6 +245,28 @@ export default function PropertyEditPage() {
   const [isAddingRoomPhoto, setIsAddingRoomPhoto] = useState(false)
   const [isAddingRoomInstruction, setIsAddingRoomInstruction] = useState(false)
 
+  // Room linens state
+  interface RoomLinenCategory {
+    id: string
+    name: string
+    items: {
+      id: string
+      name: string
+      code: string
+      unitCost: number
+      perFlip: number
+      customCost: number | null
+    }[]
+  }
+  const [roomLinensData, setRoomLinensData] = useState<Record<string, RoomLinenCategory[]>>({})
+  const [roomLinenQuantities, setRoomLinenQuantities] = useState<Record<string, Record<string, number>>>({})
+  const [isSavingRoomLinens, setIsSavingRoomLinens] = useState(false)
+  const [roomLinensDirty, setRoomLinensDirty] = useState<Record<string, boolean>>({})
+
+  // Room instruction editing state
+  const [editingRoomInstructionId, setEditingRoomInstructionId] = useState<string | null>(null)
+  const [editingRoomInstructionText, setEditingRoomInstructionText] = useState('')
+
   // Room inventory state (kept for compatibility)
   const [roomInventory, setRoomInventory] = useState<Record<string, InventoryItem[]>>({})
   const [availableLinens, setAvailableLinens] = useState<AvailableItem[]>([])
@@ -469,7 +491,7 @@ export default function PropertyEditPage() {
     setNewRoomBeds(newRoomBeds.filter((_, i) => i !== index))
   }
 
-  // Room expansion - load photos and instructions for a room
+  // Room expansion - load photos, instructions, and linens for a room
   const toggleRoomExpansion = async (room: Room) => {
     if (expandedRoomId === room.id) {
       setExpandedRoomId(null)
@@ -480,6 +502,8 @@ export default function PropertyEditPage() {
     setRoomNewInstruction('')
     setRoomNewPhotoUrl('')
     setRoomNewPhotoCaption('')
+    setEditingRoomInstructionId(null)
+    setEditingRoomInstructionText('')
 
     // Load photos and instructions for this room if not already loaded
     if (!roomPhotos[room.name]) {
@@ -489,6 +513,119 @@ export default function PropertyEditPage() {
     if (!roomInstructions[room.name]) {
       const filtered = instructions.filter(i => i.room === room.name)
       setRoomInstructions(prev => ({ ...prev, [room.name]: filtered }))
+    }
+
+    // Load room linens if not already loaded
+    if (!roomLinensData[room.id]) {
+      await fetchRoomLinens(room.id)
+    }
+  }
+
+  // Fetch linens for a specific room
+  const fetchRoomLinens = async (roomId: string) => {
+    try {
+      const res = await fetch(`/api/properties/${id}/rooms/${roomId}/linens`)
+      if (res.ok) {
+        const data = await res.json()
+        setRoomLinensData(prev => ({ ...prev, [roomId]: data.categories || [] }))
+
+        // Initialize quantities from the data
+        const quantities: Record<string, number> = {}
+        for (const cat of data.categories || []) {
+          for (const item of cat.items) {
+            quantities[item.id] = item.perFlip || 0
+          }
+        }
+        setRoomLinenQuantities(prev => ({ ...prev, [roomId]: quantities }))
+      }
+    } catch (error) {
+      console.error('Failed to fetch room linens:', error)
+    }
+  }
+
+  // Update room linen quantity
+  const handleRoomLinenChange = (roomId: string, itemId: string, value: number) => {
+    setRoomLinenQuantities(prev => ({
+      ...prev,
+      [roomId]: {
+        ...prev[roomId],
+        [itemId]: Math.max(0, value),
+      },
+    }))
+    setRoomLinensDirty(prev => ({ ...prev, [roomId]: true }))
+  }
+
+  // Save room linens
+  const handleSaveRoomLinens = async (roomId: string) => {
+    if (!roomLinensDirty[roomId]) return
+
+    setIsSavingRoomLinens(true)
+    try {
+      const quantities = roomLinenQuantities[roomId] || {}
+      const linens = Object.entries(quantities)
+        .filter(([_, perFlip]) => perFlip > 0)
+        .map(([itemId, perFlip]) => ({ itemId, perFlip }))
+
+      const res = await fetch(`/api/properties/${id}/rooms/${roomId}/linens`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linens }),
+      })
+
+      if (res.ok) {
+        toast.success('Linens saved')
+        setRoomLinensDirty(prev => ({ ...prev, [roomId]: false }))
+        // Refresh rooms to update counts
+        fetchRooms()
+        // Also refresh property inventory to reflect changes
+        fetchPropertyInventory()
+      } else {
+        toast.error('Failed to save linens')
+      }
+    } catch (error) {
+      toast.error('Failed to save linens')
+    } finally {
+      setIsSavingRoomLinens(false)
+    }
+  }
+
+  // Update room instruction
+  const handleUpdateRoomInstruction = async (instructionId: string, roomName: string) => {
+    if (!editingRoomInstructionText.trim()) return
+
+    try {
+      const res = await fetch(`/api/properties/${id}/instructions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: instructionId,
+          instruction: editingRoomInstructionText,
+          room: roomName,
+        }),
+      })
+
+      if (res.ok) {
+        const updated = await res.json()
+        // Update local state
+        const updatedInstructions = instructions.map(i =>
+          i.id === instructionId ? updated : i
+        )
+        setInstructions(updatedInstructions)
+        rebuildInstructionsByRoom(updatedInstructions)
+        setRoomInstructions(prev => ({
+          ...prev,
+          [roomName]: (prev[roomName] || []).map(i =>
+            i.id === instructionId ? updated : i
+          ),
+        }))
+        setEditingRoomInstructionId(null)
+        setEditingRoomInstructionText('')
+        toast.success('Instruction updated')
+      } else {
+        toast.error('Failed to update instruction')
+      }
+    } catch (error) {
+      toast.error('Failed to update instruction')
     }
   }
 
@@ -1449,6 +1586,10 @@ export default function PropertyEditPage() {
                                 <ListChecks size={12} />
                                 {room._count?.instructions || 0}
                               </span>
+                              <span className="flex items-center gap-1">
+                                <Package size={12} />
+                                {room._count?.linenRequirements || 0}
+                              </span>
                             </div>
                             {/* Edit/Delete buttons */}
                             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
@@ -1474,126 +1615,282 @@ export default function PropertyEditPage() {
                       {/* Expanded Content */}
                       {isExpanded && (
                         <CardContent className="border-t bg-gray-50 pt-4">
-                          <div className="grid grid-cols-2 gap-6">
-                            {/* Photos Section */}
-                            <div>
-                              <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                                <Camera size={16} />
-                                Photos
-                              </h5>
+                          <div className="space-y-6">
+                            {/* Row 1: Instructions and Photos */}
+                            <div className="grid grid-cols-2 gap-6">
+                              {/* Instructions Section - now with inline editing */}
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                  <ListChecks size={16} />
+                                  Instructions
+                                </h5>
 
-                              {/* Existing photos */}
-                              {currentRoomPhotos.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2 mb-4">
-                                  {currentRoomPhotos.map((photo) => (
-                                    <div
-                                      key={photo.id}
-                                      className="relative group rounded-lg overflow-hidden bg-gray-200"
-                                    >
-                                      <div className="relative h-16 w-full">
-                                        <Image
-                                          src={photo.url}
-                                          alt={photo.caption || room.name}
-                                          fill
-                                          className="object-cover"
-                                        />
-                                      </div>
-                                      {photo.caption && (
-                                        <div className="text-xs p-1 truncate bg-white">
-                                          {photo.caption}
-                                        </div>
-                                      )}
-                                      <button
-                                        onClick={() => handleDeleteRoomPhoto(photo.id, room.name)}
-                                        className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                {/* Existing instructions */}
+                                {currentRoomInstructions.length > 0 && (
+                                  <div className="space-y-2 mb-4">
+                                    {currentRoomInstructions.map((inst, index) => (
+                                      <div
+                                        key={inst.id}
+                                        className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200 group"
                                       >
-                                        <X size={12} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-
-                              {/* Add photo inline */}
-                              <div className="bg-white p-3 rounded-lg border border-gray-200">
-                                <ImageUpload
-                                  value={roomNewPhotoUrl}
-                                  onChange={setRoomNewPhotoUrl}
-                                  onRemove={() => setRoomNewPhotoUrl('')}
-                                  folder={`properties/${id}/reference`}
-                                  label="Add photo"
-                                  previewSize="sm"
-                                />
-                                {roomNewPhotoUrl && (
-                                  <div className="mt-2 space-y-2">
-                                    <Input
-                                      placeholder="Caption (optional)"
-                                      value={roomNewPhotoCaption}
-                                      onChange={(e) => setRoomNewPhotoCaption(e.target.value)}
-                                    />
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleAddRoomPhoto(room.name)}
-                                      isLoading={isAddingRoomPhoto}
-                                    >
-                                      <Plus size={14} />
-                                      Save Photo
-                                    </Button>
+                                        <span className="text-gray-400 text-sm pt-1">{index + 1}.</span>
+                                        {editingRoomInstructionId === inst.id ? (
+                                          <div className="flex-1 space-y-2">
+                                            <Input
+                                              value={editingRoomInstructionText}
+                                              onChange={(e) => setEditingRoomInstructionText(e.target.value)}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  handleUpdateRoomInstruction(inst.id, room.name)
+                                                } else if (e.key === 'Escape') {
+                                                  setEditingRoomInstructionId(null)
+                                                  setEditingRoomInstructionText('')
+                                                }
+                                              }}
+                                              autoFocus
+                                            />
+                                            <div className="flex gap-2">
+                                              <Button
+                                                size="sm"
+                                                onClick={() => handleUpdateRoomInstruction(inst.id, room.name)}
+                                              >
+                                                <Save size={14} />
+                                              </Button>
+                                              <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() => {
+                                                  setEditingRoomInstructionId(null)
+                                                  setEditingRoomInstructionText('')
+                                                }}
+                                              >
+                                                <X size={14} />
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <span
+                                              className="flex-1 text-sm cursor-pointer hover:text-blue-600"
+                                              onClick={() => {
+                                                setEditingRoomInstructionId(inst.id)
+                                                setEditingRoomInstructionText(inst.instruction)
+                                              }}
+                                            >
+                                              {inst.instruction}
+                                            </span>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100">
+                                              <button
+                                                onClick={() => {
+                                                  setEditingRoomInstructionId(inst.id)
+                                                  setEditingRoomInstructionText(inst.instruction)
+                                                }}
+                                                className="p-1 text-gray-400 hover:text-blue-500"
+                                              >
+                                                <Edit3 size={14} />
+                                              </button>
+                                              <button
+                                                onClick={() => handleDeleteRoomInstruction(inst.id, room.name)}
+                                                className="p-1 text-gray-400 hover:text-red-500"
+                                              >
+                                                <Trash2 size={14} />
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
                                 )}
+
+                                {/* Add instruction inline */}
+                                <div className="flex gap-2">
+                                  <Input
+                                    className="flex-1"
+                                    placeholder="Add an instruction..."
+                                    value={roomNewInstruction}
+                                    onChange={(e) => setRoomNewInstruction(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && roomNewInstruction.trim()) {
+                                        handleAddRoomInstruction(room.name)
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleAddRoomInstruction(room.name)}
+                                    isLoading={isAddingRoomInstruction}
+                                    disabled={!roomNewInstruction.trim()}
+                                  >
+                                    <Plus size={14} />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {/* Photos Section */}
+                              <div>
+                                <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                                  <Camera size={16} />
+                                  Photos
+                                </h5>
+
+                                {/* Existing photos */}
+                                {currentRoomPhotos.length > 0 && (
+                                  <div className="grid grid-cols-2 gap-2 mb-4">
+                                    {currentRoomPhotos.map((photo) => (
+                                      <div
+                                        key={photo.id}
+                                        className="relative group rounded-lg overflow-hidden bg-gray-200"
+                                      >
+                                        <div className="relative h-16 w-full">
+                                          <Image
+                                            src={photo.url}
+                                            alt={photo.caption || room.name}
+                                            fill
+                                            className="object-cover"
+                                          />
+                                        </div>
+                                        {photo.caption && (
+                                          <div className="text-xs p-1 truncate bg-white">
+                                            {photo.caption}
+                                          </div>
+                                        )}
+                                        <button
+                                          onClick={() => handleDeleteRoomPhoto(photo.id, room.name)}
+                                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                          <X size={12} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {/* Add photo inline */}
+                                <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                  <ImageUpload
+                                    value={roomNewPhotoUrl}
+                                    onChange={setRoomNewPhotoUrl}
+                                    onRemove={() => setRoomNewPhotoUrl('')}
+                                    folder={`properties/${id}/reference`}
+                                    label="Add photo"
+                                    previewSize="sm"
+                                  />
+                                  {roomNewPhotoUrl && (
+                                    <div className="mt-2 space-y-2">
+                                      <Input
+                                        placeholder="Caption (optional)"
+                                        value={roomNewPhotoCaption}
+                                        onChange={(e) => setRoomNewPhotoCaption(e.target.value)}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleAddRoomPhoto(room.name)}
+                                        isLoading={isAddingRoomPhoto}
+                                      >
+                                        <Plus size={14} />
+                                        Save Photo
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
 
-                            {/* Instructions Section */}
-                            <div>
-                              <h5 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                                <ListChecks size={16} />
-                                Instructions
-                              </h5>
+                            {/* Row 2: Linens Section */}
+                            <div className="border-t pt-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <h5 className="font-medium text-gray-900 flex items-center gap-2">
+                                  <Package size={16} />
+                                  Linens in this Room
+                                </h5>
+                                {roomLinensDirty[room.id] && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleSaveRoomLinens(room.id)}
+                                    isLoading={isSavingRoomLinens}
+                                  >
+                                    <Save size={14} />
+                                    Save Linens
+                                  </Button>
+                                )}
+                              </div>
 
-                              {/* Existing instructions */}
-                              {currentRoomInstructions.length > 0 && (
-                                <div className="space-y-2 mb-4">
-                                  {currentRoomInstructions.map((inst, index) => (
-                                    <div
-                                      key={inst.id}
-                                      className="flex items-start gap-2 p-2 bg-white rounded border border-gray-200 group"
-                                    >
-                                      <span className="text-gray-400 text-sm">{index + 1}.</span>
-                                      <span className="flex-1 text-sm">{inst.instruction}</span>
-                                      <button
-                                        onClick={() => handleDeleteRoomInstruction(inst.id, room.name)}
-                                        className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100"
-                                      >
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  ))}
+                              {!roomLinensData[room.id] ? (
+                                <div className="text-sm text-gray-500 py-4 text-center">
+                                  Loading linens...
+                                </div>
+                              ) : roomLinensData[room.id].length === 0 ? (
+                                <div className="text-sm text-gray-500 py-4 text-center bg-white rounded border border-dashed border-gray-300">
+                                  No linen items in catalog. Add items in the Linens page first.
+                                </div>
+                              ) : (
+                                <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+                                  {roomLinensData[room.id].map((category) => {
+                                    const categoryQuantities = roomLinenQuantities[room.id] || {}
+                                    const hasAnyQuantity = category.items.some(
+                                      item => (categoryQuantities[item.id] || 0) > 0
+                                    )
+
+                                    return (
+                                      <div key={category.id}>
+                                        <h6 className="text-xs font-medium text-gray-600 uppercase tracking-wide mb-2">
+                                          {category.name}
+                                        </h6>
+                                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                                          {category.items.map((item) => {
+                                            const quantity = categoryQuantities[item.id] || 0
+                                            const hasQuantity = quantity > 0
+
+                                            return (
+                                              <div
+                                                key={item.id}
+                                                className={`flex items-center gap-2 p-2 rounded border transition-colors ${
+                                                  hasQuantity
+                                                    ? 'bg-blue-50 border-blue-200'
+                                                    : 'bg-gray-50 border-gray-200'
+                                                }`}
+                                              >
+                                                <span className={`flex-1 text-sm truncate ${hasQuantity ? 'text-gray-900' : 'text-gray-500'}`}>
+                                                  {item.name}
+                                                </span>
+                                                <div className="flex items-center gap-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleRoomLinenChange(room.id, item.id, quantity - 1)}
+                                                    disabled={quantity === 0}
+                                                    className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 text-xs"
+                                                  >
+                                                    -
+                                                  </button>
+                                                  <input
+                                                    type="number"
+                                                    min="0"
+                                                    value={quantity}
+                                                    onChange={(e) => handleRoomLinenChange(room.id, item.id, parseInt(e.target.value) || 0)}
+                                                    className={`w-10 h-6 text-center text-sm border rounded ${
+                                                      hasQuantity
+                                                        ? 'border-blue-300 bg-blue-100 text-blue-700'
+                                                        : 'border-gray-200 bg-white text-gray-400'
+                                                    }`}
+                                                  />
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleRoomLinenChange(room.id, item.id, quantity + 1)}
+                                                    className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs"
+                                                  >
+                                                    +
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
                                 </div>
                               )}
-
-                              {/* Add instruction inline */}
-                              <div className="flex gap-2">
-                                <Input
-                                  className="flex-1"
-                                  placeholder="Add an instruction..."
-                                  value={roomNewInstruction}
-                                  onChange={(e) => setRoomNewInstruction(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && roomNewInstruction.trim()) {
-                                      handleAddRoomInstruction(room.name)
-                                    }
-                                  }}
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAddRoomInstruction(room.name)}
-                                  isLoading={isAddingRoomInstruction}
-                                  disabled={!roomNewInstruction.trim()}
-                                >
-                                  <Plus size={14} />
-                                </Button>
-                              </div>
                             </div>
                           </div>
                         </CardContent>
@@ -1609,135 +1906,135 @@ export default function PropertyEditPage() {
         {/* Inventory Tab */}
         {activeTab === 'inventory' && !isNew && (
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Package size={18} />
-                Property Inventory
+                Property Inventory Summary
               </CardTitle>
-              {inventoryDirty && (
-                <Button onClick={handleSaveInventory} isLoading={isSavingInventory}>
-                  <Save size={16} />
-                  Save Changes
-                </Button>
-              )}
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-500 mb-6">
-                Set the quantity needed for each item per cleaning. Items with 0 quantity are not required for this property.
-              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                  <strong>Tip:</strong> Inventory is now managed at the room level. Expand each room in the <strong>Rooms</strong> tab to configure what linens belong in that room. The totals below are calculated from all rooms combined.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => setActiveTab('rooms')}
+                >
+                  <Home size={14} />
+                  Go to Rooms
+                </Button>
+              </div>
 
-              {catalogItems.length === 0 ? (
+              {rooms.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
-                  <Package size={40} className="mx-auto mb-2 opacity-50" />
-                  <p>No catalog items found</p>
-                  <p className="text-sm">Add items to the Linens/Supplies catalog first</p>
+                  <Home size={40} className="mx-auto mb-2 opacity-50" />
+                  <p>No rooms configured yet</p>
+                  <p className="text-sm">Add rooms first, then configure linens for each room</p>
                 </div>
               ) : (
-                <div className="space-y-8">
-                  {/* Group by type */}
-                  {['linen', 'supply'].map(type => {
-                    const typeItems = catalogItems.filter(item => item.type === type)
-                    if (typeItems.length === 0) return null
+                <div className="space-y-6">
+                  {/* Room-by-room breakdown */}
+                  {rooms.map((room) => {
+                    const roomLinens = roomLinensData[room.id] || []
+                    const roomQtys = roomLinenQuantities[room.id] || {}
+                    const configuredItems = roomLinens.flatMap(cat =>
+                      cat.items.filter(item => (roomQtys[item.id] || 0) > 0)
+                    )
 
-                    // Group by category
-                    const byCategory = typeItems.reduce((acc, item) => {
-                      const cat = item.category || 'Other'
-                      if (!acc[cat]) acc[cat] = []
-                      acc[cat].push(item)
-                      return acc
-                    }, {} as Record<string, CatalogItem[]>)
-
-                    // Count items with quantity > 0
-                    const configuredCount = typeItems.filter(item => {
-                      const key = `${item.type}-${item.itemId}`
-                      return (catalogQuantities[key] || 0) > 0
-                    }).length
+                    if (configuredItems.length === 0) {
+                      return (
+                        <div key={room.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                              <Home size={16} />
+                              {room.name}
+                              <span className="text-xs text-gray-500 font-normal capitalize">({room.type})</span>
+                            </h4>
+                            <span className="text-xs text-gray-400">No linens configured</span>
+                          </div>
+                        </div>
+                      )
+                    }
 
                     return (
-                      <div key={type}>
-                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-3">
-                          <span className={`text-xs px-2 py-1 rounded ${type === 'linen' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {type === 'linen' ? 'Linens' : 'Supplies'}
-                          </span>
-                          <span className="text-sm font-normal text-gray-500">
-                            {configuredCount} of {typeItems.length} items configured
-                          </span>
-                        </h3>
-                        {Object.entries(byCategory).sort(([a], [b]) => a.localeCompare(b)).map(([category, categoryItems]) => (
-                          <div key={category} className="mb-6">
-                            <h4 className="text-sm font-medium text-gray-700 mb-3 pb-2 border-b">
-                              {category}
-                            </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {categoryItems.map((item) => {
-                                const key = `${item.type}-${item.itemId}`
-                                const quantity = catalogQuantities[key] || 0
-                                const hasQuantity = quantity > 0
-
-                                return (
-                                  <div
-                                    key={key}
-                                    className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                                      hasQuantity
-                                        ? 'bg-white border-gray-300 shadow-sm'
-                                        : 'bg-gray-50 border-gray-200'
-                                    }`}
-                                  >
-                                    <div className="flex-1 min-w-0">
-                                      <p className={`font-medium truncate ${hasQuantity ? 'text-gray-900' : 'text-gray-500'}`}>
-                                        {item.itemName}
-                                      </p>
-                                      {item.itemCode && (
-                                        <p className="text-xs text-gray-400 truncate">{item.itemCode}</p>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCatalogQuantityChange(key, quantity - 1)}
-                                        disabled={quantity === 0}
-                                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
-                                      >
-                                        -
-                                      </button>
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        value={quantity}
-                                        onChange={(e) => handleCatalogQuantityChange(key, parseInt(e.target.value) || 0)}
-                                        className={`w-12 h-8 text-center border rounded font-medium ${
-                                          hasQuantity
-                                            ? 'border-blue-300 bg-blue-50 text-blue-700'
-                                            : 'border-gray-200 bg-white text-gray-400'
-                                        }`}
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => handleCatalogQuantityChange(key, quantity + 1)}
-                                        className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200 text-gray-600"
-                                      >
-                                        +
-                                      </button>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
+                      <div key={room.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                          <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                            <Home size={16} />
+                            {room.name}
+                            <span className="text-xs text-gray-500 font-normal capitalize">({room.type})</span>
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-2">
+                              {configuredItems.length} items
+                            </span>
+                          </h4>
+                        </div>
+                        <div className="p-4">
+                          <div className="flex flex-wrap gap-2">
+                            {configuredItems.map((item) => (
+                              <div
+                                key={item.id}
+                                className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm"
+                              >
+                                <span className="text-gray-700">{item.name}</span>
+                                <span className="font-medium text-blue-600">×{roomQtys[item.id]}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        </div>
                       </div>
                     )
                   })}
-                </div>
-              )}
 
-              {/* Save button at bottom if dirty */}
-              {inventoryDirty && catalogItems.length > 0 && (
-                <div className="mt-6 pt-6 border-t flex justify-end">
-                  <Button onClick={handleSaveInventory} isLoading={isSavingInventory}>
-                    <Save size={16} />
-                    Save Inventory Changes
-                  </Button>
+                  {/* Totals Summary */}
+                  {(() => {
+                    // Calculate totals across all rooms
+                    const totals: Record<string, { name: string; count: number; rooms: string[] }> = {}
+                    for (const room of rooms) {
+                      const roomLinens = roomLinensData[room.id] || []
+                      const roomQtys = roomLinenQuantities[room.id] || {}
+                      for (const cat of roomLinens) {
+                        for (const item of cat.items) {
+                          const qty = roomQtys[item.id] || 0
+                          if (qty > 0) {
+                            if (!totals[item.id]) {
+                              totals[item.id] = { name: item.name, count: 0, rooms: [] }
+                            }
+                            totals[item.id].count += qty
+                            totals[item.id].rooms.push(room.name)
+                          }
+                        }
+                      }
+                    }
+
+                    const totalItems = Object.values(totals)
+                    if (totalItems.length === 0) return null
+
+                    return (
+                      <div className="border-t pt-6">
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                          <Package size={18} />
+                          Total Per Turnover
+                        </h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {totalItems.map((item) => (
+                            <div
+                              key={item.name}
+                              className="bg-white border border-gray-200 rounded-lg p-3"
+                            >
+                              <p className="font-medium text-gray-900">{item.name}</p>
+                              <p className="text-2xl font-bold text-blue-600">{item.count}</p>
+                              <p className="text-xs text-gray-500">
+                                {item.rooms.length === 1 ? item.rooms[0] : `${item.rooms.length} rooms`}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </CardContent>
