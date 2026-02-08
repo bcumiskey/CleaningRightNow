@@ -1,4 +1,5 @@
 import { type ClassValue, clsx } from 'clsx'
+import { parseISO } from 'date-fns'
 
 export function cn(...inputs: ClassValue[]) {
   return inputs.filter(Boolean).join(' ')
@@ -12,7 +13,9 @@ export function formatCurrency(amount: number): string {
 }
 
 export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString('en-US', {
+  // Use parseISO for strings to avoid timezone issues
+  const dateObj = typeof date === 'string' ? parseISO(date) : date
+  return dateObj.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',

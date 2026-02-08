@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import {
   Calendar,
   Plus,
@@ -473,7 +473,7 @@ function JobsPageContent() {
 
   // Group jobs by date
   const jobsByDate = jobs.reduce((acc, job) => {
-    const dateKey = format(new Date(job.date), 'yyyy-MM-dd')
+    const dateKey = format(parseISO(job.date), 'yyyy-MM-dd')
     if (!acc[dateKey]) acc[dateKey] = []
     acc[dateKey].push(job)
     return acc
@@ -607,7 +607,7 @@ function JobsPageContent() {
             {sortedDates.map(dateKey => (
               <div key={dateKey}>
                 <h4 className="text-sm font-semibold text-gray-500 mb-2 px-1">
-                  {format(new Date(dateKey), 'EEEE, MMMM d')}
+                  {format(parseISO(dateKey), 'EEEE, MMMM d')}
                 </h4>
                 <div className="space-y-2">
                   {jobsByDate[dateKey].map(job => {
@@ -942,7 +942,7 @@ function JobsPageContent() {
           <div className="space-y-4">
             <div className="text-center pb-4 border-b">
               <p className="font-medium text-gray-900">{selectedJobForTeamPayment.property.name}</p>
-              <p className="text-sm text-gray-500">{format(new Date(selectedJobForTeamPayment.date), 'MMMM d, yyyy')}</p>
+              <p className="text-sm text-gray-500">{format(parseISO(selectedJobForTeamPayment.date), 'MMMM d, yyyy')}</p>
               <p className="text-lg font-semibold text-blue-600 mt-1">
                 {formatCurrency(calculateJobPayments(
                   selectedJobForTeamPayment.rate,
@@ -1063,7 +1063,7 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
       if (editingJob) {
         setFormData({
           propertyId: editingJob.property.id,
-          date: format(new Date(editingJob.date), 'yyyy-MM-dd'),
+          date: format(parseISO(editingJob.date), 'yyyy-MM-dd'),
           priority: editingJob.priority?.toString() || '5',
           rate: editingJob.rate.toString(),
           expensePercent: editingJob.expensePercent?.toString() || '12',

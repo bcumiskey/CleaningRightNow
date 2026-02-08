@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { format } from 'date-fns'
+
+// Helper to format date as YYYY-MM-DD in local timezone (not UTC)
+function toLocalDateString(date: Date): string {
+  return format(date, 'yyyy-MM-dd')
+}
 
 // Helper to get next occurrence dates for a schedule
 function getNextOccurrences(
@@ -119,13 +125,13 @@ export async function POST(request: NextRequest) {
     })
 
     const existingDates = new Set(
-      existingJobs.map((j: { date: Date }) => j.date.toISOString().split('T')[0])
+      existingJobs.map((j: { date: Date }) => toLocalDateString(j.date))
     )
 
     // Create jobs for new dates only
     const newJobs = []
     for (const date of dates) {
-      const dateStr = date.toISOString().split('T')[0]
+      const dateStr = toLocalDateString(date)
       if (!existingDates.has(dateStr)) {
         const job = await prisma.job.create({
           data: {
@@ -207,13 +213,13 @@ export async function PUT() {
       })
 
       const existingDates = new Set(
-        existingJobs.map((j: { date: Date }) => j.date.toISOString().split('T')[0])
+        existingJobs.map((j: { date: Date }) => toLocalDateString(j.date))
       )
 
       // Create jobs for new dates
       let created = 0
       for (const date of dates) {
-        const dateStr = date.toISOString().split('T')[0]
+        const dateStr = toLocalDateString(date)
         if (!existingDates.has(dateStr)) {
           await prisma.job.create({
             data: {
