@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { startOfDay, endOfDay } from 'date-fns'
+import { startOfDay, endOfDay, parseISO } from 'date-fns'
 
 // GET - List job sessions (with filters)
 export async function GET(request: NextRequest) {
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     // If date provided, get sessions for jobs on that date
     if (date) {
-      const targetDate = new Date(date)
+      const targetDate = parseISO(date)
       const jobs = await prisma.job.findMany({
         where: {
           date: {

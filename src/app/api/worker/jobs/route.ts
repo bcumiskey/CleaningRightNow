@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { parseISO, startOfDay, endOfDay } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,10 +18,12 @@ export async function GET(request: NextRequest) {
 
     const whereClause: Record<string, unknown> = {}
     if (startDate) {
-      whereClause.date = { ...whereClause.date as object, gte: new Date(startDate) }
+      // parseISO treats the date string as local time, then startOfDay ensures we get the beginning of that day
+      whereClause.date = { ...whereClause.date as object, gte: startOfDay(parseISO(startDate)) }
     }
     if (endDate) {
-      whereClause.date = { ...whereClause.date as object, lte: new Date(endDate) }
+      // endOfDay ensures we include the entire end date
+      whereClause.date = { ...whereClause.date as object, lte: endOfDay(parseISO(endDate)) }
     }
     if (propertyId) {
       whereClause.propertyId = propertyId

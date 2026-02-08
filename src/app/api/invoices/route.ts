@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { parseISO } from 'date-fns'
 
 // Helper to generate next invoice number
 async function generateInvoiceNumber(): Promise<string> {
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const invoiceNumber = await generateInvoiceNumber()
-    const invoiceDate = data.invoiceDate ? new Date(data.invoiceDate) : new Date()
+    const invoiceDate = data.invoiceDate ? parseISO(data.invoiceDate) : new Date()
 
     // Calculate subtotal from included jobs if provided
     let subtotal = 0
@@ -122,7 +123,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: `Line item ${i + 1}: Invalid amount "${item.amount}"` }, { status: 400 })
         }
         lineItemsToCreate.push({
-          date: item.date ? new Date(item.date) : null,
+          date: item.date ? parseISO(item.date) : null,
           description: item.description.trim(),
           amount: amount,
           itemType: item.itemType || 'service',

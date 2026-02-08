@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
-import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
+import { startOfMonth, endOfMonth, parseISO } from 'date-fns'
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
 
     // Default to current month if no dates provided
     const now = new Date()
-    const start = startDate ? new Date(startDate) : startOfMonth(now)
-    const end = endDate ? new Date(endDate) : endOfMonth(now)
+    const start = startDate ? parseISO(startDate) : startOfMonth(now)
+    const end = endDate ? parseISO(endDate) : endOfMonth(now)
 
     // Get the worker
     const worker = await prisma.teamMember.findUnique({
