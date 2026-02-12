@@ -473,6 +473,38 @@ function JobsPageContent() {
     }
   }
 
+  const handlePriorityChange = async (jobId: string, newPriority: number) => {
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: newPriority }),
+      })
+
+      if (response.ok) {
+        // Optimistic update for smoother UX
+        setJobs(prev =>
+          prev.map(job =>
+            job.id === jobId ? { ...job, priority: newPriority } : job
+          ).sort((a, b) => {
+            // Sort by date desc, then priority asc, then time asc
+            const dateCompare = new Date(b.date).getTime() - new Date(a.date).getTime()
+            if (dateCompare !== 0) return dateCompare
+            const priorityCompare = a.priority - b.priority
+            if (priorityCompare !== 0) return priorityCompare
+            if (!a.time && !b.time) return 0
+            if (!a.time) return 1
+            if (!b.time) return -1
+            return a.time.localeCompare(b.time)
+          })
+        )
+        toast.success(`Priority updated to ${newPriority}`)
+      }
+    } catch (error) {
+      toast.error('Failed to update priority')
+    }
+  }
+
   const handleEdit = (job: Job) => {
     setEditingJob(job)
     setShowModal(true)
@@ -803,16 +835,44 @@ function JobsPageContent() {
                                 )}
                               </div>
 
-                              {/* Meta Info */}
+                              {/* Meta Info with Priority Controls */}
                               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  job.priority <= 2 ? 'bg-red-100 text-red-700' :
-                                  job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
-                                  job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
-                                  'bg-blue-100 text-blue-700'
-                                }`}>
-                                  Priority {job.priority}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (job.priority > 1) {
+                                        handlePriorityChange(job.id, job.priority - 1)
+                                      }
+                                    }}
+                                    disabled={job.priority <= 1}
+                                    className="p-1 hover:bg-gray-100 rounded disabled:opacity-30"
+                                    title="Move up (higher priority)"
+                                  >
+                                    <ChevronUp size={16} />
+                                  </button>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    job.priority <= 2 ? 'bg-red-100 text-red-700' :
+                                    job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
+                                    job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
+                                    'bg-blue-100 text-blue-700'
+                                  }`}>
+                                    Priority {job.priority}
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (job.priority < 10) {
+                                        handlePriorityChange(job.id, job.priority + 1)
+                                      }
+                                    }}
+                                    disabled={job.priority >= 10}
+                                    className="p-1 hover:bg-gray-100 rounded disabled:opacity-30"
+                                    title="Move down (lower priority)"
+                                  >
+                                    <ChevronDown size={16} />
+                                  </button>
+                                </div>
                                 <span className="capitalize">Source: {job.source}</span>
                               </div>
 
