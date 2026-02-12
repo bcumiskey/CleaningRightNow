@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff, Shield, Star, TrendingUp } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff, Shield, Star, TrendingUp, Calendar } from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -27,6 +28,9 @@ interface TeamMember {
   avgRating?: number | null
   totalRatings?: number
   reliabilityScore?: number | null
+  // YTD earnings
+  ytdEarnings?: number
+  ytdJobs?: number
 }
 
 export default function TeamPage() {
@@ -240,6 +244,25 @@ export default function TeamPage() {
                           </Badge>
                         )}
                       </div>
+
+                      {/* YTD Earnings */}
+                      {member.isActive && member.role === 'worker' && (
+                        <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-100">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <DollarSign size={16} className="text-green-600" />
+                              <span className="text-sm font-medium text-gray-700">YTD Earnings</span>
+                            </div>
+                            <span className="text-lg font-bold text-green-600">
+                              {formatCurrency(member.ytdEarnings || 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                            <Calendar size={10} />
+                            <span>{member.ytdJobs || 0} jobs paid in {new Date().getFullYear()}</span>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Rank and Performance Stats */}
                       {member.isActive && (

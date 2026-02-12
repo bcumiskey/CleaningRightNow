@@ -34,22 +34,89 @@ export async function GET(request: NextRequest) {
       reliabilityScore?: number | null
     }
 
-    const membersWithPasswordStatus = teamMembers.map((member: TeamMemberFromDb) => ({
-      id: member.id,
-      name: member.name,
-      email: member.email,
-      phone: member.phone,
-      role: member.role,
-      isActive: member.isActive,
-      hasPassword: !!member.password,
-      // Supervisor fields
-      rank: member.rank ?? 50,
-      canSupervise: member.canSupervise ?? false,
-      // Performance metrics
-      avgRating: member.avgRating ?? null,
-      totalRatings: member.totalRatings ?? 0,
-      reliabilityScore: member.reliabilityScore ?? null,
-    }))
+    // Calculate YTD earnings for each team member
+    const now = new Date()
+    const yearStart = new Date(now.getFullYear(), 0, 1)
+
+    // Get all paid assignments for this year grouped by team member
+    const ytdEarnings = await prisma.jobAssignment.groupBy({
+      by: ['teamMemberId'],
+      where: {
+        paidAt: {
+          gte: yearStart,
+          lte: now,
+        },
+        job: {
+          completed: true,
+        },
+      },
+      _count: {
+        id: true,
+      },
+    })
+
+    // Get job details to calculate actual earnings
+    const assignmentsWithJobs = await prisma.jobAssignment.findMany({
+      where: {
+        paidAt: {
+          gte: yearStart,
+          lte: now,
+        },
+        job: {
+          completed: true,
+        },
+      },
+      include: {
+        job: {
+          select: {
+            rate: true,
+            expensePercent: true,
+            assignments: {
+              select: { id: true },
+            },
+          },
+        },
+      },
+    })
+
+    // Calculate earnings per team member
+    const earningsMap = new Map<string, { ytdEarnings: number; ytdJobs: number }>()
+    for (const assignment of assignmentsWithJobs) {
+      const teamMemberId = assignment.teamMemberId
+      const job = assignment.job
+      const assignmentCount = job.assignments.length
+      const teamTotal = job.rate * (1 - (job.expensePercent / 100))
+      const perPerson = assignmentCount > 0 ? teamTotal / assignmentCount : 0
+
+      const current = earningsMap.get(teamMemberId) || { ytdEarnings: 0, ytdJobs: 0 }
+      earningsMap.set(teamMemberId, {
+        ytdEarnings: current.ytdEarnings + perPerson,
+        ytdJobs: current.ytdJobs + 1,
+      })
+    }
+
+    const membersWithPasswordStatus = teamMembers.map((member: TeamMemberFromDb) => {
+      const earnings = earningsMap.get(member.id) || { ytdEarnings: 0, ytdJobs: 0 }
+      return {
+        id: member.id,
+        name: member.name,
+        email: member.email,
+        phone: member.phone,
+        role: member.role,
+        isActive: member.isActive,
+        hasPassword: !!member.password,
+        // Supervisor fields
+        rank: member.rank ?? 50,
+        canSupervise: member.canSupervise ?? false,
+        // Performance metrics
+        avgRating: member.avgRating ?? null,
+        totalRatings: member.totalRatings ?? 0,
+        reliabilityScore: member.reliabilityScore ?? null,
+        // YTD earnings
+        ytdEarnings: earnings.ytdEarnings,
+        ytdJobs: earnings.ytdJobs,
+      }
+    })
 
     return NextResponse.json(membersWithPasswordStatus)
   } catch (error) {
