@@ -6,7 +6,7 @@ import { format, addDays, isToday, parseISO } from 'date-fns'
 import { Building, ChevronRight, AlertCircle, Calendar, Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import EmptyState from '@/components/ui/EmptyState'
-import { cn } from '@/lib/utils'
+import { cn, getPropertyHexColor } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
 interface ScheduledJob {
@@ -14,7 +14,7 @@ interface ScheduledJob {
   date: string
   time: string | null
   completed: boolean
-  property: { id: string; name: string; address: string }
+  property: { id: string; name: string; address: string; color?: string }
   _activeNotes?: number
 }
 
@@ -61,50 +61,63 @@ export default function WorkerSchedulePage() {
   const today = format(new Date(), 'EEEE, MMMM d')
   const completedCount = todayJobs.filter((j) => j.completed).length
 
-  const JobCard = ({ job, showDate = false }: { job: ScheduledJob; showDate?: boolean }) => (
-    <Link href={`/worker/job/${job.id}`}>
-      <Card className="hover:shadow-md transition-shadow">
-        <CardContent className="flex items-center gap-4">
-          <div
-            className={cn(
-              'w-14 h-14 rounded-xl flex items-center justify-center',
-              job._activeNotes && job._activeNotes > 0 ? 'bg-amber-100' : 'bg-emerald-100'
-            )}
-          >
-            <Building
-              className={job._activeNotes && job._activeNotes > 0 ? 'text-amber-600' : 'text-emerald-600'}
-              size={24}
-            />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="font-semibold text-gray-900 truncate">{job.property.name}</div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              {job.time && (
-                <span className="flex items-center gap-1">
-                  <Clock size={12} />
-                  {job.time}
-                </span>
-              )}
-              {!job.time && <span>No time set</span>}
+  const JobCard = ({ job, showDate = false }: { job: ScheduledJob; showDate?: boolean }) => {
+    const propertyColor = job.property.color || getPropertyHexColor(job.property.id)
+    const hasActiveNotes = job._activeNotes && job._activeNotes > 0
+
+    return (
+      <Link href={`/worker/job/${job.id}`}>
+        <Card
+          className="hover:shadow-md transition-shadow"
+          style={{
+            borderLeft: `4px solid ${hasActiveNotes ? '#F59E0B' : propertyColor}`,
+          }}
+        >
+          <CardContent className="flex items-center gap-4">
+            <div
+              className="w-14 h-14 rounded-xl flex items-center justify-center"
+              style={{
+                backgroundColor: hasActiveNotes ? '#FEF3C7' : `${propertyColor}20`,
+              }}
+            >
+              <Building
+                size={24}
+                style={{ color: hasActiveNotes ? '#D97706' : propertyColor }}
+              />
             </div>
-            {job._activeNotes && job._activeNotes > 0 && (
-              <div className="flex items-center gap-1 text-xs text-amber-600 mt-1">
-                <AlertCircle size={12} />
-                {job._activeNotes} active note{job._activeNotes !== 1 && 's'}
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-gray-900 truncate">{job.property.name}</div>
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                {job.time && (
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} />
+                    {job.time}
+                  </span>
+                )}
+                {!job.time && <span>No time set</span>}
               </div>
+              {hasActiveNotes && (
+                <div className="flex items-center gap-1 text-xs text-amber-600 mt-1">
+                  <AlertCircle size={12} />
+                  {job._activeNotes} active note{job._activeNotes !== 1 && 's'}
+                </div>
+              )}
+            </div>
+            {job.completed ? (
+              <span
+                className="px-2 py-1 text-xs rounded-full font-medium"
+                style={{ backgroundColor: `${propertyColor}30`, color: propertyColor }}
+              >
+                Done
+              </span>
+            ) : (
+              <ChevronRight className="text-gray-400 flex-shrink-0" size={24} />
             )}
-          </div>
-          {job.completed ? (
-            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-              Done
-            </span>
-          ) : (
-            <ChevronRight className="text-gray-400 flex-shrink-0" size={24} />
-          )}
-        </CardContent>
-      </Card>
-    </Link>
-  )
+          </CardContent>
+        </Card>
+      </Link>
+    )
+  }
 
   return (
     <div className="p-4 space-y-6">

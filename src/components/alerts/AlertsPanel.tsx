@@ -6,7 +6,6 @@ import {
   Bell,
   Calendar,
   Users,
-  Package,
   AlertCircle,
   DollarSign,
   ChevronRight,
@@ -16,7 +15,7 @@ import { useRouter } from 'next/navigation'
 
 interface Alert {
   id: string
-  type: 'surprise_booking' | 'urgent_job' | 'low_inventory' | 'critical_issue' | 'unpaid_job' | 'new_job_soon' | 'job_modified' | 'job_cancelled'
+  type: 'surprise_booking' | 'urgent_job' | 'critical_issue' | 'unpaid_job' | 'new_job_soon' | 'job_modified' | 'job_cancelled'
   severity: 'critical' | 'warning' | 'info'
   title: string
   description: string
@@ -47,8 +46,6 @@ const getAlertIcon = (type: Alert['type']) => {
       return Calendar
     case 'urgent_job':
       return Users
-    case 'low_inventory':
-      return Package
     case 'critical_issue':
     case 'job_cancelled':
       return AlertCircle

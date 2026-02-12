@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { getPropertyHexColor, cleanPropertyName } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
       where: whereClause,
       include: {
         property: {
-          select: { id: true, name: true, address: true, color: true },
+          select: { id: true, name: true, address: true },
         },
         assignments: {
           select: {
@@ -47,7 +48,17 @@ export async function GET(request: NextRequest) {
       orderBy: [{ date: 'desc' }, { priority: 'asc' }, { time: 'asc' }],
     })
 
-    return NextResponse.json(jobs)
+    // Add derived property colors and clean names
+    const jobsWithColors = jobs.map((job) => ({
+      ...job,
+      property: {
+        ...job.property,
+        name: cleanPropertyName(job.property.name),
+        color: getPropertyHexColor(job.property.id),
+      },
+    }))
+
+    return NextResponse.json(jobsWithColors)
   } catch (error) {
     console.error('Jobs GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch jobs' }, { status: 500 })

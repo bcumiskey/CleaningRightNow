@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
 import EmptyState from '@/components/ui/EmptyState'
 import AlertsPanel from '@/components/alerts/AlertsPanel'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, getPropertyHexColor } from '@/lib/utils'
 
 interface DashboardStats {
   monthlyRevenue: number
@@ -32,7 +32,7 @@ interface DashboardStats {
 interface TodayJob {
   id: string
   time: string | null
-  property: { id: string; name: string; address: string }
+  property: { id: string; name: string; address: string; color?: string }
   assignments: { teamMember: { name: string } }[]
   completed: boolean
 }
@@ -174,42 +174,51 @@ export default function DashboardPage() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    {todayJobs.map((job) => (
-                      <Link
-                        key={job.id}
-                        href={`/jobs?id=${job.id}`}
-                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                              job.completed ? 'bg-green-100' : 'bg-blue-100'
-                            }`}
-                          >
-                            <Building
-                              className={job.completed ? 'text-green-600' : 'text-blue-600'}
-                              size={24}
-                            />
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">{job.property.name}</div>
-                            <div className="text-sm text-gray-500">
-                              {job.time || 'No time set'}
-                              {job.assignments.length > 0 && (
-                                <span className="ml-2">
-                                  • {job.assignments.map((a) => a.teamMember.name).join(', ')}
-                                </span>
-                              )}
+                    {todayJobs.map((job) => {
+                      const propertyColor = job.property.color || getPropertyHexColor(job.property.id)
+                      return (
+                        <Link
+                          key={job.id}
+                          href={`/jobs?id=${job.id}`}
+                          className="flex items-center justify-between p-4 rounded-lg hover:brightness-95 transition-all"
+                          style={{
+                            backgroundColor: job.completed ? `${propertyColor}30` : `${propertyColor}15`,
+                            borderLeft: `4px solid ${propertyColor}`,
+                          }}
+                        >
+                          <div className="flex items-center gap-4">
+                            <div
+                              className="w-12 h-12 rounded-lg flex items-center justify-center"
+                              style={{ backgroundColor: `${propertyColor}25` }}
+                            >
+                              <Building
+                                size={24}
+                                style={{ color: propertyColor }}
+                              />
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900">{job.property.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {job.time || 'No time set'}
+                                {job.assignments.length > 0 && (
+                                  <span className="ml-2">
+                                    • {job.assignments.map((a) => a.teamMember.name).join(', ')}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        {job.completed && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full">
-                            Complete
-                          </span>
-                        )}
-                      </Link>
-                    ))}
+                          {job.completed && (
+                            <span
+                              className="px-2 py-1 text-xs rounded-full font-medium"
+                              style={{ backgroundColor: `${propertyColor}30`, color: propertyColor }}
+                            >
+                              Complete
+                            </span>
+                          )}
+                        </Link>
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>

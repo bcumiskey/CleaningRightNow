@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { parseISO, startOfDay, endOfDay } from 'date-fns'
+import { getPropertyHexColor, cleanPropertyName } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,14 +40,19 @@ export async function GET(request: NextRequest) {
       orderBy: [{ date: 'asc' }, { time: 'asc' }],
     })
 
-    // Remove financial data
+    // Remove financial data and add property colors
     interface JobWithProperty { id: string; date: Date; time: string | null; completed: boolean; property: { id: string; name: string; address: string } }
     const sanitizedJobs = jobs.map((job: JobWithProperty) => ({
       id: job.id,
       date: job.date,
       time: job.time,
       completed: job.completed,
-      property: job.property,
+      property: {
+        id: job.property.id,
+        name: cleanPropertyName(job.property.name),
+        address: job.property.address,
+        color: getPropertyHexColor(job.property.id),
+      },
     }))
 
     return NextResponse.json(sanitizedJobs)

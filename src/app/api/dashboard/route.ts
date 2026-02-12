@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { startOfMonth, endOfMonth, startOfDay, endOfDay, addDays } from 'date-fns'
+import { getPropertyHexColor, cleanPropertyName } from '@/lib/utils'
 
 export async function GET() {
   try {
@@ -85,6 +86,23 @@ export async function GET() {
       take: 10,
     })
 
+    // Add derived colors and clean property names
+    const todayJobsWithColors = todayJobs.map((job) => ({
+      ...job,
+      property: {
+        ...job.property,
+        name: cleanPropertyName(job.property.name),
+        color: getPropertyHexColor(job.property.id),
+      },
+    }))
+
+    const upcomingJobsWithColors = upcomingJobs.map((job) => ({
+      ...job,
+      property: {
+        name: cleanPropertyName(job.property.name),
+      },
+    }))
+
     return NextResponse.json({
       stats: {
         monthlyRevenue,
@@ -93,8 +111,8 @@ export async function GET() {
         draftInvoices,
         lowStockItems,
       },
-      todayJobs,
-      upcomingJobs,
+      todayJobs: todayJobsWithColors,
+      upcomingJobs: upcomingJobsWithColors,
     })
   } catch (error) {
     console.error('Dashboard API error:', error)
