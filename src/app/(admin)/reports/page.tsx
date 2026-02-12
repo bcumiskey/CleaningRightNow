@@ -171,8 +171,11 @@ export default function ReportsPage() {
         const allJobs = await response.json()
         // Filter to next 7 days
         const filtered = allJobs.filter((job: UpcomingJob) => {
-          const jobDate = new Date(job.date)
-          return jobDate >= startOfDay(today) && jobDate <= endDate
+          // Extract just the date portion (YYYY-MM-DD) to avoid timezone issues
+          const jobDateStr = job.date.substring(0, 10)
+          const todayStr = format(today, 'yyyy-MM-dd')
+          const endDateStr = format(endDate, 'yyyy-MM-dd')
+          return jobDateStr >= todayStr && jobDateStr <= endDateStr
         })
         setUpcomingJobs(filtered)
       }
@@ -273,8 +276,9 @@ export default function ReportsPage() {
                       <div className="grid grid-cols-7 gap-1 sm:gap-2">
                         {Array.from({ length: 7 }).map((_, idx) => {
                           const day = addDays(new Date(), idx)
+                          const dayStr = format(day, 'yyyy-MM-dd')
                           const dayJobs = upcomingJobs.filter(job =>
-                            isSameDay(new Date(job.date), day)
+                            job.date.substring(0, 10) === dayStr
                           )
                           const isToday = idx === 0
 
@@ -339,13 +343,14 @@ export default function ReportsPage() {
                     )}
 
                     {/* Today's jobs detail */}
-                    {upcomingJobs.filter(j => isSameDay(new Date(j.date), new Date())).length > 0 && (
+                    {(() => {
+                      const todayStr = format(new Date(), 'yyyy-MM-dd')
+                      const todaysJobs = upcomingJobs.filter(j => j.date.substring(0, 10) === todayStr)
+                      return todaysJobs.length > 0 && (
                       <div className="mt-4 pt-4 border-t">
                         <h4 className="text-sm font-medium text-gray-700 mb-2">Today&apos;s Jobs</h4>
                         <div className="space-y-2">
-                          {upcomingJobs
-                            .filter(j => isSameDay(new Date(j.date), new Date()))
-                            .map(job => (
+                          {todaysJobs.map(job => (
                               <div
                                 key={job.id}
                                 className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 cursor-pointer hover:bg-gray-100"
@@ -376,7 +381,7 @@ export default function ReportsPage() {
                             ))}
                         </div>
                       </div>
-                    )}
+                    )})()}
                   </CardContent>
                 </Card>
 

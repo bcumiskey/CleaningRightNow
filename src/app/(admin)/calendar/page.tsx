@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns'
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays, parseISO } from 'date-fns'
 import { ChevronLeft, ChevronRight, RefreshCw, Settings, Plus, Calendar as CalendarIcon, List, Grid3X3, Repeat } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -213,7 +213,14 @@ export default function CalendarPage() {
   const displayDays = getDaysToDisplay()
 
   const getJobsForDay = (date: Date) => {
-    return jobs.filter((job) => isSameDay(new Date(job.date), date))
+    // Format the target date as YYYY-MM-DD for comparison
+    const targetDateStr = format(date, 'yyyy-MM-dd')
+    return jobs.filter((job) => {
+      // Extract just the date portion from the job's ISO string (first 10 chars)
+      // This avoids timezone conversion issues completely
+      const jobDateStr = job.date.substring(0, 10)
+      return jobDateStr === targetDateStr
+    })
   }
 
   // Get color styles for a job based on property color and completion status
