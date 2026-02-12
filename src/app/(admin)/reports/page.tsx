@@ -16,6 +16,8 @@ import {
   ArrowDownRight,
   BarChart3,
   Activity,
+  MapPin,
+  ChevronRight,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -23,7 +25,7 @@ import Button from '@/components/ui/Button'
 import Select from '@/components/ui/Select'
 import Badge from '@/components/ui/Badge'
 import { formatCurrency, cn } from '@/lib/utils'
-import { format } from 'date-fns'
+import { format, addDays, startOfDay, isSameDay } from 'date-fns'
 
 interface ReportData {
   period: string
@@ -103,6 +105,15 @@ interface ReportData {
   }
 }
 
+interface UpcomingJob {
+  id: string
+  date: string
+  time: string | null
+  property: { id: string; name: string; color: string | null }
+  completed: boolean
+  assignments: { teamMember: { name: string } }[]
+}
+
 const PERIODS = [
   { value: 'this_week', label: 'This Week' },
   { value: 'this_month', label: 'This Month' },
@@ -118,6 +129,8 @@ export default function ReportsPage() {
   const [period, setPeriod] = useState('this_month')
   const [data, setData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [upcomingJobs, setUpcomingJobs] = useState<UpcomingJob[]>([])
+  const [isLoadingOutlook, setIsLoadingOutlook] = useState(true)
 
   const fetchReportData = useCallback(async () => {
     setIsLoading(true)
@@ -133,9 +146,38 @@ export default function ReportsPage() {
     }
   }, [period])
 
+  const fetchWeekOutlook = useCallback(async () => {
+    setIsLoadingOutlook(true)
+    try {
+      // Fetch jobs for the next 7 days
+      const today = new Date()
+      const endDate = addDays(today, 7)
+      const month = today.getMonth() + 1
+      const year = today.getFullYear()
+      const response = await fetch(`/api/jobs?month=${month}&year=${year}`)
+      if (response.ok) {
+        const allJobs = await response.json()
+        // Filter to next 7 days
+        const filtered = allJobs.filter((job: UpcomingJob) => {
+          const jobDate = new Date(job.date)
+          return jobDate >= startOfDay(today) && jobDate <= endDate
+        })
+        setUpcomingJobs(filtered)
+      }
+    } catch (error) {
+      console.error('Failed to fetch week outlook:', error)
+    } finally {
+      setIsLoadingOutlook(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchReportData()
   }, [fetchReportData])
+
+  useEffect(() => {
+    fetchWeekOutlook()
+  }, [fetchWeekOutlook])
 
   const maxRevenue = data?.monthlyTrends
     ? Math.max(...data.monthlyTrends.map(m => m.revenue), 1)
@@ -163,6 +205,137 @@ export default function ReportsPage() {
             className="w-48"
           />
         </div>
+
+        {/* Week Outlook - Mobile Friendly */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Calendar size={20} />
+                Week Outlook
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/jobs')}
+              >
+                View All <ChevronRight size={16} />
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoadingOutlook ? (
+              <div className="text-center py-4 text-gray-500">Loading...</div>
+            ) : (
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {Array.from({ length: 7 }).map((_, idx) => {
+                  const day = addDays(new Date(), idx)
+                  const dayJobs = upcomingJobs.filter(job =>
+                    isSameDay(new Date(job.date), day)
+                  )
+                  const isToday = idx === 0
+
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        'flex flex-col items-center p-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors',
+                        isToday && 'bg-blue-50 ring-2 ring-blue-200'
+                      )}
+                      onClick={() => router.push('/jobs')}
+                    >
+                      <span className="text-xs text-gray-500 font-medium">
+                        {format(day, 'EEE')}
+                      </span>
+                      <span className={cn(
+                        'text-lg font-bold',
+                        isToday ? 'text-blue-600' : 'text-gray-900'
+                      )}>
+                        {format(day, 'd')}
+                      </span>
+
+                      {/* Job indicators */}
+                      <div className="mt-1 flex flex-col gap-0.5 w-full">
+                        {dayJobs.length === 0 ? (
+                          <div className="h-2 w-full bg-gray-100 rounded" />
+                        ) : dayJobs.length <= 3 ? (
+                          dayJobs.map((job) => (
+                            <div
+                              key={job.id}
+                              className={cn(
+                                'h-2 w-full rounded',
+                                job.completed ? 'bg-green-400' : 'bg-blue-400'
+                              )}
+                              style={job.property.color ? { backgroundColor: job.property.color } : undefined}
+                              title={job.property.name}
+                            />
+                          ))
+                        ) : (
+                          <>
+                            <div className="h-2 w-full bg-blue-400 rounded" />
+                            <div className="text-xs text-center text-gray-500 font-medium">
+                              +{dayJobs.length - 1}
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Job count badge for mobile */}
+                      {dayJobs.length > 0 && (
+                        <span className={cn(
+                          'mt-1 text-xs font-medium',
+                          dayJobs.some(j => !j.completed) ? 'text-blue-600' : 'text-green-600'
+                        )}>
+                          {dayJobs.length}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Today's jobs detail */}
+            {upcomingJobs.filter(j => isSameDay(new Date(j.date), new Date())).length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Today&apos;s Jobs</h4>
+                <div className="space-y-2">
+                  {upcomingJobs
+                    .filter(j => isSameDay(new Date(j.date), new Date()))
+                    .map(job => (
+                      <div
+                        key={job.id}
+                        className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 cursor-pointer hover:bg-gray-100"
+                        onClick={() => router.push(`/jobs?highlight=${job.id}`)}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center"
+                          style={{ backgroundColor: job.property.color ? `${job.property.color}30` : '#dbeafe' }}
+                        >
+                          <MapPin
+                            size={16}
+                            style={{ color: job.property.color || '#2563eb' }}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{job.property.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {job.time || 'No time set'}
+                            {job.assignments.length > 0 && ` • ${job.assignments.map(a => a.teamMember.name).join(', ')}`}
+                          </p>
+                        </div>
+                        {job.completed ? (
+                          <Badge variant="success" className="text-xs">Done</Badge>
+                        ) : (
+                          <Badge variant="info" className="text-xs">Pending</Badge>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {isLoading ? (
           <div className="text-center py-12 text-gray-500">Loading reports...</div>
