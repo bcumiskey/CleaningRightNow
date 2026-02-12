@@ -4,7 +4,7 @@ import ical from 'node-ical'
 import { format, differenceInDays } from 'date-fns'
 
 // This endpoint is called by Vercel Cron to auto-sync calendar feeds
-// Schedule: Every hour (0 * * * *)
+// Schedule: Daily at 6:00 AM UTC (0 6 * * *)
 
 interface ParsedEvent {
   uid: string
