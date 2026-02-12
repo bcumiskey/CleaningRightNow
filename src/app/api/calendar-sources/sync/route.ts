@@ -10,7 +10,8 @@ interface SyncResult {
   status: 'success' | 'error'
   eventsFound: number
   jobsCreated: number
-  jobsSkipped: number
+  jobsUpdated: number
+  jobsUnchanged: number
   unmatchedEvents: string[]
   error?: string
 }
@@ -21,6 +22,41 @@ interface ParsedEvent {
   start: Date
   end: Date
   description?: string
+  isAllDay: boolean  // Track if this is an all-day event
+}
+
+// Helper to extract renter/guest name from event summary
+function extractRenterName(summary: string): string | null {
+  if (!summary) return null
+
+  // Common patterns:
+  // "Property Name - Guest Name"
+  // "Guest Name @ Property"
+  // "Reserved - Guest Name"
+  // "Property (Guest Name)"
+
+  // Try parenthetical pattern first: "Property (Guest Name)"
+  const parenMatch = summary.match(/\(([^)]+)\)\s*$/)
+  if (parenMatch) return parenMatch[1].trim()
+
+  // Try "Reserved - Guest" or "Property - Guest"
+  const dashParts = summary.split(/\s*[-–—]\s*/)
+  if (dashParts.length >= 2) {
+    // The last part is often the guest name
+    const lastPart = dashParts[dashParts.length - 1].trim()
+    // Skip if it's a common keyword
+    if (!/^(check-?out|checkout|cleaning|turnover|reserved|blocked)$/i.test(lastPart)) {
+      return lastPart
+    }
+  }
+
+  // For simple summaries that are just a name
+  // Skip if it looks like a property name or keyword
+  if (!/property|house|home|cabin|cottage|villa|apartment|unit|room|check|clean|turnover|reserved|blocked/i.test(summary)) {
+    return summary.trim()
+  }
+
+  return null
 }
 
 // Helper to extract property name from event summary
@@ -102,6 +138,38 @@ async function findMatchingProperty(
   return null
 }
 
+// Helper to detect if an iCal date value is an all-day event (DATE vs DATETIME)
+// All-day events use DATE format (YYYYMMDD) without time component
+// Timed events use DATETIME format (YYYYMMDDTHHMMSS or YYYYMMDDTHHMMSSZ)
+function isAllDayEvent(startVal: unknown, endVal: unknown): boolean {
+  // Method 1: Check for dateOnly property (some node-ical versions)
+  if (typeof startVal === 'object' && startVal !== null) {
+    const startObj = startVal as Record<string, unknown>
+    if (startObj.dateOnly === true) return true
+    // Check for ical.js style type property
+    if (startObj.type === 'date') return true
+  }
+
+  // Method 2: Check if the Date objects are at midnight (00:00:00)
+  // This is a fallback - all-day events are typically parsed as midnight
+  // BUT we need both start AND end to be at midnight to confirm
+  if (startVal instanceof Date && endVal instanceof Date) {
+    const startMidnight = startVal.getHours() === 0 && startVal.getMinutes() === 0 && startVal.getSeconds() === 0
+    const endMidnight = endVal.getHours() === 0 && endVal.getMinutes() === 0 && endVal.getSeconds() === 0
+    // If both are midnight AND the duration is whole days, it's likely all-day
+    if (startMidnight && endMidnight) {
+      const durationMs = endVal.getTime() - startVal.getTime()
+      const durationDays = durationMs / (1000 * 60 * 60 * 24)
+      // All-day events have whole-day durations
+      if (Number.isInteger(durationDays) && durationDays >= 1) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
 // Parse iCal feed and extract events
 async function parseICalFeed(url: string): Promise<ParsedEvent[]> {
   const events: ParsedEvent[] = []
@@ -116,12 +184,17 @@ async function parseICalFeed(url: string): Promise<ParsedEvent[]> {
       // Skip events without required data
       if (!event.uid || !event.start || !event.end) continue
 
+      // Detect if this is an all-day event
+      // node-ical preserves some metadata on the date objects
+      const allDay = isAllDayEvent(event.start, event.end)
+
       events.push({
         uid: event.uid,
         summary: event.summary || '',
         start: new Date(event.start),
         end: new Date(event.end),
         description: event.description || '',
+        isAllDay: allDay,
       })
     }
   } catch (error) {
@@ -130,6 +203,62 @@ async function parseICalFeed(url: string): Promise<ParsedEvent[]> {
   }
 
   return events
+}
+
+// Detect and flag back-to-back cleanings
+// B2B = multiple bookings on the same property where one checkout = another check-in
+async function detectAndFlagBackToBack(propertyIds: string[]) {
+  // Get all future jobs for these properties
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const jobs = await prisma.job.findMany({
+    where: {
+      propertyId: { in: propertyIds },
+      date: { gte: today },
+    },
+    orderBy: [{ propertyId: 'asc' }, { date: 'asc' }],
+  })
+
+  // Group jobs by property and date
+  const jobsByPropertyDate = new Map<string, string[]>()
+  for (const job of jobs) {
+    const dateStr = job.date.toISOString().split('T')[0]
+    const key = `${job.propertyId}-${dateStr}`
+    if (!jobsByPropertyDate.has(key)) {
+      jobsByPropertyDate.set(key, [])
+    }
+    jobsByPropertyDate.get(key)!.push(job.id)
+  }
+
+  // Find dates with multiple jobs (B2B situation)
+  const b2bJobIds: string[] = []
+  const nonB2bJobIds: string[] = []
+
+  for (const [, jobIds] of jobsByPropertyDate) {
+    if (jobIds.length > 1) {
+      // Multiple jobs same day = B2B
+      b2bJobIds.push(...jobIds)
+    } else {
+      nonB2bJobIds.push(...jobIds)
+    }
+  }
+
+  // Update B2B flags
+  if (b2bJobIds.length > 0) {
+    await prisma.job.updateMany({
+      where: { id: { in: b2bJobIds } },
+      data: { isBackToBack: true },
+    })
+  }
+
+  // Clear B2B flag for jobs that are no longer B2B
+  if (nonB2bJobIds.length > 0) {
+    await prisma.job.updateMany({
+      where: { id: { in: nonB2bJobIds }, isBackToBack: true },
+      data: { isBackToBack: false },
+    })
+  }
 }
 
 // POST - Sync all active calendar sources (or specific one)
@@ -178,7 +307,8 @@ export async function POST(request: NextRequest) {
         status: 'success',
         eventsFound: 0,
         jobsCreated: 0,
-        jobsSkipped: 0,
+        jobsUpdated: 0,
+        jobsUnchanged: 0,
         unmatchedEvents: [],
       }
 
@@ -187,25 +317,28 @@ export async function POST(request: NextRequest) {
         const events = await parseICalFeed(source.icalUrl)
         result.eventsFound = events.length
 
+        // Track property IDs that had jobs synced for B2B detection
+        const syncedPropertyIds = new Set<string>()
+
         // Process each event
         for (const event of events) {
-          // Use checkout (end) date for cleaning jobs
-          // IMPORTANT: iCal all-day events use EXCLUSIVE end dates
-          // e.g., a stay ending May 31st has DTEND = June 1st
-          // We need to subtract one day to get the actual checkout date
+          // Calculate the cleaning/checkout date from the iCal event
+          // CRITICAL: iCal RFC 5545 specifies that DTEND for all-day events is EXCLUSIVE
+          // This means a guest staying Jan 1-3 has DTEND=20250104 (Jan 4)
+          // We must subtract 1 day to get the actual checkout date (Jan 3)
+          //
+          // THE RULE: Checkout date = cleaning date. No shifting. If guest checks
+          // out Jan 3rd, cleaning happens Jan 3rd.
+
           const jobDate = new Date(event.end)
 
-          // Check if this is an all-day event (both start and end at midnight)
-          // All-day events in iCal have dates without time components, which
-          // node-ical parses as midnight (00:00:00)
-          const startHours = event.start.getHours() + event.start.getMinutes() + event.start.getSeconds()
-          const endHours = event.end.getHours() + event.end.getMinutes() + event.end.getSeconds()
-          const isAllDayEvent = startHours === 0 && endHours === 0
-
-          if (isAllDayEvent) {
-            // Subtract one day to get the actual checkout/cleaning date
+          if (event.isAllDay) {
+            // For all-day events: DTEND is exclusive, subtract 1 day
+            // Example: Stay Jan 1-3 → DTSTART=20250101, DTEND=20250104
+            // Actual checkout = Jan 3 (DTEND minus 1 day)
             jobDate.setDate(jobDate.getDate() - 1)
           }
+          // For timed events: DTEND is the actual end datetime, just use the date portion
 
           jobDate.setHours(0, 0, 0, 0)
 
@@ -220,7 +353,14 @@ export async function POST(request: NextRequest) {
             continue
           }
 
-          // Check if job already exists (by externalId)
+          // Extract renter name from event
+          const renterName = extractRenterName(event.summary)
+
+          // Get property rate
+          const property = properties.find((p: { id: string; name: string; baseRate: number; keywords: string | null }) => p.id === matchedProperty.id)
+          const rate = property?.baseRate || 0
+
+          // Check if job already exists (by externalId/UID)
           const existingJob = await prisma.job.findFirst({
             where: {
               externalId: event.uid,
@@ -228,27 +368,46 @@ export async function POST(request: NextRequest) {
           })
 
           if (existingJob) {
-            result.jobsSkipped++
-            continue
+            // UPDATE existing job if date or details changed
+            const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
+            const renterChanged = existingJob.renterName !== renterName
+
+            if (dateChanged || renterChanged) {
+              await prisma.job.update({
+                where: { id: existingJob.id },
+                data: {
+                  date: jobDate,
+                  propertyId: matchedProperty.id,
+                  renterName,
+                },
+              })
+              result.jobsUpdated++
+            } else {
+              result.jobsUnchanged++
+            }
+          } else {
+            // CREATE new job
+            await prisma.job.create({
+              data: {
+                date: jobDate,
+                propertyId: matchedProperty.id,
+                rate,
+                expensePercent: 12,
+                source: source.type,
+                externalId: event.uid,
+                renterName,
+              },
+            })
+            result.jobsCreated++
           }
 
-          // Get property rate
-          const property = properties.find((p: { id: string; name: string; baseRate: number; keywords: string | null }) => p.id === matchedProperty.id)
-          const rate = property?.baseRate || 0
+          syncedPropertyIds.add(matchedProperty.id)
+        }
 
-          // Create the job
-          await prisma.job.create({
-            data: {
-              date: jobDate,
-              propertyId: matchedProperty.id,
-              rate,
-              expensePercent: 12,
-              source: source.type,
-              externalId: event.uid,
-            },
-          })
-
-          result.jobsCreated++
+        // Detect and flag B2B (back-to-back) cleanings
+        // B2B = same property has multiple jobs on same day (checkout and new check-in)
+        if (syncedPropertyIds.size > 0) {
+          await detectAndFlagBackToBack(Array.from(syncedPropertyIds))
         }
 
         // Update source sync status
@@ -281,15 +440,17 @@ export async function POST(request: NextRequest) {
 
     // Summary
     const totalCreated = results.reduce((sum, r) => sum + r.jobsCreated, 0)
-    const totalSkipped = results.reduce((sum, r) => sum + r.jobsSkipped, 0)
+    const totalUpdated = results.reduce((sum, r) => sum + r.jobsUpdated, 0)
+    const totalUnchanged = results.reduce((sum, r) => sum + r.jobsUnchanged, 0)
     const totalUnmatched = results.reduce((sum, r) => sum + r.unmatchedEvents.length, 0)
 
     return NextResponse.json({
       message: `Synced ${sources.length} calendar source(s)`,
       summary: {
-        sourcessynced: sources.length,
+        sourcesSynced: sources.length,
         jobsCreated: totalCreated,
-        jobsSkipped: totalSkipped,
+        jobsUpdated: totalUpdated,
+        jobsUnchanged: totalUnchanged,
         unmatchedEvents: totalUnmatched,
       },
       results,

@@ -277,7 +277,11 @@ model Job {
 
   // Calendar Source
   source          String    @default("manual") // "manual" | "turno" | "google"
-  externalId      String?
+  externalId      String?   @unique  // iCal UID for deduplication
+  renterName      String?   // Guest name from calendar event
+
+  // Back-to-back flag (checkout and new check-in same day at same property)
+  isBackToBack    Boolean   @default(false)
 
   // Relations
   assignments     JobAssignment[]
@@ -723,6 +727,20 @@ model PerformanceRating {
   feedback        String?
 
   createdAt       DateTime  @default(now())
+}
+
+// ============================================================
+// SCHEDULE ALERTS
+// ============================================================
+
+model Alert {
+  id          String    @id @default(cuid())
+  type        String    // 'new_job_soon' | 'job_modified' | 'job_cancelled' | 'low_inventory'
+  message     String
+  jobId       String?
+  propertyId  String?
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
 }
 
 // ============================================================
