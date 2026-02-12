@@ -85,12 +85,6 @@ interface Job {
   assignments: JobAssignment[]
 }
 
-const PAYMENT_METHODS = [
-  { value: 'venmo', label: 'Venmo' },
-  { value: 'zelle', label: 'Zelle' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'other', label: 'Other' },
-]
 
 const PRIORITY_OPTIONS = [
   { value: '1', label: '1 - Highest' },
@@ -194,10 +188,6 @@ function JobsPageContent() {
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
 
-  // Team payment modal state
-  const [showTeamPaymentModal, setShowTeamPaymentModal] = useState(false)
-  const [selectedJobForTeamPayment, setSelectedJobForTeamPayment] = useState<Job | null>(null)
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('')
 
   // Expanded jobs state (for mobile-friendly expand/collapse)
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
@@ -510,31 +500,6 @@ function JobsPageContent() {
     setShowModal(true)
   }
 
-  const handleTeamPayment = async (jobId: string, paymentMethod: string | null) => {
-    try {
-      const response = await fetch(`/api/jobs/${jobId}/team-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paymentMethod }),
-      })
-
-      if (response.ok) {
-        fetchJobs()
-        if (paymentMethod) {
-          toast.success(`Team marked as paid via ${PAYMENT_METHODS.find(p => p.value === paymentMethod)?.label}`)
-        } else {
-          toast.success('Team payment cleared')
-        }
-        setShowTeamPaymentModal(false)
-        setSelectedJobForTeamPayment(null)
-        setSelectedPaymentMethod('')
-      } else {
-        toast.error('Failed to update team payment')
-      }
-    } catch (error) {
-      toast.error('Failed to update team payment')
-    }
-  }
 
   const totalRevenue = jobs.reduce((sum, job) => sum + job.rate, 0)
   const completedJobs = jobs.filter(j => j.completed).length
@@ -891,31 +856,27 @@ function JobsPageContent() {
                                     <span className="text-sm text-gray-700">Complete</span>
                                   </label>
 
-                                  {/* Team Payment */}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSelectedJobForTeamPayment(job)
-                                      setShowTeamPaymentModal(true)
-                                    }}
-                                    className={cn(
-                                      'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium',
-                                      job.teamPaid
-                                        ? 'bg-blue-100 text-blue-700'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                    )}
-                                  >
-                                    {job.teamPaid ? (
-                                      <>
-                                        <Check size={14} />
-                                        {job.assignments[0]?.paymentMethod
-                                          ? PAYMENT_METHODS.find(p => p.value === job.assignments[0]?.paymentMethod)?.label
-                                          : 'Paid'}
-                                      </>
-                                    ) : (
-                                      'Pay Team'
-                                    )}
-                                  </button>
+                                  {/* Client Paid */}
+                                  <label className="flex items-center gap-2 cursor-pointer" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={job.clientPaid}
+                                      onChange={(e) => handleStatusChange(job.id, 'clientPaid', e.target.checked)}
+                                      className="w-5 h-5 text-emerald-600 rounded"
+                                    />
+                                    <span className="text-sm text-gray-700">Client Paid</span>
+                                  </label>
+
+                                  {/* Team Paid */}
+                                  <label className="flex items-center gap-2 cursor-pointer" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={job.teamPaid}
+                                      onChange={(e) => handleStatusChange(job.id, 'teamPaid', e.target.checked)}
+                                      className="w-5 h-5 text-blue-600 rounded"
+                                    />
+                                    <span className="text-sm text-gray-700">Team Paid</span>
+                                  </label>
                                 </div>
 
                                 {/* Edit/Delete Actions */}
@@ -1090,111 +1051,6 @@ function JobsPageContent() {
         properties={properties}
       />
 
-      {/* Team Payment Modal */}
-      <Modal
-        isOpen={showTeamPaymentModal}
-        onClose={() => {
-          setShowTeamPaymentModal(false)
-          setSelectedJobForTeamPayment(null)
-          setSelectedPaymentMethod('')
-        }}
-        title="Team Payment"
-        size="sm"
-      >
-        {selectedJobForTeamPayment && (
-          <div className="space-y-4">
-            <div className="text-center pb-4 border-b">
-              <p className="font-medium text-gray-900">{selectedJobForTeamPayment.property.name}</p>
-              <p className="text-sm text-gray-500">{format(parseISO(selectedJobForTeamPayment.date), 'MMMM d, yyyy')}</p>
-              <p className="text-lg font-semibold text-blue-600 mt-1">
-                {formatCurrency(calculateJobPayments(
-                  selectedJobForTeamPayment.rate,
-                  selectedJobForTeamPayment.expensePercent,
-                  selectedJobForTeamPayment.assignments.length
-                ).perPerson)} per person
-              </p>
-            </div>
-
-            {selectedJobForTeamPayment.teamPaid ? (
-              <>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-                  <Check size={32} className="mx-auto text-blue-600 mb-2" />
-                  <p className="font-medium text-blue-800">Team Already Paid</p>
-                  <p className="text-sm text-blue-600 mt-1">
-                    via {PAYMENT_METHODS.find(p => p.value === selectedJobForTeamPayment.assignments[0]?.paymentMethod)?.label || 'Unknown Method'}
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowTeamPaymentModal(false)
-                      setSelectedJobForTeamPayment(null)
-                    }}
-                  >
-                    Close
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-1 text-red-600 hover:bg-red-50"
-                    onClick={() => handleTeamPayment(selectedJobForTeamPayment.id, null)}
-                  >
-                    <X size={16} />
-                    Clear Payment
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Payment Method
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PAYMENT_METHODS.map((method) => (
-                      <button
-                        key={method.value}
-                        onClick={() => setSelectedPaymentMethod(method.value)}
-                        className={cn(
-                          'p-3 rounded-lg border-2 text-center font-medium transition-colors',
-                          selectedPaymentMethod === method.value
-                            ? 'border-blue-600 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 hover:border-gray-300 text-gray-700'
-                        )}
-                      >
-                        {method.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => {
-                      setShowTeamPaymentModal(false)
-                      setSelectedJobForTeamPayment(null)
-                      setSelectedPaymentMethod('')
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    disabled={!selectedPaymentMethod}
-                    onClick={() => handleTeamPayment(selectedJobForTeamPayment.id, selectedPaymentMethod)}
-                  >
-                    <Check size={16} />
-                    Mark as Paid
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   )
 }
