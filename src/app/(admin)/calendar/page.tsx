@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns'
-import { ChevronLeft, ChevronRight, RefreshCw, Settings, Plus, Calendar as CalendarIcon, List, Grid3X3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, Settings, Plus, Calendar as CalendarIcon, List, Grid3X3, Repeat } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
+import B2BBadge from '@/components/ui/B2BBadge'
 import { cn, getPropertyHexColor } from '@/lib/utils'
 import toast from 'react-hot-toast'
 
@@ -18,6 +19,7 @@ interface Job {
   time: string | null
   completed: boolean
   source: string
+  isBackToBack?: boolean
   property: { name: string; color: string | null }
 }
 
@@ -382,10 +384,13 @@ export default function CalendarPage() {
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <h3 className="font-semibold text-gray-900">
-                              {job.completed && <span className="opacity-60">✓ </span>}
-                              {job.property.name}
-                            </h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-gray-900">
+                                {job.completed && <span className="opacity-60">✓ </span>}
+                                {job.property.name}
+                              </h3>
+                              {job.isBackToBack && <B2BBadge size="sm" />}
+                            </div>
                             {job.time && (
                               <p className="text-sm text-gray-600">{job.time}</p>
                             )}

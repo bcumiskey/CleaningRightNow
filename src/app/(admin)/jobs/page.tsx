@@ -33,6 +33,7 @@ import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Badge from '@/components/ui/Badge'
+import B2BBadge from '@/components/ui/B2BBadge'
 import EmptyState from '@/components/ui/EmptyState'
 import { formatCurrency, calculateJobPayments, cn } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -79,6 +80,7 @@ interface Job {
   teamPaid: boolean
   teamPaidAt: string | null
   source: string
+  isBackToBack: boolean
   property: { id: string; name: string; color: string | null }
   assignments: JobAssignment[]
 }
@@ -722,6 +724,8 @@ function JobsPageContent() {
                                     {job.time}
                                   </span>
                                 )}
+                                {/* B2B badge for back-to-back jobs */}
+                                {job.isBackToBack && <B2BBadge size="sm" />}
                                 {/* Priority badge for high priority */}
                                 {job.priority <= 3 && (
                                   <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
