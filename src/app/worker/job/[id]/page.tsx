@@ -494,7 +494,7 @@ export default function WorkerJobDetailPage() {
             className="mt-3 block"
           >
             <Button variant="outline" size="sm" className="w-full">
-              View Property Details & Instructions
+              View Room Setup, Linens & Instructions
             </Button>
           </Link>
         </CardContent>
