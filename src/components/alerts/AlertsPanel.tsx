@@ -16,7 +16,7 @@ import { useRouter } from 'next/navigation'
 
 interface Alert {
   id: string
-  type: 'surprise_booking' | 'urgent_job' | 'low_inventory' | 'critical_issue' | 'unpaid_job'
+  type: 'surprise_booking' | 'urgent_job' | 'low_inventory' | 'critical_issue' | 'unpaid_job' | 'new_job_soon' | 'job_modified' | 'job_cancelled'
   severity: 'critical' | 'warning' | 'info'
   title: string
   description: string
@@ -26,6 +26,8 @@ interface Alert {
   date?: string
   actionUrl?: string
   createdAt: string
+  isRead?: boolean
+  isPersisted?: boolean
 }
 
 interface AlertsResponse {
@@ -34,21 +36,26 @@ interface AlertsResponse {
     total: number
     critical: number
     warnings: number
+    unreadPersisted?: number
   }
 }
 
 const getAlertIcon = (type: Alert['type']) => {
   switch (type) {
     case 'surprise_booking':
+    case 'new_job_soon':
       return Calendar
     case 'urgent_job':
       return Users
     case 'low_inventory':
       return Package
     case 'critical_issue':
+    case 'job_cancelled':
       return AlertCircle
     case 'unpaid_job':
       return DollarSign
+    case 'job_modified':
+      return Calendar
     default:
       return Bell
   }
@@ -107,9 +114,22 @@ export default function AlertsPanel() {
     }
   }
 
-  const dismissAlert = (alertId: string, e: React.MouseEvent) => {
+  const dismissAlert = async (alertId: string, isPersisted: boolean | undefined, e: React.MouseEvent) => {
     e.stopPropagation()
     setDismissedAlerts(prev => new Set([...prev, alertId]))
+
+    // If this is a persisted alert, mark it as read in the database
+    if (isPersisted) {
+      try {
+        await fetch('/api/alerts', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alertIds: [alertId] }),
+        })
+      } catch (error) {
+        console.error('Failed to mark alert as read:', error)
+      }
+    }
   }
 
   const visibleAlerts = data?.alerts.filter(a => !dismissedAlerts.has(a.id)) || []
@@ -195,7 +215,7 @@ export default function AlertsPanel() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={(e) => dismissAlert(alert.id, e)}
+                    onClick={(e) => dismissAlert(alert.id, alert.isPersisted, e)}
                     className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Dismiss"
                   >

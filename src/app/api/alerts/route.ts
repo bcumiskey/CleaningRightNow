@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
 interface Alert {
   id: string
-  type: 'surprise_booking' | 'urgent_job' | 'low_inventory' | 'critical_issue' | 'unpaid_job'
+  type: 'surprise_booking' | 'urgent_job' | 'low_inventory' | 'critical_issue' | 'unpaid_job' | 'new_job_soon' | 'job_modified' | 'job_cancelled'
   severity: 'critical' | 'warning' | 'info'
   title: string
   description: string
@@ -15,17 +15,45 @@ interface Alert {
   date?: Date
   actionUrl?: string
   createdAt: Date
+  isRead?: boolean
+  isPersisted?: boolean
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const showAll = searchParams.get('all') === 'true'
+
     const alerts: Alert[] = []
     const now = new Date()
+
+    // Fetch persisted alerts from database (calendar sync alerts)
+    const persistedAlerts = await prisma.alert.findMany({
+      where: showAll ? {} : { isRead: false },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })
+
+    for (const pa of persistedAlerts) {
+      alerts.push({
+        id: pa.id,
+        type: pa.type as Alert['type'],
+        severity: pa.type === 'job_cancelled' ? 'critical' : 'warning',
+        title: pa.type === 'new_job_soon' ? 'New Booking' : pa.type === 'job_modified' ? 'Schedule Changed' : pa.type === 'job_cancelled' ? 'Cancellation' : pa.message.substring(0, 30),
+        description: pa.message,
+        propertyId: pa.propertyId || undefined,
+        jobId: pa.jobId || undefined,
+        actionUrl: '/jobs',
+        createdAt: pa.createdAt,
+        isRead: pa.isRead,
+        isPersisted: true,
+      })
+    }
     const twoDaysFromNow = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000)
     const oneDayFromNow = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000)
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -234,16 +262,84 @@ export async function GET() {
       return b.createdAt.getTime() - a.createdAt.getTime()
     })
 
+    // Get unread count for persisted alerts
+    const unreadCount = await prisma.alert.count({
+      where: { isRead: false },
+    })
+
     return NextResponse.json({
       alerts,
       summary: {
         total: alerts.length,
         critical: alerts.filter(a => a.severity === 'critical').length,
         warnings: alerts.filter(a => a.severity === 'warning').length,
+        unreadPersisted: unreadCount,
       },
     })
   } catch (error) {
     console.error('Alerts GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch alerts' }, { status: 500 })
+  }
+}
+
+// PATCH - Mark persisted alerts as read
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { alertIds, markAllRead } = body
+
+    if (markAllRead) {
+      await prisma.alert.updateMany({
+        where: { isRead: false },
+        data: { isRead: true },
+      })
+      return NextResponse.json({ success: true, message: 'All alerts marked as read' })
+    }
+
+    if (alertIds && Array.isArray(alertIds) && alertIds.length > 0) {
+      await prisma.alert.updateMany({
+        where: { id: { in: alertIds } },
+        data: { isRead: true },
+      })
+      return NextResponse.json({ success: true, message: `${alertIds.length} alerts marked as read` })
+    }
+
+    return NextResponse.json({ error: 'No alert IDs provided' }, { status: 400 })
+  } catch (error) {
+    console.error('Alerts PATCH error:', error)
+    return NextResponse.json({ error: 'Failed to update alerts' }, { status: 500 })
+  }
+}
+
+// DELETE - Delete old alerts (cleanup)
+export async function DELETE(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const daysOld = parseInt(searchParams.get('daysOld') || '30', 10)
+
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld)
+
+    const result = await prisma.alert.deleteMany({
+      where: {
+        createdAt: { lt: cutoffDate },
+        isRead: true,
+      },
+    })
+
+    return NextResponse.json({ success: true, deleted: result.count })
+  } catch (error) {
+    console.error('Alerts DELETE error:', error)
+    return NextResponse.json({ error: 'Failed to delete alerts' }, { status: 500 })
   }
 }
