@@ -369,7 +369,10 @@ export async function POST(request: NextRequest) {
 
           if (existingJob) {
             // UPDATE existing job if date or details changed
-            const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
+            // Compare dates using YYYY-MM-DD strings to avoid timezone issues
+            const existingDateStr = existingJob.date.toISOString().substring(0, 10)
+            const newDateStr = jobDate.toISOString().substring(0, 10)
+            const dateChanged = existingDateStr !== newDateStr
             const renterChanged = existingJob.renterName !== renterName
 
             if (dateChanged || renterChanged) {
