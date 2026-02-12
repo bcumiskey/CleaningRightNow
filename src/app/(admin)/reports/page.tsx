@@ -124,9 +124,21 @@ const PERIODS = [
   { value: 'all_time', label: 'All Time' },
 ]
 
+type ReportTab = 'overview' | 'revenue' | 'jobs' | 'invoices' | 'properties' | 'team'
+
+const REPORT_TABS: { value: ReportTab; label: string; icon: typeof TrendingUp }[] = [
+  { value: 'overview', label: 'Overview', icon: Activity },
+  { value: 'revenue', label: 'Revenue', icon: DollarSign },
+  { value: 'jobs', label: 'Jobs', icon: Calendar },
+  { value: 'invoices', label: 'Invoices', icon: FileText },
+  { value: 'properties', label: 'Properties', icon: Building },
+  { value: 'team', label: 'Team', icon: Users },
+]
+
 export default function ReportsPage() {
   const router = useRouter()
   const [period, setPeriod] = useState('this_month')
+  const [activeTab, setActiveTab] = useState<ReportTab>('overview')
   const [data, setData] = useState<ReportData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [upcomingJobs, setUpcomingJobs] = useState<UpcomingJob[]>([])
@@ -206,643 +218,930 @@ export default function ReportsPage() {
           />
         </div>
 
-        {/* Week Outlook - Mobile Friendly */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Calendar size={20} />
-                Week Outlook
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push('/jobs')}
-              >
-                View All <ChevronRight size={16} />
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoadingOutlook ? (
-              <div className="text-center py-4 text-gray-500">Loading...</div>
-            ) : (
-              <div className="grid grid-cols-7 gap-1 sm:gap-2">
-                {Array.from({ length: 7 }).map((_, idx) => {
-                  const day = addDays(new Date(), idx)
-                  const dayJobs = upcomingJobs.filter(job =>
-                    isSameDay(new Date(job.date), day)
-                  )
-                  const isToday = idx === 0
-
-                  return (
-                    <div
-                      key={idx}
-                      className={cn(
-                        'flex flex-col items-center p-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors',
-                        isToday && 'bg-blue-50 ring-2 ring-blue-200'
-                      )}
-                      onClick={() => router.push('/jobs')}
-                    >
-                      <span className="text-xs text-gray-500 font-medium">
-                        {format(day, 'EEE')}
-                      </span>
-                      <span className={cn(
-                        'text-lg font-bold',
-                        isToday ? 'text-blue-600' : 'text-gray-900'
-                      )}>
-                        {format(day, 'd')}
-                      </span>
-
-                      {/* Job indicators */}
-                      <div className="mt-1 flex flex-col gap-0.5 w-full">
-                        {dayJobs.length === 0 ? (
-                          <div className="h-2 w-full bg-gray-100 rounded" />
-                        ) : dayJobs.length <= 3 ? (
-                          dayJobs.map((job) => (
-                            <div
-                              key={job.id}
-                              className={cn(
-                                'h-2 w-full rounded',
-                                job.completed ? 'bg-green-400' : 'bg-blue-400'
-                              )}
-                              style={job.property.color ? { backgroundColor: job.property.color } : undefined}
-                              title={job.property.name}
-                            />
-                          ))
-                        ) : (
-                          <>
-                            <div className="h-2 w-full bg-blue-400 rounded" />
-                            <div className="text-xs text-center text-gray-500 font-medium">
-                              +{dayJobs.length - 1}
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Job count badge for mobile */}
-                      {dayJobs.length > 0 && (
-                        <span className={cn(
-                          'mt-1 text-xs font-medium',
-                          dayJobs.some(j => !j.completed) ? 'text-blue-600' : 'text-green-600'
-                        )}>
-                          {dayJobs.length}
-                        </span>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* Today's jobs detail */}
-            {upcomingJobs.filter(j => isSameDay(new Date(j.date), new Date())).length > 0 && (
-              <div className="mt-4 pt-4 border-t">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Today&apos;s Jobs</h4>
-                <div className="space-y-2">
-                  {upcomingJobs
-                    .filter(j => isSameDay(new Date(j.date), new Date()))
-                    .map(job => (
-                      <div
-                        key={job.id}
-                        className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 cursor-pointer hover:bg-gray-100"
-                        onClick={() => router.push(`/jobs?highlight=${job.id}`)}
-                      >
-                        <div
-                          className="w-8 h-8 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: job.property.color ? `${job.property.color}30` : '#dbeafe' }}
-                        >
-                          <MapPin
-                            size={16}
-                            style={{ color: job.property.color || '#2563eb' }}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm truncate">{job.property.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {job.time || 'No time set'}
-                            {job.assignments.length > 0 && ` • ${job.assignments.map(a => a.teamMember.name).join(', ')}`}
-                          </p>
-                        </div>
-                        {job.completed ? (
-                          <Badge variant="success" className="text-xs">Done</Badge>
-                        ) : (
-                          <Badge variant="info" className="text-xs">Pending</Badge>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200 overflow-x-auto">
+          <nav className="flex gap-1 min-w-max">
+            {REPORT_TABS.map((tab) => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => setActiveTab(tab.value)}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap',
+                    activeTab === tab.value
+                      ? 'bg-white text-blue-600 border border-b-white border-gray-200 -mb-px'
+                      : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                  )}
+                >
+                  <Icon size={16} />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+        </div>
 
         {isLoading ? (
           <div className="text-center py-12 text-gray-500">Loading reports...</div>
         ) : data ? (
           <>
-            {/* Key Metrics */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <DollarSign className="text-green-600" size={20} />
-                    </div>
-                    {data.comparison.revenueChange !== 0 && (
-                      <div className={cn(
-                        'flex items-center text-xs font-medium',
-                        data.comparison.revenueChange > 0 ? 'text-green-600' : 'text-red-600'
-                      )}>
-                        {data.comparison.revenueChange > 0 ? (
-                          <ArrowUpRight size={14} />
-                        ) : (
-                          <ArrowDownRight size={14} />
-                        )}
-                        {Math.abs(data.comparison.revenueChange).toFixed(1)}%
+            {/* OVERVIEW TAB */}
+            {activeTab === 'overview' && (
+              <>
+                {/* Week Outlook - Mobile Friendly */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <Calendar size={20} />
+                        Week Outlook
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push('/jobs')}
+                      >
+                        View All <ChevronRight size={16} />
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {isLoadingOutlook ? (
+                      <div className="text-center py-4 text-gray-500">Loading...</div>
+                    ) : (
+                      <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                        {Array.from({ length: 7 }).map((_, idx) => {
+                          const day = addDays(new Date(), idx)
+                          const dayJobs = upcomingJobs.filter(job =>
+                            isSameDay(new Date(job.date), day)
+                          )
+                          const isToday = idx === 0
+
+                          return (
+                            <div
+                              key={idx}
+                              className={cn(
+                                'flex flex-col items-center p-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors',
+                                isToday && 'bg-blue-50 ring-2 ring-blue-200'
+                              )}
+                              onClick={() => router.push('/jobs')}
+                            >
+                              <span className="text-xs text-gray-500 font-medium">
+                                {format(day, 'EEE')}
+                              </span>
+                              <span className={cn(
+                                'text-lg font-bold',
+                                isToday ? 'text-blue-600' : 'text-gray-900'
+                              )}>
+                                {format(day, 'd')}
+                              </span>
+
+                              {/* Job indicators */}
+                              <div className="mt-1 flex flex-col gap-0.5 w-full">
+                                {dayJobs.length === 0 ? (
+                                  <div className="h-2 w-full bg-gray-100 rounded" />
+                                ) : dayJobs.length <= 3 ? (
+                                  dayJobs.map((job) => (
+                                    <div
+                                      key={job.id}
+                                      className={cn(
+                                        'h-2 w-full rounded',
+                                        job.completed ? 'bg-green-400' : 'bg-blue-400'
+                                      )}
+                                      style={job.property.color ? { backgroundColor: job.property.color } : undefined}
+                                      title={job.property.name}
+                                    />
+                                  ))
+                                ) : (
+                                  <>
+                                    <div className="h-2 w-full bg-blue-400 rounded" />
+                                    <div className="text-xs text-center text-gray-500 font-medium">
+                                      +{dayJobs.length - 1}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+
+                              {/* Job count badge for mobile */}
+                              {dayJobs.length > 0 && (
+                                <span className={cn(
+                                  'mt-1 text-xs font-medium',
+                                  dayJobs.some(j => !j.completed) ? 'text-blue-600' : 'text-green-600'
+                                )}>
+                                  {dayJobs.length}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.totalRevenue)}</p>
-                  <p className="text-sm text-gray-500">Total Revenue</p>
-                </CardContent>
-              </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Calendar className="text-blue-600" size={20} />
-                    </div>
-                    {data.comparison.jobsChange !== 0 && (
-                      <div className={cn(
-                        'flex items-center text-xs font-medium',
-                        data.comparison.jobsChange > 0 ? 'text-green-600' : 'text-red-600'
-                      )}>
-                        {data.comparison.jobsChange > 0 ? (
-                          <ArrowUpRight size={14} />
-                        ) : (
-                          <ArrowDownRight size={14} />
-                        )}
-                        {Math.abs(data.comparison.jobsChange).toFixed(1)}%
+                    {/* Today's jobs detail */}
+                    {upcomingJobs.filter(j => isSameDay(new Date(j.date), new Date())).length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Today&apos;s Jobs</h4>
+                        <div className="space-y-2">
+                          {upcomingJobs
+                            .filter(j => isSameDay(new Date(j.date), new Date()))
+                            .map(job => (
+                              <div
+                                key={job.id}
+                                className="flex items-center gap-3 p-2 rounded-lg bg-gray-50 cursor-pointer hover:bg-gray-100"
+                                onClick={() => router.push(`/jobs?highlight=${job.id}`)}
+                              >
+                                <div
+                                  className="w-8 h-8 rounded-lg flex items-center justify-center"
+                                  style={{ backgroundColor: job.property.color ? `${job.property.color}30` : '#dbeafe' }}
+                                >
+                                  <MapPin
+                                    size={16}
+                                    style={{ color: job.property.color || '#2563eb' }}
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm truncate">{job.property.name}</p>
+                                  <p className="text-xs text-gray-500">
+                                    {job.time || 'No time set'}
+                                    {job.assignments.length > 0 && ` • ${job.assignments.map(a => a.teamMember.name).join(', ')}`}
+                                  </p>
+                                </div>
+                                {job.completed ? (
+                                  <Badge variant="success" className="text-xs">Done</Badge>
+                                ) : (
+                                  <Badge variant="info" className="text-xs">Pending</Badge>
+                                )}
+                              </div>
+                            ))}
+                        </div>
                       </div>
                     )}
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{data.overview.completedJobs}</p>
-                  <p className="text-sm text-gray-500">Jobs Completed</p>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardContent className="p-4">
-                  <div className="p-2 bg-purple-100 rounded-lg w-fit">
-                    <TrendingUp className="text-purple-600" size={20} />
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.avgJobValue)}</p>
-                  <p className="text-sm text-gray-500">Avg Job Value</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="p-2 bg-amber-100 rounded-lg w-fit">
-                    <Users className="text-amber-600" size={20} />
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.teamPayments)}</p>
-                  <p className="text-sm text-gray-500">Team Earnings</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Second Row Metrics */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="p-2 bg-emerald-100 rounded-lg w-fit">
-                    <CheckCircle className="text-emerald-600" size={20} />
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{data.overview.completionRate.toFixed(0)}%</p>
-                  <p className="text-sm text-gray-500">Completion Rate</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="p-2 bg-orange-100 rounded-lg w-fit">
-                    <Clock className="text-orange-600" size={20} />
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{data.overview.pendingJobs}</p>
-                  <p className="text-sm text-gray-500">Pending Jobs</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="p-2 bg-red-100 rounded-lg w-fit">
-                    <AlertCircle className="text-red-600" size={20} />
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.invoices.outstandingRevenue)}</p>
-                  <p className="text-sm text-gray-500">Outstanding Invoices</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-4">
-                  <div className="p-2 bg-indigo-100 rounded-lg w-fit">
-                    <Activity className="text-indigo-600" size={20} />
-                  </div>
-                  <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.expenseDeductions)}</p>
-                  <p className="text-sm text-gray-500">Business Margin</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Revenue Trend Chart */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 size={20} />
-                    Revenue Trend (Last 6 Months)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-end gap-2 h-48">
-                    {data.monthlyTrends.map((month, idx) => (
-                      <div key={idx} className="flex-1 flex flex-col items-center gap-1">
-                        <div
-                          className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-                          style={{ height: `${(month.revenue / maxRevenue) * 160}px`, minHeight: '4px' }}
-                          title={formatCurrency(month.revenue)}
-                        />
-                        <span className="text-xs text-gray-500">{month.shortMonth}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between mt-4 text-sm text-gray-600">
-                    <span>
-                      Total: {formatCurrency(data.monthlyTrends.reduce((sum, m) => sum + m.revenue, 0))}
-                    </span>
-                    <span>
-                      {data.monthlyTrends.reduce((sum, m) => sum + m.jobs, 0)} jobs
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Invoice Status */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText size={20} />
-                    Invoice Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 bg-green-500 rounded" />
-                        <span>Paid</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold">{data.invoices.paid}</span>
-                        <span className="text-gray-500 ml-2">
-                          {formatCurrency(data.invoices.paidInvoiceRevenue)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 bg-amber-500 rounded" />
-                        <span>Sent (Outstanding)</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold">{data.invoices.sent}</span>
-                        <span className="text-gray-500 ml-2">
-                          {formatCurrency(data.invoices.outstandingRevenue)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 bg-gray-400 rounded" />
-                        <span>Draft</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-bold">{data.invoices.draft}</span>
-                      </div>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="pt-4">
-                      <div className="h-4 rounded-full overflow-hidden bg-gray-100 flex">
-                        {data.invoices.total > 0 && (
-                          <>
-                            <div
-                              className="bg-green-500 h-full"
-                              style={{ width: `${(data.invoices.paid / data.invoices.total) * 100}%` }}
-                            />
-                            <div
-                              className="bg-amber-500 h-full"
-                              style={{ width: `${(data.invoices.sent / data.invoices.total) * 100}%` }}
-                            />
-                            <div
-                              className="bg-gray-400 h-full"
-                              style={{ width: `${(data.invoices.draft / data.invoices.total) * 100}%` }}
-                            />
-                          </>
-                        )}
-                      </div>
-                      <p className="text-center text-sm text-gray-500 mt-2">
-                        {data.invoices.total} total invoices
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Tables Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Top Properties */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Building size={20} />
-                      Top Properties
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/properties')}
-                    >
-                      View All
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.topProperties.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No property data</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {data.topProperties.slice(0, 5).map((prop, idx) => (
-                        <div
-                          key={prop.id}
-                          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded"
-                          onClick={() => router.push(`/properties/${prop.id}/edit`)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-gray-400 text-sm w-4">{idx + 1}</span>
-                            <div>
-                              <p className="font-medium text-sm">{prop.name}</p>
-                              <p className="text-xs text-gray-500">{prop.jobs} jobs</p>
-                            </div>
-                          </div>
-                          <p className="font-semibold text-green-600">
-                            {formatCurrency(prop.revenue)}
-                          </p>
+                {/* Key Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <DollarSign className="text-green-600" size={20} />
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Top Owners */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Users size={20} />
-                      Top Owners
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/owners')}
-                    >
-                      View All
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.topOwners.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No owner data</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {data.topOwners.slice(0, 5).map((owner, idx) => (
-                        <div
-                          key={owner.id}
-                          className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-2 rounded"
-                          onClick={() => router.push(`/owners/${owner.id}`)}
-                        >
-                          <div className="flex items-center gap-3">
-                            <span className="text-gray-400 text-sm w-4">{idx + 1}</span>
-                            <div>
-                              <p className="font-medium text-sm">{owner.name}</p>
-                              <p className="text-xs text-gray-500">{owner.jobs} jobs</p>
-                            </div>
-                          </div>
-                          <p className="font-semibold text-green-600">
-                            {formatCurrency(owner.revenue)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Team Performance */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <Users size={20} />
-                      Team Performance
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/team')}
-                    >
-                      View All
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.teamStats.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No team data</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {data.teamStats.slice(0, 5).map((member, idx) => (
-                        <div key={member.id} className="flex items-center justify-between p-2">
-                          <div className="flex items-center gap-3">
-                            <span className="text-gray-400 text-sm w-4">{idx + 1}</span>
-                            <div>
-                              <p className="font-medium text-sm">{member.name}</p>
-                              <p className="text-xs text-gray-500">{member.jobs} jobs</p>
-                            </div>
-                          </div>
-                          <p className="font-semibold text-amber-600">
-                            {formatCurrency(member.earnings)}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Recent Jobs */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <CheckCircle size={20} />
-                      Recent Jobs
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/schedule')}
-                    >
-                      View All
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.recentJobs.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No recent jobs</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {data.recentJobs.slice(0, 5).map((job) => (
-                        <div
-                          key={job.id}
-                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded"
-                        >
-                          <div className="flex items-center gap-3">
-                            {job.completed ? (
-                              <CheckCircle size={16} className="text-green-500" />
+                        {data.comparison.revenueChange !== 0 && (
+                          <div className={cn(
+                            'flex items-center text-xs font-medium',
+                            data.comparison.revenueChange > 0 ? 'text-green-600' : 'text-red-600'
+                          )}>
+                            {data.comparison.revenueChange > 0 ? (
+                              <ArrowUpRight size={14} />
                             ) : (
-                              <Clock size={16} className="text-amber-500" />
+                              <ArrowDownRight size={14} />
                             )}
+                            {Math.abs(data.comparison.revenueChange).toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.totalRevenue)}</p>
+                      <p className="text-sm text-gray-500">Total Revenue</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          <Calendar className="text-blue-600" size={20} />
+                        </div>
+                        {data.comparison.jobsChange !== 0 && (
+                          <div className={cn(
+                            'flex items-center text-xs font-medium',
+                            data.comparison.jobsChange > 0 ? 'text-green-600' : 'text-red-600'
+                          )}>
+                            {data.comparison.jobsChange > 0 ? (
+                              <ArrowUpRight size={14} />
+                            ) : (
+                              <ArrowDownRight size={14} />
+                            )}
+                            {Math.abs(data.comparison.jobsChange).toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.completedJobs}</p>
+                      <p className="text-sm text-gray-500">Jobs Completed</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-purple-100 rounded-lg w-fit">
+                        <TrendingUp className="text-purple-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.avgJobValue)}</p>
+                      <p className="text-sm text-gray-500">Avg Job Value</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-amber-100 rounded-lg w-fit">
+                        <Users className="text-amber-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.teamPayments)}</p>
+                      <p className="text-sm text-gray-500">Team Earnings</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Second Row Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-emerald-100 rounded-lg w-fit">
+                        <CheckCircle className="text-emerald-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.completionRate.toFixed(0)}%</p>
+                      <p className="text-sm text-gray-500">Completion Rate</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-orange-100 rounded-lg w-fit">
+                        <Clock className="text-orange-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.pendingJobs}</p>
+                      <p className="text-sm text-gray-500">Pending Jobs</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-red-100 rounded-lg w-fit">
+                        <AlertCircle className="text-red-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.invoices.outstandingRevenue)}</p>
+                      <p className="text-sm text-gray-500">Outstanding Invoices</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-indigo-100 rounded-lg w-fit">
+                        <Activity className="text-indigo-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.expenseDeductions)}</p>
+                      <p className="text-sm text-gray-500">Business Margin</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Business Summary (Overview) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Business Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <Building className="text-blue-600" size={28} />
+                        </div>
+                        <p className="text-3xl font-bold">{data.counts.properties}</p>
+                        <p className="text-gray-500">Properties</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <Users className="text-purple-600" size={28} />
+                        </div>
+                        <p className="text-3xl font-bold">{data.counts.owners}</p>
+                        <p className="text-gray-500">Owners</p>
+                      </div>
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                          <Users className="text-amber-600" size={28} />
+                        </div>
+                        <p className="text-3xl font-bold">{data.counts.teamMembers}</p>
+                        <p className="text-gray-500">Team Members</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* REVENUE TAB */}
+            {activeTab === 'revenue' && (
+              <>
+                {/* Revenue Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="p-2 bg-green-100 rounded-lg">
+                          <DollarSign className="text-green-600" size={20} />
+                        </div>
+                        {data.comparison.revenueChange !== 0 && (
+                          <div className={cn(
+                            'flex items-center text-xs font-medium',
+                            data.comparison.revenueChange > 0 ? 'text-green-600' : 'text-red-600'
+                          )}>
+                            {data.comparison.revenueChange > 0 ? (
+                              <ArrowUpRight size={14} />
+                            ) : (
+                              <ArrowDownRight size={14} />
+                            )}
+                            {Math.abs(data.comparison.revenueChange).toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.totalRevenue)}</p>
+                      <p className="text-sm text-gray-500">Total Revenue</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-amber-100 rounded-lg w-fit">
+                        <Users className="text-amber-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.teamPayments)}</p>
+                      <p className="text-sm text-gray-500">Team Earnings</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-purple-100 rounded-lg w-fit">
+                        <TrendingUp className="text-purple-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.avgJobValue)}</p>
+                      <p className="text-sm text-gray-500">Avg Job Value</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-indigo-100 rounded-lg w-fit">
+                        <Activity className="text-indigo-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.expenseDeductions)}</p>
+                      <p className="text-sm text-gray-500">Business Margin</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Revenue Trend Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 size={20} />
+                      Revenue Trend (Last 6 Months)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-end gap-2 h-48">
+                      {data.monthlyTrends.map((month, idx) => (
+                        <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+                          <div
+                            className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
+                            style={{ height: `${(month.revenue / maxRevenue) * 160}px`, minHeight: '4px' }}
+                            title={formatCurrency(month.revenue)}
+                          />
+                          <span className="text-xs text-gray-500">{month.shortMonth}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between mt-4 text-sm text-gray-600">
+                      <span>
+                        Total: {formatCurrency(data.monthlyTrends.reduce((sum, m) => sum + m.revenue, 0))}
+                      </span>
+                      <span>
+                        {data.monthlyTrends.reduce((sum, m) => sum + m.jobs, 0)} jobs
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Monthly Breakdown */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Monthly Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {data.monthlyTrends.map((month, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div>
+                            <p className="font-medium">{month.month}</p>
+                            <p className="text-sm text-gray-500">{month.jobs} jobs</p>
+                          </div>
+                          <p className="text-lg font-bold text-green-600">{formatCurrency(month.revenue)}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* JOBS TAB */}
+            {activeTab === 'jobs' && (
+              <>
+                {/* Job Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="p-2 bg-blue-100 rounded-lg">
+                          <Calendar className="text-blue-600" size={20} />
+                        </div>
+                        {data.comparison.jobsChange !== 0 && (
+                          <div className={cn(
+                            'flex items-center text-xs font-medium',
+                            data.comparison.jobsChange > 0 ? 'text-green-600' : 'text-red-600'
+                          )}>
+                            {data.comparison.jobsChange > 0 ? (
+                              <ArrowUpRight size={14} />
+                            ) : (
+                              <ArrowDownRight size={14} />
+                            )}
+                            {Math.abs(data.comparison.jobsChange).toFixed(1)}%
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.totalJobs}</p>
+                      <p className="text-sm text-gray-500">Total Jobs</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-green-100 rounded-lg w-fit">
+                        <CheckCircle className="text-green-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.completedJobs}</p>
+                      <p className="text-sm text-gray-500">Completed</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-orange-100 rounded-lg w-fit">
+                        <Clock className="text-orange-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.pendingJobs}</p>
+                      <p className="text-sm text-gray-500">Pending</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-emerald-100 rounded-lg w-fit">
+                        <Activity className="text-emerald-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.completionRate.toFixed(0)}%</p>
+                      <p className="text-sm text-gray-500">Completion Rate</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Recent Jobs */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <CheckCircle size={20} />
+                        Recent Jobs
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push('/jobs')}
+                      >
+                        View All
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.recentJobs.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">No recent jobs</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {data.recentJobs.map((job) => (
+                          <div
+                            key={job.id}
+                            className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg"
+                          >
+                            <div className="flex items-center gap-3">
+                              {job.completed ? (
+                                <CheckCircle size={18} className="text-green-500" />
+                              ) : (
+                                <Clock size={18} className="text-amber-500" />
+                              )}
+                              <div>
+                                <p className="font-medium">{job.propertyName}</p>
+                                <p className="text-sm text-gray-500">
+                                  {format(new Date(job.date), 'MMM d, yyyy')}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-semibold">{formatCurrency(job.rate)}</p>
+                              {job.completed && (
+                                <Badge variant={job.clientPaid ? 'success' : 'warning'} className="text-xs">
+                                  {job.clientPaid ? 'Paid' : 'Unpaid'}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* INVOICES TAB */}
+            {activeTab === 'invoices' && (
+              <>
+                {/* Invoice Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-blue-100 rounded-lg w-fit">
+                        <FileText className="text-blue-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.invoices.total}</p>
+                      <p className="text-sm text-gray-500">Total Invoices</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-green-100 rounded-lg w-fit">
+                        <CheckCircle className="text-green-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.invoices.paidInvoiceRevenue)}</p>
+                      <p className="text-sm text-gray-500">Paid ({data.invoices.paid})</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-amber-100 rounded-lg w-fit">
+                        <Clock className="text-amber-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.invoices.outstandingRevenue)}</p>
+                      <p className="text-sm text-gray-500">Outstanding ({data.invoices.sent})</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-gray-100 rounded-lg w-fit">
+                        <FileText className="text-gray-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.invoices.draft}</p>
+                      <p className="text-sm text-gray-500">Drafts</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Invoice Status Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText size={20} />
+                      Invoice Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-4 h-4 bg-green-500 rounded" />
+                          <span>Paid</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold">{data.invoices.paid}</span>
+                          <span className="text-gray-500 ml-2">
+                            {formatCurrency(data.invoices.paidInvoiceRevenue)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-4 h-4 bg-amber-500 rounded" />
+                          <span>Sent (Outstanding)</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold">{data.invoices.sent}</span>
+                          <span className="text-gray-500 ml-2">
+                            {formatCurrency(data.invoices.outstandingRevenue)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-4 h-4 bg-gray-400 rounded" />
+                          <span>Draft</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="font-bold">{data.invoices.draft}</span>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="pt-4">
+                        <div className="h-6 rounded-full overflow-hidden bg-gray-100 flex">
+                          {data.invoices.total > 0 && (
+                            <>
+                              <div
+                                className="bg-green-500 h-full"
+                                style={{ width: `${(data.invoices.paid / data.invoices.total) * 100}%` }}
+                              />
+                              <div
+                                className="bg-amber-500 h-full"
+                                style={{ width: `${(data.invoices.sent / data.invoices.total) * 100}%` }}
+                              />
+                              <div
+                                className="bg-gray-400 h-full"
+                                style={{ width: `${(data.invoices.draft / data.invoices.total) * 100}%` }}
+                              />
+                            </>
+                          )}
+                        </div>
+                        <p className="text-center text-sm text-gray-500 mt-2">
+                          {data.invoices.total} total invoices
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Recent Invoices */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <FileText size={20} />
+                        Recent Invoices
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push('/invoices')}
+                      >
+                        View All
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.recentInvoices.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">No recent invoices</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {data.recentInvoices.map((invoice) => (
+                          <div
+                            key={invoice.id}
+                            className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg cursor-pointer"
+                            onClick={() => router.push(`/invoices/${invoice.id}`)}
+                          >
                             <div>
-                              <p className="text-sm font-medium">{job.propertyName}</p>
-                              <p className="text-xs text-gray-500">
-                                {format(new Date(job.date), 'MMM d, yyyy')}
+                              <p className="font-medium">{invoice.invoiceNumber}</p>
+                              <p className="text-sm text-gray-500">
+                                {invoice.propertyName} - {format(new Date(invoice.invoiceDate), 'MMM d')}
                               </p>
                             </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-semibold">{formatCurrency(job.rate)}</p>
-                            {job.completed && (
-                              <Badge variant={job.clientPaid ? 'success' : 'warning'} className="text-xs">
-                                {job.clientPaid ? 'Paid' : 'Unpaid'}
+                            <div className="text-right flex items-center gap-2">
+                              <p className="font-semibold">{formatCurrency(invoice.total)}</p>
+                              <Badge
+                                variant={
+                                  invoice.status === 'paid'
+                                    ? 'success'
+                                    : invoice.status === 'sent'
+                                    ? 'warning'
+                                    : 'default'
+                                }
+                              >
+                                {invoice.status}
                               </Badge>
-                            )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
 
-              {/* Recent Invoices */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <FileText size={20} />
-                      Recent Invoices
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => router.push('/invoices')}
-                    >
-                      View All
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.recentInvoices.length === 0 ? (
-                    <p className="text-gray-500 text-center py-4">No recent invoices</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {data.recentInvoices.slice(0, 5).map((invoice) => (
-                        <div
-                          key={invoice.id}
-                          className="flex items-center justify-between p-2 hover:bg-gray-50 rounded cursor-pointer"
-                          onClick={() => router.push(`/invoices/${invoice.id}`)}
+            {/* PROPERTIES TAB */}
+            {activeTab === 'properties' && (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Top Properties */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Building size={20} />
+                          Top Properties by Revenue
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => router.push('/properties')}
                         >
-                          <div>
-                            <p className="text-sm font-medium">{invoice.invoiceNumber}</p>
-                            <p className="text-xs text-gray-500">
-                              {invoice.propertyName} - {format(new Date(invoice.invoiceDate), 'MMM d')}
+                          View All
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {data.topProperties.length === 0 ? (
+                        <p className="text-gray-500 text-center py-4">No property data</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {data.topProperties.map((prop, idx) => (
+                            <div
+                              key={prop.id}
+                              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-3 rounded-lg"
+                              onClick={() => router.push(`/properties/${prop.id}/edit`)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-gray-400 text-sm w-6 text-center">{idx + 1}</span>
+                                <div>
+                                  <p className="font-medium">{prop.name}</p>
+                                  <p className="text-sm text-gray-500">{prop.jobs} jobs • Avg {formatCurrency(prop.avgRate)}</p>
+                                </div>
+                              </div>
+                              <p className="font-bold text-green-600 text-lg">
+                                {formatCurrency(prop.revenue)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Top Owners */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <Users size={20} />
+                          Top Owners by Revenue
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => router.push('/owners')}
+                        >
+                          View All
+                        </Button>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {data.topOwners.length === 0 ? (
+                        <p className="text-gray-500 text-center py-4">No owner data</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {data.topOwners.map((owner, idx) => (
+                            <div
+                              key={owner.id}
+                              className="flex items-center justify-between cursor-pointer hover:bg-gray-50 p-3 rounded-lg"
+                              onClick={() => router.push(`/owners/${owner.id}`)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-gray-400 text-sm w-6 text-center">{idx + 1}</span>
+                                <div>
+                                  <p className="font-medium">{owner.name}</p>
+                                  <p className="text-sm text-gray-500">{owner.jobs} jobs</p>
+                                </div>
+                              </div>
+                              <p className="font-bold text-green-600 text-lg">
+                                {formatCurrency(owner.revenue)}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Property Summary */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Property Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      <div className="text-center p-4 bg-blue-50 rounded-lg">
+                        <p className="text-3xl font-bold text-blue-600">{data.counts.properties}</p>
+                        <p className="text-sm text-gray-500">Total Properties</p>
+                      </div>
+                      <div className="text-center p-4 bg-purple-50 rounded-lg">
+                        <p className="text-3xl font-bold text-purple-600">{data.counts.owners}</p>
+                        <p className="text-sm text-gray-500">Total Owners</p>
+                      </div>
+                      <div className="text-center p-4 bg-green-50 rounded-lg">
+                        <p className="text-3xl font-bold text-green-600">{formatCurrency(data.overview.totalRevenue)}</p>
+                        <p className="text-sm text-gray-500">Total Revenue</p>
+                      </div>
+                      <div className="text-center p-4 bg-amber-50 rounded-lg">
+                        <p className="text-3xl font-bold text-amber-600">{data.overview.totalJobs}</p>
+                        <p className="text-sm text-gray-500">Total Jobs</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {/* TEAM TAB */}
+            {activeTab === 'team' && (
+              <>
+                {/* Team Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-amber-100 rounded-lg w-fit">
+                        <Users className="text-amber-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.counts.teamMembers}</p>
+                      <p className="text-sm text-gray-500">Team Members</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-green-100 rounded-lg w-fit">
+                        <DollarSign className="text-green-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{formatCurrency(data.overview.teamPayments)}</p>
+                      <p className="text-sm text-gray-500">Total Team Earnings</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="p-2 bg-blue-100 rounded-lg w-fit">
+                        <Calendar className="text-blue-600" size={20} />
+                      </div>
+                      <p className="text-2xl font-bold mt-2">{data.overview.completedJobs}</p>
+                      <p className="text-sm text-gray-500">Jobs Completed</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Team Performance */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <Users size={20} />
+                        Team Performance
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => router.push('/team')}
+                      >
+                        Manage Team
+                      </Button>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.teamStats.length === 0 ? (
+                      <p className="text-gray-500 text-center py-4">No team data</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {data.teamStats.map((member, idx) => (
+                          <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
+                                <span className="text-amber-700 font-bold">{idx + 1}</span>
+                              </div>
+                              <div>
+                                <p className="font-medium">{member.name}</p>
+                                <p className="text-sm text-gray-500">{member.jobs} jobs completed</p>
+                              </div>
+                            </div>
+                            <p className="font-bold text-amber-600 text-lg">
+                              {formatCurrency(member.earnings)}
                             </p>
                           </div>
-                          <div className="text-right flex items-center gap-2">
-                            <p className="text-sm font-semibold">{formatCurrency(invoice.total)}</p>
-                            <Badge
-                              variant={
-                                invoice.status === 'paid'
-                                  ? 'success'
-                                  : invoice.status === 'sent'
-                                  ? 'warning'
-                                  : 'default'
-                              }
-                              className="text-xs"
-                            >
-                              {invoice.status}
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Business Summary */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Business Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <Building className="text-blue-600" size={28} />
-                    </div>
-                    <p className="text-3xl font-bold">{data.counts.properties}</p>
-                    <p className="text-gray-500">Properties</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <Users className="text-purple-600" size={28} />
-                    </div>
-                    <p className="text-3xl font-bold">{data.counts.owners}</p>
-                    <p className="text-gray-500">Owners</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <Users className="text-amber-600" size={28} />
-                    </div>
-                    <p className="text-3xl font-bold">{data.counts.teamMembers}</p>
-                    <p className="text-gray-500">Team Members</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
           </>
         ) : (
           <div className="text-center py-12 text-gray-500">Failed to load report data</div>
