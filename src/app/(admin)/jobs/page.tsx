@@ -8,6 +8,8 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Pencil,
   Trash2,
   Check,
@@ -22,6 +24,7 @@ import {
   Pause,
   Building,
   History,
+  AlertCircle,
 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
@@ -36,9 +39,32 @@ import toast from 'react-hot-toast'
 
 interface JobAssignment {
   id: string
-  teamMember: { id: string; name: string }
+  teamMember: { id: string; name: string; imageUrl?: string | null }
   paidAt: string | null
   paymentMethod: string | null
+}
+
+// Helper to get initials from name
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2)
+}
+
+// Helper to generate consistent color from string
+const getAvatarColor = (name: string) => {
+  const colors = [
+    'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-pink-500',
+    'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-cyan-500'
+  ]
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return colors[Math.abs(hash) % colors.length]
 }
 
 interface Job {
@@ -86,6 +112,7 @@ interface Property {
 interface TeamMember {
   id: string
   name: string
+  imageUrl?: string | null
 }
 
 interface Schedule {
@@ -169,6 +196,21 @@ function JobsPageContent() {
   const [showTeamPaymentModal, setShowTeamPaymentModal] = useState(false)
   const [selectedJobForTeamPayment, setSelectedJobForTeamPayment] = useState<Job | null>(null)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('')
+
+  // Expanded jobs state (for mobile-friendly expand/collapse)
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
+
+  const toggleJobExpanded = (jobId: string) => {
+    setExpandedJobs(prev => {
+      const next = new Set(prev)
+      if (next.has(jobId)) {
+        next.delete(jobId)
+      } else {
+        next.add(jobId)
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     fetchJobs()
@@ -612,6 +654,7 @@ function JobsPageContent() {
                 <div className="space-y-2">
                   {jobsByDate[dateKey].map(job => {
                     const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+                    const isExpanded = expandedJobs.has(job.id)
                     // Get background color style based on property color
                     const getJobStyle = () => {
                       if (job.property.color) {
@@ -631,148 +674,204 @@ function JobsPageContent() {
                         key={job.id}
                         id={`job-${job.id}`}
                         className={cn(
-                          'transition-all',
+                          'transition-all cursor-pointer',
                           !job.property.color && (job.completed ? 'bg-green-50 border-green-200' : 'bg-white')
                         )}
                         style={getJobStyle()}
                       >
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            {/* Left: Property & Time */}
-                            <div className="flex items-center gap-4">
-                              <div
-                                className={cn(
-                                  'w-12 h-12 rounded-lg flex items-center justify-center',
-                                  !job.property.color && (job.completed ? 'bg-green-200' : 'bg-blue-100')
-                                )}
-                                style={job.property.color ? { backgroundColor: `${job.property.color}30` } : undefined}
-                              >
-                                {job.completed ? (
-                                  <Check
-                                    className={!job.property.color ? 'text-green-700' : ''}
-                                    style={job.property.color ? { color: job.property.color } : undefined}
-                                    size={24}
-                                  />
-                                ) : (
-                                  <MapPin
-                                    className={!job.property.color ? 'text-blue-600' : ''}
-                                    style={job.property.color ? { color: job.property.color } : undefined}
-                                    size={24}
-                                  />
-                                )}
-                              </div>
-                              <div>
-                                <h3 className="font-semibold text-gray-900">{job.property.name}</h3>
-                                <div className="flex items-center gap-3 text-sm text-gray-500">
-                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                                    job.priority <= 2 ? 'bg-red-100 text-red-700' :
-                                    job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
-                                    job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
-                                    'bg-blue-100 text-blue-700'
-                                  }`}>
-                                    P{job.priority}
-                                  </span>
-                                  {job.time && (
-                                    <span className="flex items-center gap-1">
-                                      <Clock size={14} />
-                                      {job.time}
-                                    </span>
-                                  )}
-                                  <span className="capitalize">{job.source}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Middle: Team */}
-                            <div className="flex items-center gap-2">
-                              <Users size={16} className="text-gray-400" />
-                              {job.assignments.length > 0 ? (
-                                <div className="flex gap-1">
-                                  {job.assignments.map(a => (
-                                    <Badge key={a.teamMember.id} variant="info">
-                                      {a.teamMember.name}
-                                    </Badge>
-                                  ))}
-                                </div>
+                        <CardContent className="p-3 sm:p-4">
+                          {/* Main row - always visible */}
+                          <div
+                            className="flex items-center gap-3"
+                            onClick={() => toggleJobExpanded(job.id)}
+                          >
+                            {/* Property Icon */}
+                            <div
+                              className={cn(
+                                'w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center flex-shrink-0',
+                                !job.property.color && (job.completed ? 'bg-green-200' : 'bg-blue-100')
+                              )}
+                              style={job.property.color ? { backgroundColor: `${job.property.color}30` } : undefined}
+                            >
+                              {job.completed ? (
+                                <Check
+                                  className={!job.property.color ? 'text-green-700' : ''}
+                                  style={job.property.color ? { color: job.property.color } : undefined}
+                                  size={20}
+                                />
                               ) : (
-                                <span className="text-sm text-gray-400">Unassigned</span>
+                                <MapPin
+                                  className={!job.property.color ? 'text-blue-600' : ''}
+                                  style={job.property.color ? { color: job.property.color } : undefined}
+                                  size={20}
+                                />
                               )}
                             </div>
 
-                            {/* Right: Payment Info & Actions */}
-                            <div className="flex items-center gap-6">
-                              <div className="text-right">
-                                <div className="font-semibold text-lg">{formatCurrency(job.rate)}</div>
-                                {job.assignments.length > 0 && (
-                                  <div className="text-xs text-gray-500">
-                                    {formatCurrency(payments.perPerson)} each
-                                  </div>
+                            {/* Property Name & Rate */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h3 className="font-semibold text-gray-900 truncate">{job.property.name}</h3>
+                                <span className="font-semibold text-gray-900 flex-shrink-0">{formatCurrency(job.rate)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {/* Time if exists */}
+                                {job.time && (
+                                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                                    <Clock size={12} />
+                                    {job.time}
+                                  </span>
+                                )}
+                                {/* Priority badge for high priority */}
+                                {job.priority <= 3 && (
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    job.priority <= 2 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    P{job.priority}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Team Member Avatars */}
+                            <div className="flex items-center -space-x-2 flex-shrink-0">
+                              {job.assignments.length > 0 ? (
+                                <>
+                                  {job.assignments.slice(0, 3).map((a, idx) => (
+                                    <div
+                                      key={a.teamMember.id}
+                                      className={cn(
+                                        'w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium border-2 border-white',
+                                        getAvatarColor(a.teamMember.name)
+                                      )}
+                                      style={{ zIndex: 3 - idx }}
+                                      title={a.teamMember.name}
+                                    >
+                                      {getInitials(a.teamMember.name)}
+                                    </div>
+                                  ))}
+                                  {job.assignments.length > 3 && (
+                                    <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-400 text-white text-xs font-medium border-2 border-white">
+                                      +{job.assignments.length - 3}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-200 text-gray-400 border-2 border-white" title="Unassigned">
+                                  <AlertCircle size={16} />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Expand/Collapse Indicator */}
+                            <div className="flex-shrink-0 text-gray-400">
+                              {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                            </div>
+                          </div>
+
+                          {/* Expanded Details */}
+                          {isExpanded && (
+                            <div className="mt-4 pt-4 border-t space-y-4">
+                              {/* Team Members Detail */}
+                              <div className="flex flex-wrap gap-2">
+                                {job.assignments.length > 0 ? (
+                                  job.assignments.map(a => (
+                                    <div key={a.teamMember.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                                      <div className={cn(
+                                        'w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium',
+                                        getAvatarColor(a.teamMember.name)
+                                      )}>
+                                        {getInitials(a.teamMember.name)}
+                                      </div>
+                                      <span className="text-sm font-medium text-gray-700">{a.teamMember.name}</span>
+                                      {job.assignments.length > 0 && (
+                                        <span className="text-xs text-gray-500">
+                                          {formatCurrency(payments.perPerson)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))
+                                ) : (
+                                  <span className="text-sm text-amber-600 flex items-center gap-1">
+                                    <AlertCircle size={14} />
+                                    No team assigned
+                                  </span>
                                 )}
                               </div>
 
-                              {/* Status Controls */}
-                              <div className="flex items-center gap-4 border-l pl-4">
-                                {/* Job Completion */}
-                                <label className="flex flex-col items-center cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={job.completed}
-                                    onChange={(e) => handleStatusChange(job.id, 'completed', e.target.checked)}
-                                    className="w-5 h-5 text-green-600 rounded mb-1"
-                                  />
-                                  <span className="text-xs text-gray-500">Complete</span>
-                                </label>
-                                {/* Team Payment - shows method selector or paid status */}
-                                <div className="flex flex-col items-center">
-                                  {job.teamPaid ? (
-                                    <button
-                                      onClick={() => {
-                                        setSelectedJobForTeamPayment(job)
-                                        setShowTeamPaymentModal(true)
-                                      }}
-                                      className="flex flex-col items-center group"
-                                    >
-                                      <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center mb-1">
-                                        <Check size={14} className="text-white" />
-                                      </div>
-                                      <span className="text-xs text-blue-600 group-hover:underline">
-                                        {job.assignments[0]?.paymentMethod
-                                          ? PAYMENT_METHODS.find(p => p.value === job.assignments[0]?.paymentMethod)?.label || 'Paid'
-                                          : 'Paid'}
-                                      </span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => {
-                                        setSelectedJobForTeamPayment(job)
-                                        setShowTeamPaymentModal(true)
-                                      }}
-                                      className="flex flex-col items-center group"
-                                    >
-                                      <div className="w-5 h-5 border-2 border-gray-300 rounded group-hover:border-blue-400 mb-1" />
-                                      <span className="text-xs text-gray-500 group-hover:text-blue-600">Team</span>
-                                    </button>
-                                  )}
-                                </div>
+                              {/* Meta Info */}
+                              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  job.priority <= 2 ? 'bg-red-100 text-red-700' :
+                                  job.priority <= 4 ? 'bg-amber-100 text-amber-700' :
+                                  job.priority <= 6 ? 'bg-gray-100 text-gray-700' :
+                                  'bg-blue-100 text-blue-700'
+                                }`}>
+                                  Priority {job.priority}
+                                </span>
+                                <span className="capitalize">Source: {job.source}</span>
                               </div>
 
-                              {/* Actions */}
-                              <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => handleEdit(job)}
-                                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                >
-                                  <Pencil size={16} />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(job.id)}
-                                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
+                              {/* Actions Row */}
+                              <div className="flex items-center justify-between pt-2 border-t">
+                                {/* Status Controls */}
+                                <div className="flex items-center gap-4">
+                                  {/* Job Completion */}
+                                  <label className="flex items-center gap-2 cursor-pointer" onClick={e => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={job.completed}
+                                      onChange={(e) => handleStatusChange(job.id, 'completed', e.target.checked)}
+                                      className="w-5 h-5 text-green-600 rounded"
+                                    />
+                                    <span className="text-sm text-gray-700">Complete</span>
+                                  </label>
+
+                                  {/* Team Payment */}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedJobForTeamPayment(job)
+                                      setShowTeamPaymentModal(true)
+                                    }}
+                                    className={cn(
+                                      'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium',
+                                      job.teamPaid
+                                        ? 'bg-blue-100 text-blue-700'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    )}
+                                  >
+                                    {job.teamPaid ? (
+                                      <>
+                                        <Check size={14} />
+                                        {job.assignments[0]?.paymentMethod
+                                          ? PAYMENT_METHODS.find(p => p.value === job.assignments[0]?.paymentMethod)?.label
+                                          : 'Paid'}
+                                      </>
+                                    ) : (
+                                      'Pay Team'
+                                    )}
+                                  </button>
+                                </div>
+
+                                {/* Edit/Delete Actions */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleEdit(job) }}
+                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                  >
+                                    <Pencil size={18} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDelete(job.id) }}
+                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          )}
                         </CardContent>
                       </Card>
                     )
