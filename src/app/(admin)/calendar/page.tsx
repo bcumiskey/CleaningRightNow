@@ -17,6 +17,7 @@ interface Job {
   completed: boolean
   source: string
   property: { name: string; color: string | null }
+  assignments?: { teamMember: { name: string } }[]
 }
 
 interface HoverPreview {
@@ -293,6 +294,11 @@ export default function CalendarPage() {
                             {job.completed && <span className="opacity-60">✓ </span>}
                             {job.time && <span className="font-medium">{job.time} </span>}
                             {job.property.name}
+                            {job.assignments && job.assignments.length > 0 && (
+                              <div className="text-[10px] opacity-70 truncate">
+                                {job.assignments.map(a => a.teamMember.name.split(' ')[0]).join(', ')}
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -350,6 +356,11 @@ export default function CalendarPage() {
                     </div>
                     {job.time && (
                       <div className="text-xs opacity-75">{job.time}</div>
+                    )}
+                    {job.assignments && job.assignments.length > 0 && (
+                      <div className="text-xs opacity-75">
+                        Team: {job.assignments.map(a => a.teamMember.name).join(', ')}
+                      </div>
                     )}
                   </div>
                 )

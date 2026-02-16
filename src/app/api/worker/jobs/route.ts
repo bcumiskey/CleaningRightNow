@@ -11,12 +11,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const sessionUser = session.user as { id?: string; role?: string; teamMemberId?: string }
+    const teamMemberId = sessionUser.teamMemberId
+
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const propertyId = searchParams.get('propertyId')
 
     const whereClause: Record<string, unknown> = {}
+
+    // Filter by team member - workers only see their assigned jobs
+    if (teamMemberId) {
+      whereClause.assignments = { some: { teamMemberId } }
+    }
+
     if (startDate) {
       // parseISO treats the date string as local time, then startOfDay ensures we get the beginning of that day
       whereClause.date = { ...whereClause.date as object, gte: startOfDay(parseISO(startDate)) }

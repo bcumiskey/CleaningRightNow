@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { calculateJobPayments } from '@/lib/utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -98,19 +99,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 })
     }
 
+    const jobRate = data.rate || property.baseRate
+    const jobExpensePercent = data.expensePercent ?? property.expensePercent ?? 12
+    const teamMemberIds: string[] = data.teamMemberIds || []
+
+    // Pre-calculate amountEarned for assignments if we have a rate and team
+    const amountEarned = teamMemberIds.length > 0 && jobRate > 0
+      ? calculateJobPayments(jobRate, jobExpensePercent, teamMemberIds.length).perPerson
+      : null
+
     const job = await prisma.job.create({
       data: {
         date: jobDate,
         time: data.time || null,
         priority: data.priority ?? 5,
         propertyId: data.propertyId,
-        rate: data.rate || property.baseRate,
-        expensePercent: data.expensePercent ?? property.expensePercent ?? 12,
+        rate: jobRate,
+        expensePercent: jobExpensePercent,
         source: 'manual',
-        assignments: data.teamMemberIds?.length > 0
+        assignments: teamMemberIds.length > 0
           ? {
-              create: data.teamMemberIds.map((id: string) => ({
+              create: teamMemberIds.map((id: string) => ({
                 teamMemberId: id,
+                amountEarned,
               })),
             }
           : undefined,

@@ -340,7 +340,10 @@ export async function POST(request: NextRequest) {
           }
           // For timed events: DTEND is the actual end datetime, just use the date portion
 
-          jobDate.setHours(0, 0, 0, 0)
+          // Use noon (12:00) to avoid timezone shift issues.
+          // Midnight UTC (00:00) shifts to the previous day in EST/EDT (UTC-5/4).
+          // Noon UTC stays on the correct calendar day in all US timezones.
+          jobDate.setHours(12, 0, 0, 0)
 
           // Skip past events
           if (jobDate < today) continue
@@ -386,19 +389,47 @@ export async function POST(request: NextRequest) {
               result.jobsUnchanged++
             }
           } else {
-            // CREATE new job
-            await prisma.job.create({
-              data: {
-                date: jobDate,
+            // Secondary dedup: check for existing job with same property + date
+            // This catches cases where a job was manually created and then the
+            // same event comes through calendar sync, or if iCal UIDs change
+            const duplicateJob = await prisma.job.findFirst({
+              where: {
                 propertyId: matchedProperty.id,
-                rate,
-                expensePercent: 12,
-                source: source.type,
-                externalId: event.uid,
-                renterName,
+                date: jobDate,
               },
             })
-            result.jobsCreated++
+
+            if (duplicateJob) {
+              // Link the existing job to this calendar event's UID so future
+              // syncs will match by externalId directly
+              const needsUpdate = !duplicateJob.externalId || duplicateJob.renterName !== renterName
+              if (needsUpdate) {
+                await prisma.job.update({
+                  where: { id: duplicateJob.id },
+                  data: {
+                    externalId: event.uid,
+                    ...(renterName && !duplicateJob.renterName ? { renterName } : {}),
+                  },
+                })
+                result.jobsUpdated++
+              } else {
+                result.jobsUnchanged++
+              }
+            } else {
+              // CREATE new job — no duplicate found
+              await prisma.job.create({
+                data: {
+                  date: jobDate,
+                  propertyId: matchedProperty.id,
+                  rate,
+                  expensePercent: 12,
+                  source: source.type,
+                  externalId: event.uid,
+                  renterName,
+                },
+              })
+              result.jobsCreated++
+            }
           }
 
           syncedPropertyIds.add(matchedProperty.id)
