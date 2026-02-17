@@ -216,7 +216,9 @@ export async function GET(request: NextRequest) {
             jobDate.setDate(jobDate.getDate() - 1)
           }
 
-          jobDate.setHours(0, 0, 0, 0)
+          // Use noon UTC to avoid timezone boundary issues.
+          // Midnight UTC renders as the previous day in US timezones.
+          jobDate.setUTCHours(12, 0, 0, 0)
 
           if (jobDate < today) continue
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { calculateJobPayments } from '@/lib/utils'
 
 // GET single job
 export async function GET(
@@ -103,6 +104,51 @@ export async function PATCH(
         },
       },
     })
+
+    // When job is marked completed, calculate and store amountEarned for each assignment
+    if (data.completed && job.assignments.length > 0) {
+      const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+      await prisma.jobAssignment.updateMany({
+        where: { jobId: job.id },
+        data: { amountEarned: payments.perPerson },
+      })
+    }
+
+    // When rate or expensePercent changes, cascade to invoice line items and recalculate amountEarned
+    if (data.rate !== undefined || data.expensePercent !== undefined) {
+      // Update linked invoice line item if one exists
+      const linkedLineItem = await prisma.invoiceLineItem.findFirst({
+        where: { jobId: job.id },
+      })
+      if (linkedLineItem) {
+        await prisma.invoiceLineItem.update({
+          where: { id: linkedLineItem.id },
+          data: { amount: job.rate },
+        })
+        // Recalculate parent invoice totals from all its line items
+        const allLineItems = await prisma.invoiceLineItem.findMany({
+          where: { invoiceId: linkedLineItem.invoiceId },
+        })
+        const subtotal = allLineItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0)
+        const invoice = await prisma.invoice.findUnique({
+          where: { id: linkedLineItem.invoiceId },
+          select: { discount: true },
+        })
+        await prisma.invoice.update({
+          where: { id: linkedLineItem.invoiceId },
+          data: { subtotal, total: subtotal - (invoice?.discount || 0) },
+        })
+      }
+
+      // Recalculate amountEarned for existing assignments if job is completed
+      if (job.completed && job.assignments.length > 0) {
+        const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+        await prisma.jobAssignment.updateMany({
+          where: { jobId: job.id },
+          data: { amountEarned: payments.perPerson },
+        })
+      }
+    }
 
     // If job is marked completed, handle invoice creation based on billing frequency
     if (data.completed) {
@@ -248,12 +294,17 @@ export async function PATCH(
         where: { jobId: params.id },
       })
 
-      // Add new assignments
+      // Add new assignments with amountEarned if job is completed
       if (data.teamMemberIds.length > 0) {
+        const currentJob = await prisma.job.findUnique({ where: { id: params.id } })
+        const amountEarned = currentJob?.completed && currentJob.rate > 0
+          ? calculateJobPayments(currentJob.rate, currentJob.expensePercent, data.teamMemberIds.length).perPerson
+          : null
         await prisma.jobAssignment.createMany({
           data: data.teamMemberIds.map((teamMemberId: string) => ({
             jobId: params.id,
             teamMemberId,
+            amountEarned,
           })),
         })
       }

@@ -56,7 +56,11 @@ function getNextOccurrences(
     }
 
     if (isMatch) {
-      dates.push(new Date(current))
+      const d = new Date(current)
+      // Use noon UTC to avoid timezone boundary issues.
+      // Midnight UTC renders as the previous day in US timezones.
+      d.setUTCHours(12, 0, 0, 0)
+      dates.push(d)
     }
 
     current.setDate(current.getDate() + 1)

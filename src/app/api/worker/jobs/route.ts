@@ -11,6 +11,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const sessionUser = session.user as { id?: string; role?: string; teamMemberId?: string }
+    const teamMemberId = sessionUser.teamMemberId
+
     const { searchParams } = new URL(request.url)
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
@@ -27,6 +30,10 @@ export async function GET(request: NextRequest) {
     }
     if (propertyId) {
       whereClause.propertyId = propertyId
+    }
+    // Filter to only show jobs assigned to this worker
+    if (teamMemberId) {
+      whereClause.assignments = { some: { teamMemberId } }
     }
 
     const jobs = await prisma.job.findMany({

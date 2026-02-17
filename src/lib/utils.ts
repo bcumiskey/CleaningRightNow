@@ -27,9 +27,9 @@ export function formatTime(time: string): string {
 }
 
 export function calculateJobPayments(rate: number, expensePercent: number, assignmentCount: number) {
-  const expenseAmount = rate * (expensePercent / 100)
-  const teamTotal = rate - expenseAmount
-  const perPerson = assignmentCount > 0 ? teamTotal / assignmentCount : 0
+  const expenseAmount = Math.round(rate * (expensePercent / 100) * 100) / 100
+  const teamTotal = Math.round((rate - expenseAmount) * 100) / 100
+  const perPerson = assignmentCount > 0 ? Math.round((teamTotal / assignmentCount) * 100) / 100 : 0
 
   return {
     expense: expenseAmount,

@@ -340,7 +340,10 @@ export async function POST(request: NextRequest) {
           }
           // For timed events: DTEND is the actual end datetime, just use the date portion
 
-          jobDate.setHours(0, 0, 0, 0)
+          // Use noon UTC to avoid timezone boundary issues.
+          // Midnight UTC renders as the previous day in US timezones (e.g., midnight UTC = 7pm EST = Jan 2 instead of Jan 3).
+          // Noon UTC safely lands on the correct calendar day in all US timezones (UTC-5 through UTC-10).
+          jobDate.setUTCHours(12, 0, 0, 0)
 
           // Skip past events
           if (jobDate < today) continue
@@ -386,19 +389,46 @@ export async function POST(request: NextRequest) {
               result.jobsUnchanged++
             }
           } else {
-            // CREATE new job
-            await prisma.job.create({
-              data: {
-                date: jobDate,
+            // Secondary dedup: check if a job already exists for this property+date
+            // (e.g., manually created jobs that don't have an externalId)
+            const startOfJobDate = new Date(jobDate)
+            startOfJobDate.setUTCHours(0, 0, 0, 0)
+            const endOfJobDate = new Date(jobDate)
+            endOfJobDate.setUTCHours(23, 59, 59, 999)
+
+            const existingByPropertyDate = await prisma.job.findFirst({
+              where: {
                 propertyId: matchedProperty.id,
-                rate,
-                expensePercent: 12,
-                source: source.type,
-                externalId: event.uid,
-                renterName,
+                date: { gte: startOfJobDate, lte: endOfJobDate },
               },
             })
-            result.jobsCreated++
+
+            if (existingByPropertyDate) {
+              // Link the existing job to this calendar event and update renter name
+              await prisma.job.update({
+                where: { id: existingByPropertyDate.id },
+                data: {
+                  externalId: event.uid,
+                  renterName: renterName || existingByPropertyDate.renterName,
+                  source: existingByPropertyDate.source === 'manual' ? source.type : existingByPropertyDate.source,
+                },
+              })
+              result.jobsUpdated++
+            } else {
+              // CREATE new job
+              await prisma.job.create({
+                data: {
+                  date: jobDate,
+                  propertyId: matchedProperty.id,
+                  rate,
+                  expensePercent: 12,
+                  source: source.type,
+                  externalId: event.uid,
+                  renterName,
+                },
+              })
+              result.jobsCreated++
+            }
           }
 
           syncedPropertyIds.add(matchedProperty.id)
