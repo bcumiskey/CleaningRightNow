@@ -25,6 +25,7 @@ interface HoverPreview {
   jobs: Job[]
   x: number
   y: number
+  showAbove?: boolean
 }
 
 export default function CalendarPage() {
@@ -54,11 +55,17 @@ export default function CalendarPage() {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
 
     hoverTimeoutRef.current = setTimeout(() => {
+      // Flip tooltip above the cell when near the bottom of the viewport
+      const spaceBelow = window.innerHeight - rect.bottom
+      const tooltipEstimatedHeight = Math.min(dayJobs.length * 70 + 50, 300)
+      const showAbove = spaceBelow < tooltipEstimatedHeight
+
       setHoverPreview({
         day,
         jobs: dayJobs,
         x: rect.left + rect.width / 2,
-        y: rect.bottom + 8,
+        y: showAbove ? rect.top - 8 : rect.bottom + 8,
+        showAbove,
       })
     }, 2000) // 2 second delay
   }, [])
@@ -318,10 +325,12 @@ export default function CalendarPage() {
         {/* Hover Preview Tooltip */}
         {hoverPreview && (
           <div
-            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-3 min-w-[200px] max-w-[300px]"
+            className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-3 min-w-[200px] max-w-[300px] max-h-[280px] overflow-y-auto"
             style={{
               left: `${hoverPreview.x}px`,
-              top: `${hoverPreview.y}px`,
+              ...(hoverPreview.showAbove
+                ? { bottom: `${window.innerHeight - hoverPreview.y}px` }
+                : { top: `${hoverPreview.y}px` }),
               transform: 'translateX(-50%)',
             }}
             onMouseEnter={() => {

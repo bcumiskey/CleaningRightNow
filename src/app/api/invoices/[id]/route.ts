@@ -148,6 +148,19 @@ export async function PUT(
         return invoice
       })
 
+      // When invoice is marked as paid, cascade clientPaid to linked jobs
+      if (data.status === 'paid') {
+        const jobIds = result.lineItems
+          .filter((li: { jobId: string | null }) => li.jobId)
+          .map((li: { jobId: string | null }) => li.jobId as string)
+        if (jobIds.length > 0) {
+          await prisma.job.updateMany({
+            where: { id: { in: jobIds } },
+            data: { clientPaid: true, clientPaidAt: new Date() },
+          })
+        }
+      }
+
       return NextResponse.json(result)
     }
 
@@ -183,6 +196,19 @@ export async function PUT(
         },
       },
     })
+
+    // When invoice is marked as paid, cascade clientPaid to linked jobs
+    if (data.status === 'paid') {
+      const jobIds = invoice.lineItems
+        .filter((li: { jobId: string | null }) => li.jobId)
+        .map((li: { jobId: string | null }) => li.jobId as string)
+      if (jobIds.length > 0) {
+        await prisma.job.updateMany({
+          where: { id: { in: jobIds } },
+          data: { clientPaid: true, clientPaidAt: new Date() },
+        })
+      }
+    }
 
     return NextResponse.json(invoice)
   } catch (error) {

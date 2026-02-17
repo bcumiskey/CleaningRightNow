@@ -114,13 +114,14 @@ export async function PATCH(
       })
     }
 
-    // When rate or expensePercent changes, cascade to invoice line items and recalculate amountEarned
+    // When rate or expensePercent changes, cascade to invoice line items (DRAFT only) and recalculate amountEarned
     if (data.rate !== undefined || data.expensePercent !== undefined) {
-      // Update linked invoice line item if one exists
+      // Only cascade to draft invoices - sent/paid invoices are locked
       const linkedLineItem = await prisma.invoiceLineItem.findFirst({
         where: { jobId: job.id },
+        include: { invoice: { select: { id: true, status: true, discount: true } } },
       })
-      if (linkedLineItem) {
+      if (linkedLineItem && linkedLineItem.invoice.status === 'draft') {
         await prisma.invoiceLineItem.update({
           where: { id: linkedLineItem.id },
           data: { amount: job.rate },
@@ -130,13 +131,9 @@ export async function PATCH(
           where: { invoiceId: linkedLineItem.invoiceId },
         })
         const subtotal = allLineItems.reduce((sum: number, item: { amount: number }) => sum + item.amount, 0)
-        const invoice = await prisma.invoice.findUnique({
-          where: { id: linkedLineItem.invoiceId },
-          select: { discount: true },
-        })
         await prisma.invoice.update({
           where: { id: linkedLineItem.invoiceId },
-          data: { subtotal, total: subtotal - (invoice?.discount || 0) },
+          data: { subtotal, total: subtotal - (linkedLineItem.invoice.discount || 0) },
         })
       }
 
