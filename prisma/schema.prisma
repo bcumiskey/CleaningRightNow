@@ -291,6 +291,8 @@ model Job {
 
   // Back-to-back flag (checkout and new check-in same day at same property)
   isBackToBack    Boolean   @default(false)
+  dogCount        Int       @default(0)    // Number of dogs (from calendar event 🐕)
+  dogFee          Float     @default(0)    // Dog fee total ($50 per dog)
 
   // Next guest check-in date (so cleaners know timeline)
   nextCheckIn     DateTime?
