@@ -196,7 +196,9 @@ export async function POST() {
             propertyId: propertyEntry.id,
             date: { gte: dayBefore, lte: dayAfter },
           },
-          include: {
+          select: {
+            id: true, date: true, propertyId: true, completedAt: true,
+            teamPaid: true, teamPaidAt: true,
             assignments: { select: { id: true, teamMemberId: true } },
           },
         })
@@ -233,7 +235,7 @@ export async function POST() {
               jobId: existingJob.id,
               teamMemberId,
               amountEarned: masterJob.per_cleaner,
-              paidAt: paidMap.get(teamMemberId)?.paidAt || null,
+              paidAt: paidMap.get(teamMemberId)?.paidAt || (existingJob.teamPaid ? (existingJob.teamPaidAt || jobDate) : null),
               paymentMethod: paidMap.get(teamMemberId)?.paymentMethod || null,
             })),
           })
