@@ -138,6 +138,8 @@ export async function POST() {
     let totalRevenue = 0
     let totalCommission = 0
 
+    const processedPairs = new Set<string>()
+
     for (const masterJob of masterData.jobs as MasterJob[]) {
       // Skip DOG (FEE) — null date, needs manual handling
       // Skip 150 — not yet in the system
@@ -276,6 +278,7 @@ export async function POST() {
           created++
         }
 
+        processedPairs.add(`${masterJob.date}|${propertyEntry.id}`)
         totalRevenue += masterJob.property_price
         totalCommission += masterJob.commission
       } catch (err) {
@@ -289,6 +292,35 @@ export async function POST() {
       }
     }
 
+    // 5. Cleanup: delete completed 2026 jobs not in the master JSON
+    const allCompleted2026Jobs = await prisma.job.findMany({
+      where: {
+        completed: true,
+        date: {
+          gte: new Date('2026-01-01T00:00:00.000Z'),
+          lt: new Date('2027-01-01T00:00:00.000Z'),
+        },
+      },
+      select: { id: true, date: true, propertyId: true },
+    })
+
+    const ghostJobs = allCompleted2026Jobs.filter(job => {
+      const dateStr = job.date.toISOString().split('T')[0]
+      return !processedPairs.has(`${dateStr}|${job.propertyId}`)
+    })
+
+    let ghostJobsDeleted = 0
+    if (ghostJobs.length > 0) {
+      const ghostIds = ghostJobs.map(j => j.id)
+      await prisma.jobAssignment.deleteMany({
+        where: { jobId: { in: ghostIds } },
+      })
+      await prisma.job.deleteMany({
+        where: { id: { in: ghostIds } },
+      })
+      ghostJobsDeleted = ghostJobs.length
+    }
+
     const netAfterCommission = totalRevenue - totalCommission
 
     return NextResponse.json({
@@ -299,6 +331,7 @@ export async function POST() {
         created,
         skipped,
         errors,
+        ghostJobsDeleted,
         totalRevenue,
         totalCommission: Math.round(totalCommission * 100) / 100,
         netAfterCommission: Math.round(netAfterCommission * 100) / 100,
