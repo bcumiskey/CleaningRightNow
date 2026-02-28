@@ -296,5 +296,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete alerts' }, { status: 500 })
   }
 }
-
-Remove legacy linen alerts
