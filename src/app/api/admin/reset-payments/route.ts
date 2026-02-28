@@ -46,6 +46,8 @@ export async function POST() {
         clientPaidAt: null,
         teamPaid: false,
         teamPaidAt: null,
+        completed: false,
+        completedAt: null,
       },
     })
 
