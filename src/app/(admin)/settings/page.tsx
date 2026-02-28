@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -42,6 +42,8 @@ export default function SettingsPage() {
   const [deerResult, setDeerResult] = useState<string | null>(null)
   const [isLoadingRooms, setIsLoadingRooms] = useState(false)
   const [roomResult, setRoomResult] = useState<string | null>(null)
+  const [isFixingSheets, setIsFixingSheets] = useState(false)
+  const [sheetsResult, setSheetsResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadSettings()
@@ -131,6 +133,32 @@ export default function SettingsPage() {
       setRoomResult('Error: Network request failed')
     } finally {
       setIsLoadingRooms(false)
+    }
+  }
+
+  const handleFixSheets = async () => {
+    setIsFixingSheets(true)
+    setSheetsResult(null)
+    try {
+      const res = await fetch('/api/admin/fix-sheets', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to fix sheets')
+        setSheetsResult(`Error: ${data.error}`)
+        return
+      }
+      const parts: string[] = []
+      if (data.deletedItems > 0) parts.push(`${data.deletedItems} old items removed`)
+      if (data.setsCreated.length > 0) parts.push(`${data.setsCreated.length} sets created`)
+      if (data.setsSkipped.length > 0) parts.push(`${data.setsSkipped.length} already existed`)
+      const summary = parts.length > 0 ? parts.join(', ') : 'No changes needed'
+      toast.success(`Sheets fixed! ${summary}`)
+      setSheetsResult(`Done: ${summary}`)
+    } catch (error) {
+      toast.error('Failed to fix sheets')
+      setSheetsResult('Error: Network request failed')
+    } finally {
+      setIsFixingSheets(false)
     }
   }
 
@@ -396,6 +424,36 @@ export default function SettingsPage() {
                   <span className={`text-sm ${roomResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
                     {roomResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
                     {roomResult}
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Fix Sheets to Sets */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Layers size={20} className="text-purple-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Fix Sheets to Sets</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Removes deprecated split sheet items (Top/Bottom) and creates the 4 set items
+                    (K-Set, Q-Set, F-Set, T-Set). Safe to run multiple times.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleFixSheets}
+                  isLoading={isFixingSheets}
+                  variant="outline"
+                  size="sm"
+                >
+                  <AlertTriangle size={14} />
+                  {isFixingSheets ? 'Fixing...' : 'Fix Sheets Now'}
+                </Button>
+                {sheetsResult && (
+                  <span className={`text-sm ${sheetsResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {sheetsResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {sheetsResult}
                   </span>
                 )}
               </div>
