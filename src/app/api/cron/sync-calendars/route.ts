@@ -232,14 +232,17 @@ export async function GET(request: NextRequest) {
 
     let totalCreated = 0
     let totalUpdated = 0
+    let totalRemoved = 0
     const syncedPropertyIds = new Set<string>()
     const errors: string[] = []
 
     for (const source of sources) {
       try {
         const events = await parseICalFeed(source.icalUrl)
+        const seenExternalIds = new Set<string>()
 
         for (const event of events) {
+          if (event.uid) seenExternalIds.add(event.uid)
           const jobDate = new Date(event.end)
 
           if (event.isAllDay) {
@@ -326,6 +329,30 @@ export async function GET(request: NextRequest) {
           syncedPropertyIds.add(matchedProperty.id)
         }
 
+        // Clean up stale events: delete future calendar-synced jobs whose UIDs
+        // no longer exist in this feed (event was deleted from calendar)
+        if (seenExternalIds.size > 0) {
+          const staleJobs = await prisma.job.findMany({
+            where: {
+              source: source.type,
+              externalId: { not: null },
+              date: { gte: today },
+              NOT: { externalId: { in: Array.from(seenExternalIds) } },
+            },
+            select: { id: true },
+          })
+
+          for (const staleJob of staleJobs) {
+            const assignmentCount = await prisma.jobAssignment.count({
+              where: { jobId: staleJob.id },
+            })
+            if (assignmentCount === 0) {
+              await prisma.job.delete({ where: { id: staleJob.id } })
+              totalRemoved++
+            }
+          }
+        }
+
         // Update source sync status
         await prisma.calendarSource.update({
           where: { id: source.id },
@@ -361,6 +388,7 @@ export async function GET(request: NextRequest) {
       sourcesSynced: sources.length,
       jobsCreated: totalCreated,
       jobsUpdated: totalUpdated,
+      jobsRemoved: totalRemoved,
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {

@@ -12,6 +12,7 @@ interface SyncResult {
   jobsCreated: number
   jobsUpdated: number
   jobsUnchanged: number
+  jobsRemoved: number
   unmatchedEvents: string[]
   error?: string
 }
@@ -109,54 +110,54 @@ async function findMatchingProperty(
   eventSummary: string,
   properties: { id: string; name: string; keywords: string | null }[]
 ): Promise<{ id: string; name: string } | null> {
+  // ALWAYS use parseEventTitle first — extract property name from "[Property Name] Cleaning [flags]"
+  const parsed = parseEventTitle(eventSummary)
+  const parsedName = parsed.propertyName.toLowerCase().trim()
+
+  // Also try the legacy extraction as a fallback
   const extractedName = extractPropertyName(eventSummary)
-  if (!extractedName) return null
+  const normalizedExtracted = extractedName?.toLowerCase().trim() || parsedName
 
-  const normalizedExtracted = extractedName.toLowerCase().trim()
-  const originalSummaryLower = eventSummary.toLowerCase().trim()
+  // 1. Exact name match on parsed property name (highest priority)
+  const exactMatch = properties.find(
+    p => p.name.toLowerCase().trim() === parsedName
+  )
+  if (exactMatch) return exactMatch
 
-  // First, check keywords - most reliable match
+  // 2. Exact match on legacy extracted name
+  if (normalizedExtracted !== parsedName) {
+    const exactLegacy = properties.find(
+      p => p.name.toLowerCase().trim() === normalizedExtracted
+    )
+    if (exactLegacy) return exactLegacy
+  }
+
+  // 3. Keyword matching — but keywords must match the PARSED property name, not the full summary
+  // This prevents "Deer Crossing Cleaning 🐕 +$50 dog fee" from matching a "Dogwood" keyword
   for (const prop of properties) {
     if (prop.keywords) {
       const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
       for (const keyword of keywordList) {
-        if (keyword && (originalSummaryLower.includes(keyword) || normalizedExtracted.includes(keyword))) {
+        if (keyword && keyword.length >= 3 && parsedName.includes(keyword)) {
           return prop
         }
       }
     }
   }
 
-  // Exact name match
-  let match = properties.find(
-    p => p.name.toLowerCase().trim() === normalizedExtracted
+  // 4. Contains match — property name appears within the parsed name
+  const containsMatch = properties.find(
+    p => parsedName.includes(p.name.toLowerCase().trim())
   )
-  if (match) return match
+  if (containsMatch) return containsMatch
 
-  // Contains match (property name appears in event)
-  match = properties.find(
-    p => normalizedExtracted.includes(p.name.toLowerCase().trim())
+  // 5. Reverse contains — parsed name appears within property name
+  const reverseMatch = properties.find(
+    p => p.name.toLowerCase().trim().includes(parsedName)
   )
-  if (match) return match
+  if (reverseMatch) return reverseMatch
 
-  // Reverse contains (event text appears in property name)
-  match = properties.find(
-    p => p.name.toLowerCase().trim().includes(normalizedExtracted)
-  )
-  if (match) return match
-
-  // Fuzzy match - check if most words match
-  const extractedWords = normalizedExtracted.split(/\s+/).filter(w => w.length > 2)
-  for (const prop of properties) {
-    const propWords = prop.name.toLowerCase().split(/\s+/).filter(w => w.length > 2)
-    const matchingWords = extractedWords.filter(w =>
-      propWords.some(pw => pw.includes(w) || w.includes(pw))
-    )
-    if (matchingWords.length >= Math.min(2, extractedWords.length)) {
-      return prop
-    }
-  }
-
+  // No fuzzy matching — too error-prone. If we can't match precisely, skip the event.
   return null
 }
 
@@ -331,6 +332,7 @@ export async function POST(request: NextRequest) {
         jobsCreated: 0,
         jobsUpdated: 0,
         jobsUnchanged: 0,
+        jobsRemoved: 0,
         unmatchedEvents: [],
       }
 
@@ -341,9 +343,13 @@ export async function POST(request: NextRequest) {
 
         // Track property IDs that had jobs synced for B2B detection
         const syncedPropertyIds = new Set<string>()
+        // Track all event UIDs seen in this feed (for stale cleanup)
+        const seenExternalIds = new Set<string>()
 
         // Process each event
         for (const event of events) {
+          // Track every UID from this feed, even past events
+          if (event.uid) seenExternalIds.add(event.uid)
           // Calculate the cleaning/checkout date from the iCal event
           // CRITICAL: iCal RFC 5545 specifies that DTEND for all-day events is EXCLUSIVE
           // This means a guest staying Jan 1-3 has DTEND=20250104 (Jan 4)
@@ -461,6 +467,34 @@ export async function POST(request: NextRequest) {
           syncedPropertyIds.add(matchedProperty.id)
         }
 
+        // Clean up stale events: delete future calendar-synced jobs whose UIDs
+        // no longer exist in this feed (event was deleted from Google Calendar)
+        if (seenExternalIds.size > 0) {
+          const staleJobs = await prisma.job.findMany({
+            where: {
+              source: source.type,
+              externalId: { not: null },
+              date: { gte: today },
+              // Only delete jobs NOT in the current feed
+              NOT: { externalId: { in: Array.from(seenExternalIds) } },
+            },
+            select: { id: true, externalId: true },
+          })
+
+          if (staleJobs.length > 0) {
+            // Only delete jobs that don't have crew assignments (preserve manual work)
+            for (const staleJob of staleJobs) {
+              const assignmentCount = await prisma.jobAssignment.count({
+                where: { jobId: staleJob.id },
+              })
+              if (assignmentCount === 0) {
+                await prisma.job.delete({ where: { id: staleJob.id } })
+                result.jobsRemoved++
+              }
+            }
+          }
+        }
+
         // Detect and flag B2B (back-to-back) cleanings
         // B2B = same property has multiple jobs on same day (checkout and new check-in)
         if (syncedPropertyIds.size > 0) {
@@ -499,6 +533,7 @@ export async function POST(request: NextRequest) {
     const totalCreated = results.reduce((sum, r) => sum + r.jobsCreated, 0)
     const totalUpdated = results.reduce((sum, r) => sum + r.jobsUpdated, 0)
     const totalUnchanged = results.reduce((sum, r) => sum + r.jobsUnchanged, 0)
+    const totalRemoved = results.reduce((sum, r) => sum + r.jobsRemoved, 0)
     const totalUnmatched = results.reduce((sum, r) => sum + r.unmatchedEvents.length, 0)
 
     return NextResponse.json({
@@ -507,6 +542,7 @@ export async function POST(request: NextRequest) {
         sourcesSynced: sources.length,
         jobsCreated: totalCreated,
         jobsUpdated: totalUpdated,
+        jobsRemoved: totalRemoved,
         jobsUnchanged: totalUnchanged,
         unmatchedEvents: totalUnmatched,
       },
