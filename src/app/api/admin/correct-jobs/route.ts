@@ -11,23 +11,22 @@ import masterData from '../../../../../data/crn_jobs_master.json'
 
 // Map JSON property codes → possible DB property names (case-insensitive)
 const PROPERTY_ALIAS_MAP: Record<string, string[]> = {
-  'BBR': ['gambrel', 'bbr', 'black barn ridge', 'the gambrel'],
+  'BBR': ['the gambrel', 'gambrel', 'bbr', 'black barn ridge'],
   'DUTCH': ['the dutch', 'dutch'],
   'GABLE': ['the gable', 'gable'],
   'STONES': ["stone's thoreau", 'stones thoreau', 'stones', "stone's"],
   'OWL': ['owl', 'the owl'],
-  'DOG': ['dogwood', 'dog'],
+  'DOG': ['dogwood cleaning', 'dogwood', 'dog'],
   'CB': ['cb'],
-  'RED': ['red', 'the red'],
+  'RED': ['redbud holiday house', 'red', 'the red', 'redbud'],
   'MULBERRY': ['test', 'mulberry'],
-  'MINDY': ['mindy'],
-  'FUNK': ['funk'],
+  'MINDY': ['981 ridgeview mindy', 'mindy'],
+  'FUNK': ['funkhouse', 'funk'],
   'TOBY': ['toby'],
-  'CEDAR': ['cedar'],
+  'CEDAR': ['cedar shores main', 'cedar shores', 'cedar'],
   'ANT': ['anthony', 'ant'],
-  '150': ['150'],
-  '1': ['1'],
-  '2': ['2'],
+  '1': ['suite 1', '1'],
+  '2': ['suite 2', '2'],
 }
 
 interface MasterJob {
@@ -140,12 +139,15 @@ export async function POST() {
 
     for (const masterJob of masterData.jobs as MasterJob[]) {
       // Skip DOG (FEE) — null date, needs manual handling
-      if (masterJob.date === null) {
+      // Skip 150 — not yet in the system
+      if (masterJob.date === null || masterJob.property === '150') {
         results.push({
           status: 'skipped',
-          date: null,
+          date: masterJob.date,
           property: masterJob.property,
-          detail: 'Skipped: null date (DOG FEE) — needs manual date assignment',
+          detail: masterJob.date === null
+            ? 'Skipped: null date (DOG FEE) — needs manual date assignment'
+            : 'Skipped: property 150 not yet in system',
         })
         skipped++
         continue
