@@ -46,6 +46,13 @@ export async function POST() {
         clientPaidAt: null,
         teamPaid: false,
         teamPaidAt: null,
+      },
+    })
+
+    // 2b. Un-complete only jobs that are currently completed
+    await prisma.job.updateMany({
+      where: { date: dateFilter, completed: true },
+      data: {
         completed: false,
         completedAt: null,
       },
