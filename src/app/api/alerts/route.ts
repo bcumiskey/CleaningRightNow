@@ -59,12 +59,6 @@ export async function GET(request: NextRequest) {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000)
 
-    // Get company settings for configurable values
-    const settings = await prisma.companySettings.findUnique({
-      where: { id: 'default' },
-    })
-    const linenTargetMultiplier = settings?.linenTargetMultiplier ?? 2
-
     // 1. SURPRISE BOOKINGS - Jobs created within 2 days of their date
     const recentJobs = await prisma.job.findMany({
       where: {
@@ -208,50 +202,9 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // 5. LOW INVENTORY - Check property linen inventory vs requirements
-    // Get all properties with their linen requirements and current inventory
-    const properties = await prisma.property.findMany({
-      include: {
-        linenRequirements: {
-          include: {
-            linenItem: { select: { name: true, code: true } },
-          },
-        },
-        linenInventory: {
-          include: {
-            linenItem: { select: { name: true, code: true } },
-          },
-        },
-      },
-    })
-
-    for (const property of properties) {
-      for (const req of property.linenRequirements) {
-        if (req.perFlip > 0) {
-          const inventory = property.linenInventory.find(
-            (inv: { linenItemId: string }) => inv.linenItemId === req.linenItemId
-          )
-          const onHand = inventory?.onHand || 0
-          const neededForTargetFlips = req.perFlip * linenTargetMultiplier // Alert based on configured target
-
-          if (onHand < neededForTargetFlips && onHand < req.perFlip * 5) {
-            const flipsRemaining = Math.floor(onHand / req.perFlip)
-
-            alerts.push({
-              id: `inventory-${property.id}-${req.linenItemId}`,
-              type: 'low_inventory',
-              severity: flipsRemaining <= 1 ? 'critical' : 'warning',
-              title: 'Low Linen Stock',
-              description: `${property.name}: ${req.linenItem.name} - only ${onHand} left (${flipsRemaining} flips)`,
-              propertyId: property.id,
-              propertyName: property.name,
-              actionUrl: '/linens',
-              createdAt: now,
-            })
-          }
-        }
-      }
-    }
+    // 5. LOW INVENTORY — DISABLED
+    // Legacy linen inventory system replaced by room setup guide.
+    // Linen counts are now in room notes, not tracked as inventory items.
 
     // Sort alerts by severity (critical first) then by date
     alerts.sort((a, b) => {
@@ -343,3 +296,5 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to delete alerts' }, { status: 500 })
   }
 }
+
+Remove legacy linen alerts
