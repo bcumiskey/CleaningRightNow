@@ -11,16 +11,16 @@ import masterData from '../../../../../data/crn_jobs_master.json'
 
 // Map JSON property codes → possible DB property names (case-insensitive)
 const PROPERTY_ALIAS_MAP: Record<string, string[]> = {
-  'BBR': ['the gambrel', 'gambrel', 'bbr', 'black barn ridge'],
+  'BBR': ['the gambrel- bbr', 'the gambrel', 'gambrel', 'bbr', 'black barn ridge'],
   'DUTCH': ['the dutch', 'dutch'],
   'GABLE': ['the gable', 'gable'],
   'STONES': ["stone's thoreau", 'stones thoreau', 'stones', "stone's"],
   'OWL': ['owl', 'the owl'],
   'DOG': ['dogwood cleaning', 'dogwood', 'dog'],
   'CB': ['cb'],
-  'RED': ['redbud holiday house', 'red', 'the red', 'redbud'],
-  'MULBERRY': ['test', 'mulberry'],
-  'MINDY': ['981 ridgeview mindy', 'mindy'],
+  'RED': ['red bud holiday house', 'redbud holiday house', 'red', 'the red', 'redbud'],
+  'MULBERRY': ['test (mulberry)', 'test', 'mulberry'],
+  'MINDY': ['981 ridgeview, mindy', '981 ridgeview mindy', 'mindy'],
   'FUNK': ['funkhouse', 'funk'],
   'TOBY': ['toby'],
   'CEDAR': ['cedar shores main', 'cedar shores', 'cedar'],
