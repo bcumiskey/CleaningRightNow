@@ -403,7 +403,7 @@
     },
     {
       "date": "2026-02-03",
-      "property": "150",
+      "property": "OTHER",
       "property_price": 150,
       "commission_rate": 0.12,
       "commission": 18,
