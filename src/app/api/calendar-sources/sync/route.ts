@@ -351,6 +351,18 @@ export async function POST(request: NextRequest) {
         const events = await parseICalFeed(source.icalUrl)
         result.eventsFound = events.length
 
+        // If this calendar source has a propertyPattern, use it as a direct property link.
+        // This overrides per-event title matching — ALL events from this source go to that property.
+        let sourceLinkedProperty: { id: string; name: string } | null = null
+        if (source.propertyPattern) {
+          const pattern = source.propertyPattern.trim().toLowerCase()
+          sourceLinkedProperty = properties.find(
+            (p: { id: string; name: string }) =>
+              p.id === source.propertyPattern ||
+              p.name.toLowerCase().trim() === pattern
+          ) || null
+        }
+
         // Process each event
         for (const event of events) {
           // Track every UID from every feed for stale cleanup
@@ -370,8 +382,9 @@ export async function POST(request: NextRequest) {
           // Skip past events
           if (jobDate < today) continue
 
-          // Find matching property
-          const matchedProperty = await findMatchingProperty(event.summary, properties)
+          // Find matching property — source-level link takes priority over event title matching
+          const matchedProperty = sourceLinkedProperty
+            || await findMatchingProperty(event.summary, properties)
 
           if (!matchedProperty) {
             result.unmatchedEvents.push(event.summary)
