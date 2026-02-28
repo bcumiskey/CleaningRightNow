@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 // Room types for validation
-const ROOM_TYPES = ['bedroom', 'bathroom', 'kitchen', 'living', 'laundry', 'outdoor', 'other'] as const
+const ROOM_TYPES = ['bedroom', 'bathroom', 'kitchen', 'living', 'laundry', 'outdoor', 'storage', 'other'] as const
 
 // Bed types for validation
 const BED_TYPES = ['King', 'Queen', 'Full', 'Twin', 'California King', 'Bunk', 'Sofa Bed', 'Crib'] as const
@@ -121,7 +121,7 @@ export async function POST(
 
     const body = await request.json()
 
-    const { name, type, beds, sortOrder } = body
+    const { name, type, beds, sortOrder, floor, pillowCount, sheetSet, servesRoom, notes } = body
 
     if (!name || !type) {
       return NextResponse.json(
@@ -173,6 +173,10 @@ export async function POST(
       finalSortOrder = (lastRoom?.sortOrder ?? -1) + 1
     }
 
+    // Guard against NaN pillowCount
+    const parsedPillowCount = pillowCount !== undefined ? parseInt(pillowCount, 10) : undefined
+    const safePillowCount = parsedPillowCount !== undefined && isNaN(parsedPillowCount) ? null : parsedPillowCount
+
     const room = await prisma.room.create({
       data: {
         propertyId,
@@ -180,6 +184,11 @@ export async function POST(
         type,
         beds: beds || null,
         sortOrder: finalSortOrder,
+        floor: floor || null,
+        pillowCount: safePillowCount ?? null,
+        sheetSet: sheetSet || null,
+        servesRoom: servesRoom || null,
+        notes: notes || null,
       },
     })
 

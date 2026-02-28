@@ -50,6 +50,11 @@ interface Room {
   name: string
   type: string
   beds: BedConfig[] | null
+  floor: string | null
+  pillowCount: number | null
+  sheetSet: string | null
+  servesRoom: string | null
+  notes: string | null
   sortOrder: number
   _count?: {
     instructions: number
@@ -69,7 +74,28 @@ const ROOM_TYPES = [
   { value: 'living', label: 'Living Room' },
   { value: 'laundry', label: 'Laundry' },
   { value: 'outdoor', label: 'Outdoor' },
+  { value: 'storage', label: 'Storage/Closet' },
   { value: 'other', label: 'Other' },
+]
+
+const FLOOR_OPTIONS = [
+  'Main Floor',
+  'Upstairs',
+  'Basement',
+  'Garage',
+  '1st Floor',
+  '2nd Floor',
+  '3rd Floor',
+  'General',
+]
+
+const SHEET_SET_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: 'King Set', label: 'King Set' },
+  { value: 'Queen Set', label: 'Queen Set' },
+  { value: 'Full Set', label: 'Full Set' },
+  { value: 'Twin Set', label: 'Twin Set' },
+  { value: 'Crib Sheet', label: 'Crib Sheet' },
 ]
 
 const BED_TYPES = ['King', 'Queen', 'Full', 'Twin', 'California King', 'Bunk', 'Sofa Bed', 'Crib']
@@ -233,6 +259,11 @@ export default function PropertyEditPage() {
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomType, setNewRoomType] = useState('bedroom')
   const [newRoomBeds, setNewRoomBeds] = useState<BedConfig[]>([])
+  const [newRoomFloor, setNewRoomFloor] = useState('Main Floor')
+  const [newRoomPillowCount, setNewRoomPillowCount] = useState('')
+  const [newRoomSheetSet, setNewRoomSheetSet] = useState('')
+  const [newRoomServesRoom, setNewRoomServesRoom] = useState('')
+  const [newRoomNotes, setNewRoomNotes] = useState('')
   const [isSavingRoom, setIsSavingRoom] = useState(false)
 
   // Room expansion state
@@ -385,6 +416,11 @@ export default function PropertyEditPage() {
           name: newRoomName,
           type: newRoomType,
           beds: newRoomType === 'bedroom' && newRoomBeds.length > 0 ? newRoomBeds : null,
+          floor: newRoomFloor || null,
+          pillowCount: newRoomPillowCount ? parseInt(newRoomPillowCount) : null,
+          sheetSet: newRoomSheetSet || null,
+          servesRoom: newRoomServesRoom || null,
+          notes: newRoomNotes || null,
         }),
       })
 
@@ -416,6 +452,11 @@ export default function PropertyEditPage() {
           name: newRoomName,
           type: newRoomType,
           beds: newRoomType === 'bedroom' && newRoomBeds.length > 0 ? newRoomBeds : null,
+          floor: newRoomFloor || null,
+          pillowCount: newRoomPillowCount ? parseInt(newRoomPillowCount) : null,
+          sheetSet: newRoomSheetSet || null,
+          servesRoom: newRoomServesRoom || null,
+          notes: newRoomNotes || null,
         }),
       })
 
@@ -466,6 +507,11 @@ export default function PropertyEditPage() {
     setNewRoomName('')
     setNewRoomType('bedroom')
     setNewRoomBeds([])
+    setNewRoomFloor('Main Floor')
+    setNewRoomPillowCount('')
+    setNewRoomSheetSet('')
+    setNewRoomServesRoom('')
+    setNewRoomNotes('')
   }
 
   const openEditRoom = (room: Room) => {
@@ -473,6 +519,11 @@ export default function PropertyEditPage() {
     setNewRoomName(room.name)
     setNewRoomType(room.type)
     setNewRoomBeds(room.beds || [])
+    setNewRoomFloor(room.floor || 'Main Floor')
+    setNewRoomPillowCount(room.pillowCount?.toString() || '')
+    setNewRoomSheetSet(room.sheetSet || '')
+    setNewRoomServesRoom(room.servesRoom || '')
+    setNewRoomNotes(room.notes || '')
     setShowRoomModal(true)
   }
 
@@ -2459,53 +2510,107 @@ export default function PropertyEditPage() {
             options={ROOM_TYPES}
           />
 
+          {/* Floor/Area */}
+          <Select
+            label="Floor / Area"
+            value={newRoomFloor}
+            onChange={(e) => setNewRoomFloor(e.target.value)}
+            options={FLOOR_OPTIONS.map(f => ({ value: f, label: f }))}
+          />
+
           {/* Bed Configuration - only for bedrooms */}
           {newRoomType === 'bedroom' && (
-            <div className="border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-sm font-medium text-gray-700">
-                  Bed Configuration
-                </label>
-                <Button size="sm" variant="outline" onClick={addBedToRoom}>
-                  <Plus size={14} />
-                  Add Bed
-                </Button>
+            <>
+              <div className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700">
+                    Bed Configuration
+                  </label>
+                  <Button size="sm" variant="outline" onClick={addBedToRoom}>
+                    <Plus size={14} />
+                    Add Bed
+                  </Button>
+                </div>
+
+                {newRoomBeds.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-2">
+                    No beds configured. Add beds to auto-suggest linen requirements.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {newRoomBeds.map((bed, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <Select
+                          value={bed.type}
+                          onChange={(e) => updateBed(index, 'type', e.target.value)}
+                          options={BED_TYPES.map(t => ({ value: t, label: t }))}
+                          className="flex-1"
+                        />
+                        <Input
+                          type="number"
+                          min={1}
+                          value={bed.count}
+                          onChange={(e) => updateBed(index, 'count', parseInt(e.target.value) || 1)}
+                          className="w-20"
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeBed(index)}
+                        >
+                          <Trash2 size={14} className="text-red-500" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {newRoomBeds.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-2">
-                  No beds configured. Add beds to auto-suggest linen requirements.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {newRoomBeds.map((bed, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Select
-                        value={bed.type}
-                        onChange={(e) => updateBed(index, 'type', e.target.value)}
-                        options={BED_TYPES.map(t => ({ value: t, label: t }))}
-                        className="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        min={1}
-                        value={bed.count}
-                        onChange={(e) => updateBed(index, 'count', parseInt(e.target.value) || 1)}
-                        className="w-20"
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => removeBed(index)}
-                      >
-                        <Trash2 size={14} className="text-red-500" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+              {/* Sheet Set */}
+              <Select
+                label="Sheet Set"
+                value={newRoomSheetSet}
+                onChange={(e) => setNewRoomSheetSet(e.target.value)}
+                options={SHEET_SET_OPTIONS}
+              />
+
+              {/* Pillow Count */}
+              <Input
+                label="Pillow Count"
+                type="number"
+                min={0}
+                value={newRoomPillowCount}
+                onChange={(e) => setNewRoomPillowCount(e.target.value)}
+                placeholder="e.g., 4"
+              />
+            </>
           )}
+
+          {/* Serves Room - only for bathrooms */}
+          {newRoomType === 'bathroom' && (
+            <Input
+              label="Serves Room"
+              value={newRoomServesRoom}
+              onChange={(e) => setNewRoomServesRoom(e.target.value)}
+              placeholder="e.g., King Bedroom 1"
+            />
+          )}
+
+          {/* Notes - always shown */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Setup Notes
+            </label>
+            <textarea
+              value={newRoomNotes}
+              onChange={(e) => setNewRoomNotes(e.target.value)}
+              placeholder={newRoomType === 'bathroom'
+                ? 'Towel counts and placement:\nBig Towels: 2 — both hanging\nHand Towels: 2 — 1 hanging, 1 under cabinet\nRug: 1 hanging over shower door'
+                : 'Setup details, arrangement notes, special instructions...'}
+              rows={5}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <Button

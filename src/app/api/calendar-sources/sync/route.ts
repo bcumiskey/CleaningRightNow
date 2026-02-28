@@ -12,6 +12,7 @@ interface SyncResult {
   jobsCreated: number
   jobsUpdated: number
   jobsUnchanged: number
+  jobsRemoved: number
   unmatchedEvents: string[]
   error?: string
 }
@@ -23,6 +24,28 @@ interface ParsedEvent {
   end: Date
   description?: string
   isAllDay: boolean  // Track if this is an all-day event
+}
+
+// Parse event title to extract property name, B2B status, and dog info
+// Event title format: "[Property Name] Cleaning [optional flags]"
+interface ParsedCalendarEvent {
+  propertyName: string
+  isB2B: boolean
+  dogCount: number
+  dogFee: number
+}
+
+function parseEventTitle(summary: string): ParsedCalendarEvent {
+  const cleaningIndex = summary.indexOf(' Cleaning')
+  const propertyName = cleaningIndex > -1
+    ? summary.substring(0, cleaningIndex).trim()
+    : summary.trim()
+
+  const isB2B = summary.includes('⚡B2B')
+  const dogCount = (summary.match(/🐕/g) || []).length
+  const dogFee = dogCount * 50
+
+  return { propertyName, isB2B, dogCount, dogFee }
 }
 
 // Helper to extract renter/guest name from event summary
@@ -63,13 +86,13 @@ function extractRenterName(summary: string): string | null {
 function extractPropertyName(summary: string): string | null {
   if (!summary) return null
 
-  // Common patterns in vacation rental calendars:
-  // "Property Name - Check-out"
-  // "Check-out: Property Name"
-  // "Checkout Property Name"
-  // "Property Name (Guest Name)"
-  // Just "Property Name"
+  // First try the cleaning event format: "[Property Name] Cleaning [flags]"
+  const parsed = parseEventTitle(summary)
+  if (parsed.propertyName && summary.includes(' Cleaning')) {
+    return parsed.propertyName
+  }
 
+  // Fallback: Common patterns in vacation rental calendars
   let propertyName = summary
 
   // Remove common prefixes/suffixes
@@ -87,54 +110,59 @@ async function findMatchingProperty(
   eventSummary: string,
   properties: { id: string; name: string; keywords: string | null }[]
 ): Promise<{ id: string; name: string } | null> {
+  // ALWAYS use parseEventTitle first — extract property name from "[Property Name] Cleaning [flags]"
+  const parsed = parseEventTitle(eventSummary)
+  const parsedName = parsed.propertyName.toLowerCase().trim()
+
+  // Also try the legacy extraction as a fallback
   const extractedName = extractPropertyName(eventSummary)
-  if (!extractedName) return null
+  const normalizedExtracted = extractedName?.toLowerCase().trim() || parsedName
 
-  const normalizedExtracted = extractedName.toLowerCase().trim()
-  const originalSummaryLower = eventSummary.toLowerCase().trim()
+  // 1. Exact name match on parsed property name (highest priority)
+  const exactMatch = properties.find(
+    p => p.name.toLowerCase().trim() === parsedName
+  )
+  if (exactMatch) return exactMatch
 
-  // First, check keywords - most reliable match
+  // 2. Exact match on legacy extracted name
+  if (normalizedExtracted !== parsedName) {
+    const exactLegacy = properties.find(
+      p => p.name.toLowerCase().trim() === normalizedExtracted
+    )
+    if (exactLegacy) return exactLegacy
+  }
+
+  // 3. Keyword matching — keywords must match as WHOLE WORDS in the parsed property name
+  // This prevents "deer" keyword matching "deer crossing" when it belongs to a different property
   for (const prop of properties) {
     if (prop.keywords) {
       const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
       for (const keyword of keywordList) {
-        if (keyword && (originalSummaryLower.includes(keyword) || normalizedExtracted.includes(keyword))) {
-          return prop
+        if (keyword && keyword.length >= 3) {
+          // Word boundary match — "deer" matches "deer crossing" but "dog" doesn't match "dogwood"
+          const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const wordBoundary = new RegExp(`\\b${escaped}\\b`, 'i')
+          if (wordBoundary.test(parsedName)) {
+            return prop
+          }
         }
       }
     }
   }
 
-  // Exact name match
-  let match = properties.find(
-    p => p.name.toLowerCase().trim() === normalizedExtracted
+  // 4. Contains match — property name appears within the parsed name
+  const containsMatch = properties.find(
+    p => parsedName.includes(p.name.toLowerCase().trim())
   )
-  if (match) return match
+  if (containsMatch) return containsMatch
 
-  // Contains match (property name appears in event)
-  match = properties.find(
-    p => normalizedExtracted.includes(p.name.toLowerCase().trim())
+  // 5. Reverse contains — parsed name appears within property name
+  const reverseMatch = properties.find(
+    p => p.name.toLowerCase().trim().includes(parsedName)
   )
-  if (match) return match
+  if (reverseMatch) return reverseMatch
 
-  // Reverse contains (event text appears in property name)
-  match = properties.find(
-    p => p.name.toLowerCase().trim().includes(normalizedExtracted)
-  )
-  if (match) return match
-
-  // Fuzzy match - check if most words match
-  const extractedWords = normalizedExtracted.split(/\s+/).filter(w => w.length > 2)
-  for (const prop of properties) {
-    const propWords = prop.name.toLowerCase().split(/\s+/).filter(w => w.length > 2)
-    const matchingWords = extractedWords.filter(w =>
-      propWords.some(pw => pw.includes(w) || w.includes(pw))
-    )
-    if (matchingWords.length >= Math.min(2, extractedWords.length)) {
-      return prop
-    }
-  }
-
+  // No fuzzy matching — too error-prone. If we can't match precisely, skip the event.
   return null
 }
 
@@ -300,6 +328,11 @@ export async function POST(request: NextRequest) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
+    // Collect ALL seen UIDs across ALL sources — stale cleanup happens once at end
+    const allSeenExternalIds = new Set<string>()
+    // Track all synced property IDs for B2B detection at end
+    const allSyncedPropertyIds = new Set<string>()
+
     for (const source of sources) {
       const result: SyncResult = {
         sourceId: source.id,
@@ -309,6 +342,7 @@ export async function POST(request: NextRequest) {
         jobsCreated: 0,
         jobsUpdated: 0,
         jobsUnchanged: 0,
+        jobsRemoved: 0,
         unmatchedEvents: [],
       }
 
@@ -317,44 +351,48 @@ export async function POST(request: NextRequest) {
         const events = await parseICalFeed(source.icalUrl)
         result.eventsFound = events.length
 
-        // Track property IDs that had jobs synced for B2B detection
-        const syncedPropertyIds = new Set<string>()
+        // If this calendar source has a propertyPattern, use it as a direct property link.
+        // This overrides per-event title matching — ALL events from this source go to that property.
+        let sourceLinkedProperty: { id: string; name: string } | null = null
+        if (source.propertyPattern) {
+          const pattern = source.propertyPattern.trim().toLowerCase()
+          sourceLinkedProperty = properties.find(
+            (p: { id: string; name: string }) =>
+              p.id === source.propertyPattern ||
+              p.name.toLowerCase().trim() === pattern
+          ) || null
+        }
 
         // Process each event
         for (const event of events) {
-          // Calculate the cleaning/checkout date from the iCal event
-          // CRITICAL: iCal RFC 5545 specifies that DTEND for all-day events is EXCLUSIVE
-          // This means a guest staying Jan 1-3 has DTEND=20250104 (Jan 4)
-          // We must subtract 1 day to get the actual checkout date (Jan 3)
-          //
-          // THE RULE: Checkout date = cleaning date. No shifting. If guest checks
-          // out Jan 3rd, cleaning happens Jan 3rd.
+          // Track every UID from every feed for stale cleanup
+          if (event.uid) allSeenExternalIds.add(event.uid)
 
           const jobDate = new Date(event.end)
 
           if (event.isAllDay) {
-            // For all-day events: DTEND is exclusive, subtract 1 day
-            // Example: Stay Jan 1-3 → DTSTART=20250101, DTEND=20250104
-            // Actual checkout = Jan 3 (DTEND minus 1 day)
+            // DTEND is exclusive for all-day events, subtract 1 day
             jobDate.setDate(jobDate.getDate() - 1)
           }
-          // For timed events: DTEND is the actual end datetime, just use the date portion
 
-          // Use noon (12:00) to avoid timezone shift issues.
-          // Midnight UTC (00:00) shifts to the previous day in EST/EDT (UTC-5/4).
-          // Noon UTC stays on the correct calendar day in all US timezones.
+          // Use noon to avoid timezone shift issues.
+          // Midnight UTC shifts to previous day in EST/EDT (UTC-5/4).
           jobDate.setHours(12, 0, 0, 0)
 
           // Skip past events
           if (jobDate < today) continue
 
-          // Find matching property
-          const matchedProperty = await findMatchingProperty(event.summary, properties)
+          // Find matching property — source-level link takes priority over event title matching
+          const matchedProperty = sourceLinkedProperty
+            || await findMatchingProperty(event.summary, properties)
 
           if (!matchedProperty) {
             result.unmatchedEvents.push(event.summary)
             continue
           }
+
+          // Parse event title for property name, B2B, and dog info
+          const parsedEvent = parseEventTitle(event.summary)
 
           // Extract renter name from event
           const renterName = extractRenterName(event.summary)
@@ -371,17 +409,20 @@ export async function POST(request: NextRequest) {
           })
 
           if (existingJob) {
-            // UPDATE existing job if date or details changed
+            // UPDATE existing job — only update calendar-sourced fields
             const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
             const renterChanged = existingJob.renterName !== renterName
+            const b2bChanged = existingJob.isBackToBack !== parsedEvent.isB2B
+            const propertyChanged = existingJob.propertyId !== matchedProperty.id
 
-            if (dateChanged || renterChanged) {
+            if (dateChanged || renterChanged || b2bChanged || propertyChanged) {
               await prisma.job.update({
                 where: { id: existingJob.id },
                 data: {
                   date: jobDate,
                   propertyId: matchedProperty.id,
                   renterName,
+                  isBackToBack: parsedEvent.isB2B || existingJob.isBackToBack,
                 },
               })
               result.jobsUpdated++
@@ -390,8 +431,6 @@ export async function POST(request: NextRequest) {
             }
           } else {
             // Secondary dedup: check for existing job with same property + date
-            // This catches cases where a job was manually created and then the
-            // same event comes through calendar sync, or if iCal UIDs change
             const duplicateJob = await prisma.job.findFirst({
               where: {
                 propertyId: matchedProperty.id,
@@ -400,8 +439,6 @@ export async function POST(request: NextRequest) {
             })
 
             if (duplicateJob) {
-              // Link the existing job to this calendar event's UID so future
-              // syncs will match by externalId directly
               const needsUpdate = !duplicateJob.externalId || duplicateJob.renterName !== renterName
               if (needsUpdate) {
                 await prisma.job.update({
@@ -409,6 +446,7 @@ export async function POST(request: NextRequest) {
                   data: {
                     externalId: event.uid,
                     ...(renterName && !duplicateJob.renterName ? { renterName } : {}),
+                    isBackToBack: parsedEvent.isB2B || duplicateJob.isBackToBack,
                   },
                 })
                 result.jobsUpdated++
@@ -426,19 +464,14 @@ export async function POST(request: NextRequest) {
                   source: source.type,
                   externalId: event.uid,
                   renterName,
+                  isBackToBack: parsedEvent.isB2B,
                 },
               })
               result.jobsCreated++
             }
           }
 
-          syncedPropertyIds.add(matchedProperty.id)
-        }
-
-        // Detect and flag B2B (back-to-back) cleanings
-        // B2B = same property has multiple jobs on same day (checkout and new check-in)
-        if (syncedPropertyIds.size > 0) {
-          await detectAndFlagBackToBack(Array.from(syncedPropertyIds))
+          allSyncedPropertyIds.add(matchedProperty.id)
         }
 
         // Update source sync status
@@ -469,6 +502,37 @@ export async function POST(request: NextRequest) {
       results.push(result)
     }
 
+    // Stale cleanup: AFTER processing ALL sources, delete future calendar-synced
+    // jobs whose UIDs no longer appear in ANY feed (event was deleted from calendar).
+    // Done once at end so source A doesn't accidentally delete source B's jobs.
+    let totalStaleRemoved = 0
+    if (allSeenExternalIds.size > 0) {
+      const staleJobs = await prisma.job.findMany({
+        where: {
+          source: { not: 'manual' },
+          externalId: { not: null },
+          date: { gte: today },
+          NOT: { externalId: { in: Array.from(allSeenExternalIds) } },
+        },
+        select: { id: true },
+      })
+
+      for (const staleJob of staleJobs) {
+        const assignmentCount = await prisma.jobAssignment.count({
+          where: { jobId: staleJob.id },
+        })
+        if (assignmentCount === 0) {
+          await prisma.job.delete({ where: { id: staleJob.id } })
+          totalStaleRemoved++
+        }
+      }
+    }
+
+    // Detect and flag B2B cleanings across all synced properties
+    if (allSyncedPropertyIds.size > 0) {
+      await detectAndFlagBackToBack(Array.from(allSyncedPropertyIds))
+    }
+
     // Summary
     const totalCreated = results.reduce((sum, r) => sum + r.jobsCreated, 0)
     const totalUpdated = results.reduce((sum, r) => sum + r.jobsUpdated, 0)
@@ -481,6 +545,7 @@ export async function POST(request: NextRequest) {
         sourcesSynced: sources.length,
         jobsCreated: totalCreated,
         jobsUpdated: totalUpdated,
+        jobsRemoved: totalStaleRemoved,
         jobsUnchanged: totalUnchanged,
         unmatchedEvents: totalUnmatched,
       },

@@ -63,6 +63,8 @@ interface JobDetail {
   completed: boolean
   completedAt: string | null
   rate: number
+  isBackToBack?: boolean
+  nextCheckIn?: string | null
   property: {
     id: string
     name: string
@@ -435,6 +437,20 @@ export default function WorkerJobDetailPage() {
       )}
 
       <div className="p-4 space-y-4">
+
+      {/* B2B & Next Check-in Alert */}
+      {(job.isBackToBack || job.nextCheckIn) && (
+        <div className={`rounded-lg p-3 flex flex-col gap-1 ${job.isBackToBack ? 'bg-orange-50 border border-orange-200' : 'bg-purple-50 border border-purple-200'}`}>
+          {job.isBackToBack && (
+            <p className="text-sm font-bold text-orange-700">B2B — Back-to-Back Turn</p>
+          )}
+          {job.nextCheckIn && (
+            <p className="text-sm text-purple-700">
+              Next guest checks in: <strong>{format(parseISO(job.nextCheckIn), 'EEEE, MMMM d')}</strong>
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Status Card */}
       <Card className={isCheckedIn ? 'border-emerald-500 bg-emerald-50' : ''}>

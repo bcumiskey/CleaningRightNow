@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -38,6 +38,10 @@ export default function SettingsPage() {
   const [expensePercentage, setExpensePercentage] = useState('12')
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isFixingDeer, setIsFixingDeer] = useState(false)
+  const [deerResult, setDeerResult] = useState<string | null>(null)
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false)
+  const [roomResult, setRoomResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadSettings()
@@ -83,6 +87,50 @@ export default function SettingsPage() {
       toast.error('Failed to save settings')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleFixDeerCrossing = async () => {
+    setIsFixingDeer(true)
+    setDeerResult(null)
+    try {
+      const res = await fetch('/api/admin/fix-deer-crossing', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to fix Deer Crossing')
+        setDeerResult(`Error: ${data.error}${data.hint ? ` — ${data.hint}` : ''}`)
+        return
+      }
+      toast.success(`Deer Crossing fixed! ${data.reassignedFromDogwood} reassigned, ${data.newJobsCreated} created, ${data.alreadyCorrect} already correct`)
+      setDeerResult(`Done: ${data.reassignedFromDogwood} jobs reassigned from Dogwood, ${data.newJobsCreated} new jobs created, ${data.alreadyCorrect} already correct`)
+    } catch (error) {
+      toast.error('Failed to fix Deer Crossing')
+      setDeerResult('Error: Network request failed')
+    } finally {
+      setIsFixingDeer(false)
+    }
+  }
+
+  const handleLoadRoomSetup = async () => {
+    if (!confirm('This will WIPE all existing room data and reload it fresh. Are you sure?')) return
+    setIsLoadingRooms(true)
+    setRoomResult(null)
+    try {
+      const res = await fetch('/api/admin/load-room-setup', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to load room setup')
+        setRoomResult(`Error: ${data.error}`)
+        return
+      }
+      const propResults = data.results?.map((r: { property: string; rooms: number }) => `${r.property}: ${r.rooms} rooms`).join(', ') || 'Done'
+      toast.success(`Room setup loaded! ${propResults}`)
+      setRoomResult(`Done: ${propResults}`)
+    } catch (error) {
+      toast.error('Failed to load room setup')
+      setRoomResult('Error: Network request failed')
+    } finally {
+      setIsLoadingRooms(false)
     }
   }
 
@@ -279,6 +327,79 @@ export default function SettingsPage() {
               <ExternalLink size={16} />
               Manage Properties
             </Button>
+          </CardContent>
+        </Card>
+
+        {/* Admin Tools */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Wrench size={20} className="text-gray-400" />
+              <h3 className="font-semibold text-gray-900">Admin Tools</h3>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Fix Deer Crossing */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Home size={20} className="text-orange-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Fix Deer Crossing Dates</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Fixes all 2026 Deer Crossing cleaning dates. Reassigns any jobs incorrectly listed as Dogwood
+                    to Deer Crossing and sets the correct back-to-back flags.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleFixDeerCrossing}
+                  isLoading={isFixingDeer}
+                  variant="outline"
+                  size="sm"
+                >
+                  <AlertTriangle size={14} />
+                  {isFixingDeer ? 'Fixing...' : 'Fix Deer Crossing Now'}
+                </Button>
+                {deerResult && (
+                  <span className={`text-sm ${deerResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {deerResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {deerResult}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Load Room Setup */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <BedDouble size={20} className="text-blue-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Reload Room Setup Data</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Wipes all existing room/linen data and reloads fresh setup for Gable, Dutch, Gambrel, and Stones.
+                    This will replace everything currently saved.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleLoadRoomSetup}
+                  isLoading={isLoadingRooms}
+                  variant="outline"
+                  size="sm"
+                >
+                  <AlertTriangle size={14} />
+                  {isLoadingRooms ? 'Loading...' : 'Reload Room Data Now'}
+                </Button>
+                {roomResult && (
+                  <span className={`text-sm ${roomResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {roomResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {roomResult}
+                  </span>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
 

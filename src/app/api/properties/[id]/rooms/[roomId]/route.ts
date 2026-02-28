@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 // Room types for validation
-const ROOM_TYPES = ['bedroom', 'bathroom', 'kitchen', 'living', 'laundry', 'outdoor', 'other'] as const
+const ROOM_TYPES = ['bedroom', 'bathroom', 'kitchen', 'living', 'laundry', 'outdoor', 'storage', 'other'] as const
 
 // GET /api/properties/[id]/rooms/[roomId] - Get a single room with details
 export async function GET(
@@ -68,7 +68,7 @@ export async function PATCH(
     const { id: propertyId, roomId } = await params
     const body = await request.json()
 
-    const { name, type, beds, sortOrder } = body
+    const { name, type, beds, sortOrder, floor, pillowCount, sheetSet, servesRoom, notes } = body
 
     // Check room exists and belongs to this property
     const existingRoom = await prisma.room.findUnique({
@@ -108,6 +108,14 @@ export async function PATCH(
     if (type !== undefined) updateData.type = type
     if (beds !== undefined) updateData.beds = beds
     if (sortOrder !== undefined) updateData.sortOrder = sortOrder
+    if (floor !== undefined) updateData.floor = floor || null
+    if (pillowCount !== undefined) {
+      const parsedCount = parseInt(pillowCount, 10)
+      updateData.pillowCount = isNaN(parsedCount) ? null : parsedCount
+    }
+    if (sheetSet !== undefined) updateData.sheetSet = sheetSet || null
+    if (servesRoom !== undefined) updateData.servesRoom = servesRoom || null
+    if (notes !== undefined) updateData.notes = notes || null
 
     const room = await prisma.room.update({
       where: { id: roomId },
