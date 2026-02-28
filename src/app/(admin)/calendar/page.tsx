@@ -34,6 +34,7 @@ export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [hoverPreview, setHoverPreview] = useState<HoverPreview | null>(null)
+  const [unmatchedEvents, setUnmatchedEvents] = useState<string[]>([])
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Handle date click - go to jobs page with date pre-selected
@@ -115,7 +116,17 @@ export default function CalendarPage() {
           messages.push(`${calendarCreated} from calendars`)
         }
         if (unmatched > 0) {
+          // Collect actual event titles from results
+          const unmatchedTitles: string[] = []
+          if (calendarData.results && Array.isArray(calendarData.results)) {
+            for (const r of calendarData.results) {
+              if (r.unmatchedEvents && Array.isArray(r.unmatchedEvents)) {
+                unmatchedTitles.push(...r.unmatchedEvents)
+              }
+            }
+          }
           toast.error(`${unmatched} calendar events couldn't be matched to properties`)
+          setUnmatchedEvents(unmatchedTitles)
         }
       }
 
@@ -314,6 +325,25 @@ export default function CalendarPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Unmatched Events */}
+        {unmatchedEvents.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h4 className="font-medium text-red-800 mb-2">
+              {unmatchedEvents.length} Unmatched Calendar Events
+            </h4>
+            <p className="text-sm text-red-600 mb-2">
+              These event titles didn&apos;t match any property name. Check your property names or calendar event titles.
+            </p>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {unmatchedEvents.map((title, i) => (
+                <div key={i} className="text-sm text-red-700 bg-white px-3 py-1.5 rounded">
+                  {title}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Hover Preview Tooltip */}
         {hoverPreview && (
