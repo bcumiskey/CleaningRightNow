@@ -61,6 +61,7 @@ export default function CalendarSettingsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncResults, setSyncResults] = useState<SyncResult[] | null>(null)
+  const [unmatchedEvents, setUnmatchedEvents] = useState<string[]>([])
 
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false)
@@ -169,6 +170,7 @@ export default function CalendarSettingsPage() {
   const handleSyncAll = async () => {
     setIsSyncing(true)
     setSyncResults(null)
+    setUnmatchedEvents([])
 
     try {
       const res = await fetch('/api/calendar-sources/sync', {
@@ -181,6 +183,22 @@ export default function CalendarSettingsPage() {
         const data = await res.json()
         setSyncResults(data.results)
         toast.success(`Sync complete: ${data.summary.jobsCreated} jobs created`)
+
+        // Collect unmatched event titles from results
+        const unmatchedTitles: string[] = []
+        if (data.results && Array.isArray(data.results)) {
+          for (const r of data.results) {
+            if (r.unmatchedEvents && Array.isArray(r.unmatchedEvents)) {
+              unmatchedTitles.push(...r.unmatchedEvents)
+            }
+          }
+        }
+        const unmatched = data.summary?.unmatchedEvents || 0
+        if (unmatched > 0) {
+          toast.error(`${unmatched} calendar events couldn't be matched to properties`)
+          setUnmatchedEvents(unmatchedTitles)
+        }
+
         fetchSources() // Refresh to get updated sync times
       } else {
         toast.error('Sync failed')
@@ -194,6 +212,7 @@ export default function CalendarSettingsPage() {
 
   const handleSyncOne = async (sourceId: string) => {
     setIsSyncing(true)
+    setUnmatchedEvents([])
 
     try {
       const res = await fetch('/api/calendar-sources/sync', {
@@ -210,6 +229,21 @@ export default function CalendarSettingsPage() {
         } else {
           toast.error(`Sync failed: ${result.error}`)
         }
+
+        // Collect unmatched event titles from results
+        const unmatchedTitles: string[] = []
+        if (data.results && Array.isArray(data.results)) {
+          for (const r of data.results) {
+            if (r.unmatchedEvents && Array.isArray(r.unmatchedEvents)) {
+              unmatchedTitles.push(...r.unmatchedEvents)
+            }
+          }
+        }
+        if (unmatchedTitles.length > 0) {
+          toast.error(`${unmatchedTitles.length} calendar events couldn't be matched to properties`)
+          setUnmatchedEvents(unmatchedTitles)
+        }
+
         fetchSources()
       } else {
         toast.error('Sync failed')
@@ -448,6 +482,25 @@ export default function CalendarSettingsPage() {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Unmatched Events */}
+        {unmatchedEvents.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h4 className="font-medium text-red-800 mb-2">
+              {unmatchedEvents.length} Unmatched Calendar Events
+            </h4>
+            <p className="text-sm text-red-600 mb-2">
+              These event titles didn&apos;t match any property name. Check your property names or calendar event titles.
+            </p>
+            <div className="max-h-60 overflow-y-auto space-y-1">
+              {unmatchedEvents.map((title, i) => (
+                <div key={i} className="text-sm text-red-700 bg-white px-3 py-1.5 rounded">
+                  {title}
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Instructions */}
