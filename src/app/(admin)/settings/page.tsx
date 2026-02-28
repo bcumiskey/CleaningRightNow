@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck, Search } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [sheetsResult, setSheetsResult] = useState<string | null>(null)
   const [isCorrectingJobs, setIsCorrectingJobs] = useState(false)
   const [correctJobsResult, setCorrectJobsResult] = useState<string | null>(null)
+  const [isAuditing, setIsAuditing] = useState(false)
+  const [auditResult, setAuditResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadSettings()
@@ -189,6 +191,41 @@ export default function SettingsPage() {
       setCorrectJobsResult('Error: Network request failed')
     } finally {
       setIsCorrectingJobs(false)
+    }
+  }
+
+  const handleAuditEarnings = async () => {
+    setIsAuditing(true)
+    setAuditResult(null)
+    try {
+      const res = await fetch('/api/admin/audit-earnings')
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to audit earnings')
+        setAuditResult(`Error: ${data.error}`)
+        return
+      }
+      if (data.totalIssues === 0) {
+        toast.success('All earnings match the master data!')
+        setAuditResult(`All clean! ${data.totalMembers} members audited, 0 issues found.`)
+      } else {
+        toast.error(`Found ${data.totalIssues} issue(s) across ${data.totalMembers} members`)
+        const lines: string[] = []
+        for (const m of data.members) {
+          const issues = m.extras.length + m.missing.length + m.mismatches.length
+          if (issues === 0 && m.difference === 0) continue
+          lines.push(`${m.name}: DB $${m.dbTotal} vs JSON $${m.jsonTotal} (diff: $${m.difference})`)
+          for (const e of m.extras) lines.push(`  + EXTRA in DB: ${e.date} ${e.property} $${e.amountEarned}`)
+          for (const mi of m.missing) lines.push(`  - MISSING from DB: ${mi.date} ${mi.property} $${mi.perCleaner}`)
+          for (const mm of m.mismatches) lines.push(`  ~ MISMATCH: ${mm.date} ${mm.property} DB=$${mm.dbAmount} JSON=$${mm.jsonAmount}`)
+        }
+        setAuditResult(lines.join('\n'))
+      }
+    } catch (error) {
+      toast.error('Failed to audit earnings')
+      setAuditResult('Error: Network request failed')
+    } finally {
+      setIsAuditing(false)
     }
   }
 
@@ -519,6 +556,42 @@ export default function SettingsPage() {
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* Audit Earnings */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Search size={20} className="text-indigo-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Audit Earnings</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Compares every team member&apos;s DB earnings against the master JSON.
+                    Shows extras, missing jobs, and amount mismatches. Read-only — no data is changed.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleAuditEarnings}
+                  isLoading={isAuditing}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Search size={14} />
+                  {isAuditing ? 'Auditing...' : 'Audit Earnings'}
+                </Button>
+                {auditResult && !auditResult.includes('\n') && (
+                  <span className={`text-sm ${auditResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {auditResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {auditResult}
+                  </span>
+                )}
+              </div>
+              {auditResult && auditResult.includes('\n') && (
+                <pre className="text-xs bg-gray-50 border border-gray-200 rounded p-3 overflow-x-auto whitespace-pre-wrap text-red-700 max-h-64 overflow-y-auto">
+                  {auditResult}
+                </pre>
+              )}
             </div>
           </CardContent>
         </Card>
