@@ -214,7 +214,16 @@ export async function POST() {
             },
           })
 
-          // Sync cleaner assignments: delete existing, create with exact amountEarned
+          // Read existing assignments to preserve payment status
+          const existingAssignments = await prisma.jobAssignment.findMany({
+            where: { jobId: existingJob.id },
+            select: { teamMemberId: true, paidAt: true, paymentMethod: true },
+          })
+          const paidMap = new Map(
+            existingAssignments.map(a => [a.teamMemberId, { paidAt: a.paidAt, paymentMethod: a.paymentMethod }])
+          )
+
+          // Delete and recreate with correct amountEarned, preserving payment status
           await prisma.jobAssignment.deleteMany({
             where: { jobId: existingJob.id },
           })
@@ -223,6 +232,8 @@ export async function POST() {
               jobId: existingJob.id,
               teamMemberId,
               amountEarned: masterJob.per_cleaner,
+              paidAt: paidMap.get(teamMemberId)?.paidAt || null,
+              paymentMethod: paidMap.get(teamMemberId)?.paymentMethod || null,
             })),
           })
 
