@@ -28,6 +28,7 @@ const PROPERTY_ALIAS_MAP: Record<string, string[]> = {
   '1': ['suite 1', '1'],
   '2': ['suite 2', '2'],
   '150': ['other', '150'],
+  'OTHER': ['other'],
 }
 
 interface MasterJob {
