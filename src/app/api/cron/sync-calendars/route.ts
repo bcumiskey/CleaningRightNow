@@ -127,14 +127,18 @@ async function findMatchingProperty(
   )
   if (exactMatch) return exactMatch
 
-  // 2. Keyword matching — keywords must match the PARSED property name only, NOT the full summary
-  // This prevents "Deer Crossing Cleaning 🐕 +$50 dog fee" from matching a "dog" keyword
+  // 2. Keyword matching — keywords must match as WHOLE WORDS in the parsed property name
+  // This prevents "deer" keyword matching "deer crossing" when it belongs to a different property
   for (const prop of properties) {
     if (prop.keywords) {
       const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
       for (const keyword of keywordList) {
-        if (keyword && keyword.length >= 3 && parsedName.includes(keyword)) {
-          return prop
+        if (keyword && keyword.length >= 3) {
+          const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const wordBoundary = new RegExp(`\\b${escaped}\\b`, 'i')
+          if (wordBoundary.test(parsedName)) {
+            return prop
+          }
         }
       }
     }
@@ -280,8 +284,9 @@ export async function GET(request: NextRequest) {
           if (existingJob) {
             const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
             const renterChanged = existingJob.renterName !== renterName
+            const propertyChanged = existingJob.propertyId !== matchedProperty.id
 
-            if (dateChanged || renterChanged) {
+            if (dateChanged || renterChanged || propertyChanged) {
               const oldDate = existingJob.date
               await prisma.job.update({
                 where: { id: existingJob.id },

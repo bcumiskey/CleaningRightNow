@@ -132,14 +132,19 @@ async function findMatchingProperty(
     if (exactLegacy) return exactLegacy
   }
 
-  // 3. Keyword matching — but keywords must match the PARSED property name, not the full summary
-  // This prevents "Deer Crossing Cleaning 🐕 +$50 dog fee" from matching a "Dogwood" keyword
+  // 3. Keyword matching — keywords must match as WHOLE WORDS in the parsed property name
+  // This prevents "deer" keyword matching "deer crossing" when it belongs to a different property
   for (const prop of properties) {
     if (prop.keywords) {
       const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
       for (const keyword of keywordList) {
-        if (keyword && keyword.length >= 3 && parsedName.includes(keyword)) {
-          return prop
+        if (keyword && keyword.length >= 3) {
+          // Word boundary match — "deer" matches "deer crossing" but "dog" doesn't match "dogwood"
+          const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          const wordBoundary = new RegExp(`\\b${escaped}\\b`, 'i')
+          if (wordBoundary.test(parsedName)) {
+            return prop
+          }
         }
       }
     }
@@ -395,8 +400,9 @@ export async function POST(request: NextRequest) {
             const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
             const renterChanged = existingJob.renterName !== renterName
             const b2bChanged = existingJob.isBackToBack !== parsedEvent.isB2B
+            const propertyChanged = existingJob.propertyId !== matchedProperty.id
 
-            if (dateChanged || renterChanged || b2bChanged) {
+            if (dateChanged || renterChanged || b2bChanged || propertyChanged) {
               await prisma.job.update({
                 where: { id: existingJob.id },
                 data: {
