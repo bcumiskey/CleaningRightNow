@@ -102,10 +102,15 @@ export async function POST(request: NextRequest) {
     const jobRate = data.rate || property.baseRate
     const jobExpensePercent = data.expensePercent ?? property.expensePercent ?? 12
     const teamMemberIds: string[] = data.teamMemberIds || []
+    const dogCount = parseInt(data.dogCount) || 0
+    const dogFee = parseFloat(data.dogFee) || 0
+
+    // Total revenue = cleaning rate + dog fee (dog fee added before house cut)
+    const totalRevenue = jobRate + dogFee
 
     // Pre-calculate amountEarned for assignments if we have a rate and team
-    const amountEarned = teamMemberIds.length > 0 && jobRate > 0
-      ? calculateJobPayments(jobRate, jobExpensePercent, teamMemberIds.length).perPerson
+    const amountEarned = teamMemberIds.length > 0 && totalRevenue > 0
+      ? calculateJobPayments(totalRevenue, jobExpensePercent, teamMemberIds.length).perPerson
       : null
 
     const job = await prisma.job.create({
@@ -121,6 +126,8 @@ export async function POST(request: NextRequest) {
         nextCheckIn: data.nextCheckIn ? new Date(data.nextCheckIn) : null,
         payOverride: data.payOverride != null ? parseFloat(data.payOverride) : null,
         payAdjustNote: data.payAdjustNote || null,
+        dogCount,
+        dogFee,
         assignments: teamMemberIds.length > 0
           ? {
               create: teamMemberIds.map((id: string) => ({

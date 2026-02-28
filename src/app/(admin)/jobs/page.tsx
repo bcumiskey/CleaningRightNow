@@ -84,6 +84,8 @@ interface Job {
   renterName: string | null
   payOverride: number | null
   payAdjustNote: string | null
+  dogCount: number
+  dogFee: number
   property: { id: string; name: string; color: string | null }
   assignments: JobAssignment[]
 }
@@ -413,6 +415,8 @@ function JobsPageContent() {
         priority: parseInt(data.priority) || 5,
         payOverride: data.payOverride !== '' ? parseFloat(data.payOverride) : null,
         nextCheckIn: data.nextCheckIn || null,
+        dogCount: parseInt(data.dogCount) || 0,
+        dogFee: parseFloat(data.dogFee) || 0,
       }
 
       const url = editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs'
@@ -660,7 +664,8 @@ function JobsPageContent() {
                 </h4>
                 <div className="space-y-2">
                   {jobsByDate[dateKey].map(job => {
-                    const basePayments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+                    const totalRevenue = job.rate + (job.dogFee || 0)
+                    const basePayments = calculateJobPayments(totalRevenue, job.expensePercent, job.assignments.length)
                     const payments = job.payOverride != null && job.assignments.length > 0
                       ? { ...basePayments, perPerson: job.payOverride / job.assignments.length, teamTotal: job.payOverride }
                       : basePayments
@@ -744,6 +749,12 @@ function JobsPageContent() {
                                 {job.isBackToBack && (
                                   <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700">
                                     B2B
+                                  </span>
+                                )}
+                                {/* Dog badge */}
+                                {job.dogCount > 0 && (
+                                  <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700">
+                                    🐕 {job.dogCount} (+{formatCurrency(job.dogFee)})
                                   </span>
                                 )}
                                 {/* Next check-in */}
@@ -840,6 +851,9 @@ function JobsPageContent() {
                                 <span className="capitalize">Source: {job.source}</span>
                                 {job.isBackToBack && (
                                   <span className="px-2 py-1 rounded text-xs font-bold bg-orange-100 text-orange-700">B2B</span>
+                                )}
+                                {job.dogCount > 0 && (
+                                  <span className="px-2 py-1 rounded text-xs font-bold bg-purple-100 text-purple-700">🐕 {job.dogCount} (+{formatCurrency(job.dogFee)})</span>
                                 )}
                                 {job.renterName && (
                                   <span className="text-xs">Guest: {job.renterName}</span>
@@ -1092,7 +1106,7 @@ function JobsPageContent() {
                   selectedJobForTeamPayment.payOverride != null && selectedJobForTeamPayment.assignments.length > 0
                     ? selectedJobForTeamPayment.payOverride / selectedJobForTeamPayment.assignments.length
                     : calculateJobPayments(
-                        selectedJobForTeamPayment.rate,
+                        selectedJobForTeamPayment.rate + (selectedJobForTeamPayment.dogFee || 0),
                         selectedJobForTeamPayment.expensePercent,
                         selectedJobForTeamPayment.assignments.length
                       ).perPerson
@@ -1213,6 +1227,8 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
     nextCheckIn: '',
     payOverride: '',
     payAdjustNote: '',
+    dogCount: '0',
+    dogFee: '0',
   })
   const [isSaving, setIsSaving] = useState(false)
 
@@ -1231,6 +1247,8 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           nextCheckIn: editingJob.nextCheckIn ? format(parseISO(editingJob.nextCheckIn), 'yyyy-MM-dd') : '',
           payOverride: editingJob.payOverride != null ? editingJob.payOverride.toString() : '',
           payAdjustNote: editingJob.payAdjustNote || '',
+          dogCount: editingJob.dogCount?.toString() || '0',
+          dogFee: editingJob.dogFee?.toString() || '0',
         })
       } else {
         setFormData({
@@ -1245,6 +1263,8 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           nextCheckIn: '',
           payOverride: '',
           payAdjustNote: '',
+          dogCount: '0',
+          dogFee: '0',
         })
       }
     }
@@ -1367,6 +1387,27 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
             type="date"
             value={formData.nextCheckIn}
             onChange={(e) => setFormData({ ...formData, nextCheckIn: e.target.value })}
+          />
+        </div>
+
+        {/* Dog Fees */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input
+            label="Number of Dogs"
+            type="number"
+            min="0"
+            value={formData.dogCount}
+            onChange={(e) => {
+              const count = parseInt(e.target.value) || 0
+              setFormData({ ...formData, dogCount: e.target.value, dogFee: (count * 50).toString() })
+            }}
+          />
+          <Input
+            label="Dog Fee ($50/dog)"
+            type="number"
+            step="0.01"
+            value={formData.dogFee}
+            onChange={(e) => setFormData({ ...formData, dogFee: e.target.value })}
           />
         </div>
 
