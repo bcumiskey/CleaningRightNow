@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck, Search } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck, Search, Trash2 } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -48,6 +48,8 @@ export default function SettingsPage() {
   const [correctJobsResult, setCorrectJobsResult] = useState<string | null>(null)
   const [isAuditing, setIsAuditing] = useState(false)
   const [auditResult, setAuditResult] = useState<string | null>(null)
+  const [isResettingPayments, setIsResettingPayments] = useState(false)
+  const [resetPaymentsResult, setResetPaymentsResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadSettings()
@@ -226,6 +228,28 @@ export default function SettingsPage() {
       setAuditResult('Error: Network request failed')
     } finally {
       setIsAuditing(false)
+    }
+  }
+
+  const handleResetPayments = async () => {
+    if (!confirm('This will delete all 2026 invoices and reset all payment status. Jobs and earnings amounts will be kept. This cannot be undone.')) return
+    setIsResettingPayments(true)
+    setResetPaymentsResult(null)
+    try {
+      const res = await fetch('/api/admin/reset-payments', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to reset payments')
+        setResetPaymentsResult(`Error: ${data.error}`)
+        return
+      }
+      toast.success(`Payments reset! ${data.invoicesDeleted} invoices deleted, ${data.jobsReset} jobs reset, ${data.assignmentsReset} assignments reset`)
+      setResetPaymentsResult(`Done: ${data.invoicesDeleted} invoices deleted, ${data.jobsReset} jobs reset, ${data.assignmentsReset} assignments reset`)
+    } catch (error) {
+      toast.error('Failed to reset payments')
+      setResetPaymentsResult('Error: Network request failed')
+    } finally {
+      setIsResettingPayments(false)
     }
   }
 
@@ -592,6 +616,37 @@ export default function SettingsPage() {
                   {auditResult}
                 </pre>
               )}
+            </div>
+            {/* Reset All Payments */}
+            <div className="border border-red-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Trash2 size={20} className="text-red-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Reset All Payments</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Deletes all 2026 invoices and resets all payment status on jobs and assignments.
+                    Job data and earnings amounts are preserved. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleResetPayments}
+                  isLoading={isResettingPayments}
+                  variant="outline"
+                  size="sm"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  <AlertTriangle size={14} />
+                  {isResettingPayments ? 'Resetting...' : 'Reset All Payments'}
+                </Button>
+                {resetPaymentsResult && (
+                  <span className={`text-sm ${resetPaymentsResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {resetPaymentsResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {resetPaymentsResult}
+                  </span>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
