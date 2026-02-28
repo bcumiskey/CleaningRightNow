@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
     // Calculate earnings for each job
     interface Assignment {
       id: string
+      amountEarned: number | null
       paidAt: Date | null
       job: {
         id: string
@@ -103,8 +104,12 @@ export async function GET(request: NextRequest) {
     const earnings = assignments.map((assignment: Assignment) => {
       const job = assignment.job
       const workerCount = job.assignments.length
-      const netAfterExpenses = job.rate * (1 - job.expensePercent / 100)
-      const workerShare = netAfterExpenses / workerCount
+
+      // Use stored amountEarned when available (set by correction endpoint),
+      // fall back to calculation only when null
+      const workerShare = assignment.amountEarned != null
+        ? assignment.amountEarned
+        : Math.round((job.rate * (1 - job.expensePercent / 100) / workerCount) * 100) / 100
 
       return {
         id: assignment.id,
@@ -114,7 +119,7 @@ export async function GET(request: NextRequest) {
         jobRate: job.rate,
         expensePercent: job.expensePercent,
         workerCount,
-        workerShare: Math.round(workerShare * 100) / 100, // Round to 2 decimals
+        workerShare,
         status: assignment.paidAt ? 'paid' : 'pending',
         paidAt: assignment.paidAt,
       }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -44,6 +44,8 @@ export default function SettingsPage() {
   const [roomResult, setRoomResult] = useState<string | null>(null)
   const [isFixingSheets, setIsFixingSheets] = useState(false)
   const [sheetsResult, setSheetsResult] = useState<string | null>(null)
+  const [isCorrectingJobs, setIsCorrectingJobs] = useState(false)
+  const [correctJobsResult, setCorrectJobsResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadSettings()
@@ -159,6 +161,34 @@ export default function SettingsPage() {
       setSheetsResult('Error: Network request failed')
     } finally {
       setIsFixingSheets(false)
+    }
+  }
+
+  const handleCorrectJobs = async () => {
+    if (!confirm('This will update ALL completed jobs to match the master data. Rates, commissions, and cleaner assignments will be overwritten. Continue?')) return
+    setIsCorrectingJobs(true)
+    setCorrectJobsResult(null)
+    try {
+      const res = await fetch('/api/admin/correct-jobs', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to correct jobs')
+        const hint = data.hint ? ` — ${data.hint}` : ''
+        const unmatched = data.unmatchedProperties?.join(', ') || data.unmatchedMembers?.join(', ') || ''
+        setCorrectJobsResult(`Error: ${data.error}${hint}${unmatched ? ` [${unmatched}]` : ''}`)
+        return
+      }
+      const s = data.summary
+      toast.success(`Jobs corrected! ${s.updated} updated, ${s.created} created`)
+      setCorrectJobsResult(
+        `Done: ${s.updated} updated, ${s.created} created, ${s.skipped} skipped, ${s.errors} errors | ` +
+        `Revenue: $${s.totalRevenue.toLocaleString()} | Commission: $${s.totalCommission} | Net: $${s.netAfterCommission}`
+      )
+    } catch (error) {
+      toast.error('Failed to correct jobs')
+      setCorrectJobsResult('Error: Network request failed')
+    } finally {
+      setIsCorrectingJobs(false)
     }
   }
 
@@ -454,6 +484,38 @@ export default function SettingsPage() {
                   <span className={`text-sm ${sheetsResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
                     {sheetsResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
                     {sheetsResult}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Correct All Jobs */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <ClipboardCheck size={20} className="text-green-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Correct All Completed Jobs</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Updates all 47 completed jobs to match the master spreadsheet data exactly.
+                    Corrects rates, commission percentages, cleaner assignments, and per-cleaner pay.
+                    DOG (FEE) is skipped (needs date). Safe to run multiple times.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleCorrectJobs}
+                  isLoading={isCorrectingJobs}
+                  variant="outline"
+                  size="sm"
+                >
+                  <AlertTriangle size={14} />
+                  {isCorrectingJobs ? 'Correcting...' : 'Correct All Jobs Now'}
+                </Button>
+                {correctJobsResult && (
+                  <span className={`text-sm ${correctJobsResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {correctJobsResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {correctJobsResult}
                   </span>
                 )}
               </div>

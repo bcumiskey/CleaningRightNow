@@ -301,6 +301,9 @@ model Job {
   payOverride     Float?
   payAdjustNote   String?   // "Left early", "Docked for no-show", etc.
 
+  // Group label for multi-property cleans done on the same day
+  originalGroup   String?
+
   // Relations
   assignments     JobAssignment[]
   invoiceItems    InvoiceLineItem[]
