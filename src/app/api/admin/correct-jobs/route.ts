@@ -27,6 +27,7 @@ const PROPERTY_ALIAS_MAP: Record<string, string[]> = {
   'ANT': ['anthony', 'ant'],
   '1': ['suite 1', '1'],
   '2': ['suite 2', '2'],
+  '150': ['other', '150'],
 }
 
 interface MasterJob {
@@ -140,14 +141,12 @@ export async function POST() {
     for (const masterJob of masterData.jobs as MasterJob[]) {
       // Skip DOG (FEE) — null date, needs manual handling
       // Skip 150 — not yet in the system
-      if (masterJob.date === null || masterJob.property === '150') {
+      if (masterJob.date === null) {
         results.push({
           status: 'skipped',
           date: masterJob.date,
           property: masterJob.property,
-          detail: masterJob.date === null
-            ? 'Skipped: null date (DOG FEE) — needs manual date assignment'
-            : 'Skipped: property 150 not yet in system',
+          detail: 'Skipped: null date (DOG FEE) — needs manual date assignment',
         })
         skipped++
         continue
