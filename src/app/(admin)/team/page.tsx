@@ -213,7 +213,7 @@ export default function TeamPage() {
                 className={`hover:shadow-md transition-shadow cursor-pointer ${
                   !member.isActive ? 'opacity-60 bg-gray-50' : ''
                 }`}
-                onClick={() => member.isActive && handleEdit(member)}
+                onClick={() => handleEdit(member)}
               >
                 <CardContent>
                   <div className="flex items-start gap-4">
@@ -331,38 +331,35 @@ export default function TeamPage() {
 
                       {/* Action Buttons */}
                       <div className="mt-3 pt-3 border-t flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(member)
+                          }}
+                        >
+                          <Pencil size={14} />
+                          Edit
+                        </Button>
                         {member.isActive ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="flex-1"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleEdit(member)
-                              }}
-                            >
-                              <Pencil size={14} />
-                              Edit
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-600 hover:bg-red-50"
-                              onClick={(e) => handleDelete(member, e)}
-                            >
-                              <Trash2 size={14} />
-                            </Button>
-                          </>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 hover:bg-red-50"
+                            onClick={(e) => handleDelete(member, e)}
+                          >
+                            <Trash2 size={14} />
+                          </Button>
                         ) : (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="flex-1 text-green-600 hover:bg-green-50"
+                            className="text-green-600 hover:bg-green-50"
                             onClick={(e) => handleReactivate(member, e)}
                           >
                             <RefreshCw size={14} />
-                            Reactivate
                           </Button>
                         )}
                       </div>

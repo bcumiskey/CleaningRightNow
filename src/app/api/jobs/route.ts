@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
         assignments: {
           select: {
             id: true,
+            payAdjustment: true,
+            adjustNote: true,
             paidAt: true,
             paymentMethod: true,
             teamMember: { select: { id: true, name: true } },

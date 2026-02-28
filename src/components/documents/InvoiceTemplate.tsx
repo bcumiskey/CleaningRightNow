@@ -68,6 +68,7 @@ export default function InvoiceTemplate({
     draft: 'bg-gray-100 text-gray-800',
     sent: 'bg-blue-100 text-blue-800',
     paid: 'bg-green-100 text-green-800',
+    voided: 'bg-red-100 text-red-800',
   }
 
   return (

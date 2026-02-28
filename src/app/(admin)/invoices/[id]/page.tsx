@@ -38,6 +38,8 @@ interface Invoice {
   total: number
   status: string
   paymentMethod?: string | null
+  voidedAt?: string | null
+  voidReason?: string | null
   notes?: string | null
   lineItems: LineItem[]
   property: {
@@ -237,6 +239,27 @@ export default function InvoiceViewPage() {
     }
   }
 
+  const handleVoid = async () => {
+    const reason = window.prompt('Reason for voiding this invoice:')
+    if (reason === null) return // cancelled
+    try {
+      const res = await fetch(`/api/invoices/${id}/void`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      if (res.ok) {
+        toast.success('Invoice voided')
+        loadData()
+      } else {
+        const error = await res.json()
+        toast.error(error.error || 'Failed to void invoice')
+      }
+    } catch {
+      toast.error('Failed to void invoice')
+    }
+  }
+
   const handleDelete = async () => {
     if (!invoice) return
     if (!confirm('Are you sure you want to delete this invoice? This cannot be undone.')) return
@@ -392,6 +415,17 @@ export default function InvoiceViewPage() {
                   Print
                 </Button>
 
+                {/* Void - for sent or paid invoices */}
+                {(invoice.status === 'sent' || invoice.status === 'paid') && (
+                  <Button
+                    variant="outline"
+                    onClick={handleVoid}
+                    className="text-red-600 hover:text-red-700 hover:border-red-300"
+                  >
+                    Void
+                  </Button>
+                )}
+
                 {/* Delete - only for draft invoices */}
                 {invoice.status === 'draft' && (
                   <Button
@@ -408,6 +442,16 @@ export default function InvoiceViewPage() {
             </div>
           </div>
         </div>
+
+        {/* Voided Banner */}
+        {invoice.status === 'voided' && (
+          <div className="mx-6 mb-0 p-4 bg-red-50 border border-red-200 rounded-lg print:hidden">
+            <p className="text-red-800 font-semibold">This invoice has been voided</p>
+            {invoice.voidReason && (
+              <p className="text-red-600 text-sm mt-1">Reason: {invoice.voidReason}</p>
+            )}
+          </div>
+        )}
 
         {/* Invoice Template - visible in print */}
         <div className="p-6 print:p-0 overflow-x-auto">

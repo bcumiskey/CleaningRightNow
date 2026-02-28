@@ -40,6 +40,8 @@ import toast from 'react-hot-toast'
 interface JobAssignment {
   id: string
   teamMember: { id: string; name: string; imageUrl?: string | null }
+  payAdjustment: number | null
+  adjustNote: string | null
   paidAt: string | null
   paymentMethod: string | null
 }
@@ -811,32 +813,52 @@ function JobsPageContent() {
                           {/* Expanded Details */}
                           {isExpanded && (
                             <div className="mt-4 pt-4 border-t space-y-4">
-                              {/* Team Members Detail */}
-                              <div className="flex flex-wrap gap-2">
-                                {job.assignments.length > 0 ? (
-                                  job.assignments.map(a => (
-                                    <div key={a.teamMember.id} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                                      <div className={cn(
-                                        'w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium',
-                                        getAvatarColor(a.teamMember.name)
-                                      )}>
-                                        {getInitials(a.teamMember.name)}
-                                      </div>
-                                      <span className="text-sm font-medium text-gray-700">{a.teamMember.name}</span>
-                                      {job.assignments.length > 0 && (
-                                        <span className="text-xs text-gray-500">
-                                          {formatCurrency(payments.perPerson)}
+                              {/* Team Members Detail with Per-Person Pay */}
+                              {job.assignments.length > 0 ? (
+                                <div className="space-y-2">
+                                  {job.assignments.map(a => {
+                                    const basePay = payments.perPerson
+                                    const finalPay = basePay + (a.payAdjustment || 0)
+                                    return (
+                                      <div key={a.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2">
+                                        <div className={cn(
+                                          'w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium flex-shrink-0',
+                                          getAvatarColor(a.teamMember.name)
+                                        )}>
+                                          {getInitials(a.teamMember.name)}
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-700 min-w-[80px]">{a.teamMember.name}</span>
+                                        <span className={cn(
+                                          'text-sm font-semibold',
+                                          a.payAdjustment && a.payAdjustment < 0 ? 'text-red-600' :
+                                          a.payAdjustment && a.payAdjustment > 0 ? 'text-green-600' :
+                                          'text-gray-700'
+                                        )}>
+                                          {formatCurrency(finalPay)}
                                         </span>
-                                      )}
-                                    </div>
-                                  ))
-                                ) : (
-                                  <span className="text-sm text-amber-600 flex items-center gap-1">
-                                    <AlertCircle size={14} />
-                                    No team assigned
-                                  </span>
-                                )}
-                              </div>
+                                        {a.payAdjustment != null && a.payAdjustment !== 0 && (
+                                          <span className={cn(
+                                            'text-xs',
+                                            a.payAdjustment < 0 ? 'text-red-500' : 'text-green-500'
+                                          )}>
+                                            ({a.payAdjustment > 0 ? '+' : ''}{formatCurrency(a.payAdjustment)})
+                                          </span>
+                                        )}
+                                        {a.adjustNote && (
+                                          <span className="text-xs text-gray-400 italic">{a.adjustNote}</span>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                  {/* Per-Person Adjustment Inputs */}
+                                  <PerPersonAdjustments job={job} onSaved={fetchJobs} />
+                                </div>
+                              ) : (
+                                <span className="text-sm text-amber-600 flex items-center gap-1">
+                                  <AlertCircle size={14} />
+                                  No team assigned
+                                </span>
+                              )}
 
                               {/* Meta Info */}
                               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
@@ -1200,6 +1222,113 @@ function JobsPageContent() {
           </div>
         )}
       </Modal>
+    </div>
+  )
+}
+
+// Per-person pay adjustment inline component for expanded job view
+function PerPersonAdjustments({ job, onSaved }: { job: Job; onSaved: () => void }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [adjustments, setAdjustments] = useState<Record<string, { payAdjustment: string; adjustNote: string }>>({})
+  const [isSaving, setIsSaving] = useState<string | null>(null)
+
+  useEffect(() => {
+    const initial: Record<string, { payAdjustment: string; adjustNote: string }> = {}
+    for (const a of job.assignments) {
+      initial[a.id] = {
+        payAdjustment: a.payAdjustment != null ? a.payAdjustment.toString() : '',
+        adjustNote: a.adjustNote || '',
+      }
+    }
+    setAdjustments(initial)
+  }, [job.assignments])
+
+  const handleSave = async (assignmentId: string) => {
+    const adj = adjustments[assignmentId]
+    if (!adj) return
+
+    setIsSaving(assignmentId)
+    try {
+      const res = await fetch(`/api/jobs/${job.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignmentAdjustments: [{
+            assignmentId,
+            payAdjustment: adj.payAdjustment === '' ? null : adj.payAdjustment,
+            adjustNote: adj.adjustNote,
+          }],
+        }),
+      })
+      if (res.ok) {
+        toast.success('Pay adjustment saved')
+        onSaved()
+      } else {
+        toast.error('Failed to save adjustment')
+      }
+    } catch {
+      toast.error('Failed to save adjustment')
+    } finally {
+      setIsSaving(null)
+    }
+  }
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); setIsOpen(true) }}
+        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 mt-1"
+      >
+        <DollarSign size={12} />
+        Adjust individual pay
+      </button>
+    )
+  }
+
+  return (
+    <div className="mt-2 border rounded-lg p-3 bg-white space-y-2" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-xs font-semibold text-gray-600 uppercase">Per-Person Adjustments</span>
+        <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600">
+          <X size={14} />
+        </button>
+      </div>
+      {job.assignments.map(a => {
+        const adj = adjustments[a.id] || { payAdjustment: '', adjustNote: '' }
+        return (
+          <div key={a.id} className="flex items-center gap-2">
+            <span className="text-sm text-gray-700 min-w-[80px] truncate">{a.teamMember.name}</span>
+            <input
+              type="number"
+              step="0.01"
+              placeholder="+/- $"
+              value={adj.payAdjustment}
+              onChange={(e) => setAdjustments(prev => ({
+                ...prev,
+                [a.id]: { ...prev[a.id], payAdjustment: e.target.value },
+              }))}
+              className="w-20 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <input
+              type="text"
+              placeholder="Reason"
+              value={adj.adjustNote}
+              onChange={(e) => setAdjustments(prev => ({
+                ...prev,
+                [a.id]: { ...prev[a.id], adjustNote: e.target.value },
+              }))}
+              className="flex-1 px-2 py-1 text-sm border rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            />
+            <button
+              onClick={() => handleSave(a.id)}
+              disabled={isSaving === a.id}
+              className="p-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-50"
+            >
+              {isSaving === a.id ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />}
+            </button>
+          </div>
+        )
+      })}
     </div>
   )
 }

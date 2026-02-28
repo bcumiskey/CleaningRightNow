@@ -34,15 +34,11 @@ async function main() {
 
   // Linen Items from owner's spreadsheet
   const items = [
-    // Sheets
-    { name: 'King Top', code: 'K-Top', unitCost: 13.33, categoryId: sheets.id },
-    { name: 'King Bottom', code: 'K-Bottom', unitCost: 13.33, categoryId: sheets.id },
-    { name: 'Queen Top', code: 'Q-Top', unitCost: 11.67, categoryId: sheets.id },
-    { name: 'Queen Bottom', code: 'Q-Bottom', unitCost: 11.67, categoryId: sheets.id },
-    { name: 'Full Top', code: 'F-Top', unitCost: 10.00, categoryId: sheets.id },
-    { name: 'Full Bottom', code: 'F-Bottom', unitCost: 10.00, categoryId: sheets.id },
-    { name: 'Twin Top', code: 'T-Top', unitCost: 3.33, categoryId: sheets.id },
-    { name: 'Twin Bottom', code: 'T-Bottom', unitCost: 3.33, categoryId: sheets.id },
+    // Sheets (sets = fitted + flat + pillowcases)
+    { name: 'King Set', code: 'K-Set', unitCost: 26.66, categoryId: sheets.id },
+    { name: 'Queen Set', code: 'Q-Set', unitCost: 23.34, categoryId: sheets.id },
+    { name: 'Full Set', code: 'F-Set', unitCost: 20.00, categoryId: sheets.id },
+    { name: 'Twin Set', code: 'T-Set', unitCost: 6.66, categoryId: sheets.id },
     // Bedding
     { name: 'King Duvet Cover', code: 'K-Duvet', unitCost: 40.00, categoryId: bedding.id },
     { name: 'Full/Queen Duvet Cover', code: 'FQ-Duvet', unitCost: 35.00, categoryId: bedding.id },
