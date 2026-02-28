@@ -92,6 +92,9 @@ export async function PATCH(
       updateData.payOverride = data.payOverride !== null && data.payOverride !== '' ? parseFloat(data.payOverride) : null
     }
     if (data.payAdjustNote !== undefined) updateData.payAdjustNote = data.payAdjustNote || null
+    // Dog fields
+    if (data.dogCount !== undefined) updateData.dogCount = parseInt(data.dogCount) || 0
+    if (data.dogFee !== undefined) updateData.dogFee = parseFloat(data.dogFee) || 0
 
     const job = await prisma.job.update({
       where: { id: params.id },
@@ -113,12 +116,15 @@ export async function PATCH(
       },
     })
 
+    // Total revenue = cleaning rate + dog fee (dog fee is part of total before house cut)
+    const totalRevenue = job.rate + (job.dogFee || 0)
+
     // If job is marked completed, calculate amountEarned for all assignments
     if (data.completed && job.assignments.length > 0) {
       // Use payOverride if set, otherwise calculate normally
       const perPerson = job.payOverride != null && job.assignments.length > 0
         ? job.payOverride / job.assignments.length
-        : calculateJobPayments(job.rate, job.expensePercent, job.assignments.length).perPerson
+        : calculateJobPayments(totalRevenue, job.expensePercent, job.assignments.length).perPerson
       await prisma.jobAssignment.updateMany({
         where: { jobId: job.id },
         data: { amountEarned: perPerson },
@@ -129,7 +135,7 @@ export async function PATCH(
     if (data.payOverride !== undefined && job.completed && job.assignments.length > 0) {
       const perPerson = job.payOverride != null
         ? job.payOverride / job.assignments.length
-        : calculateJobPayments(job.rate, job.expensePercent, job.assignments.length).perPerson
+        : calculateJobPayments(totalRevenue, job.expensePercent, job.assignments.length).perPerson
       await prisma.jobAssignment.updateMany({
         where: { jobId: job.id },
         data: { amountEarned: perPerson },
@@ -169,7 +175,7 @@ export async function PATCH(
 
       // Recalculate amountEarned for assignments if job is already completed
       if (job.completed && job.assignments.length > 0) {
-        const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+        const payments = calculateJobPayments(totalRevenue, job.expensePercent, job.assignments.length)
         await prisma.jobAssignment.updateMany({
           where: { jobId: job.id },
           data: { amountEarned: payments.perPerson },
@@ -324,8 +330,9 @@ export async function PATCH(
       // Add new assignments (with amountEarned if job is completed)
       if (data.teamMemberIds.length > 0) {
         const currentJob = await prisma.job.findUnique({ where: { id: params.id } })
+        const currentTotalRevenue = currentJob ? currentJob.rate + (currentJob.dogFee || 0) : 0
         const amountEarned = currentJob?.completed && currentJob.rate > 0
-          ? calculateJobPayments(currentJob.rate, currentJob.expensePercent, data.teamMemberIds.length).perPerson
+          ? calculateJobPayments(currentTotalRevenue, currentJob.expensePercent, data.teamMemberIds.length).perPerson
           : null
 
         await prisma.jobAssignment.createMany({
