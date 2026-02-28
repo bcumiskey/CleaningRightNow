@@ -262,8 +262,32 @@ export async function DELETE(
 
     const { propertyId } = await params
     const { searchParams } = new URL(request.url)
+    const deleteAll = searchParams.get('deleteAll') === 'true'
     const itemId = searchParams.get('itemId')
     const room = searchParams.get('room') || 'General'
+
+    // Bulk wipe all linen data for this property
+    if (deleteAll) {
+      const sessionUser2 = session.user as { id?: string; email?: string }
+      console.log(`[LINEN WIPE] Property: ${propertyId}, User: ${sessionUser2.id || sessionUser2.email || 'unknown'}, Timestamp: ${new Date().toISOString()}`)
+
+      const [reqCount, invCount] = await prisma.$transaction([
+        prisma.propertyLinenRequirement.deleteMany({
+          where: { propertyId },
+        }),
+        prisma.propertyLinenInventory.deleteMany({
+          where: { propertyId },
+        }),
+      ])
+
+      return NextResponse.json({
+        success: true,
+        wiped: {
+          requirements: reqCount.count,
+          inventory: invCount.count,
+        },
+      })
+    }
 
     if (!itemId) {
       return NextResponse.json({ error: 'itemId is required' }, { status: 400 })

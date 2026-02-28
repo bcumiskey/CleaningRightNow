@@ -103,12 +103,21 @@ model Room {
   property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   name        String    // "Master Bedroom", "Guest Bathroom 1", "Kitchen"
-  type        String    // "bedroom" | "bathroom" | "kitchen" | "living" | "laundry" | "outdoor" | "other"
+  type        String    // "bedroom" | "bathroom" | "kitchen" | "living" | "laundry" | "outdoor" | "storage" | "other"
   sortOrder   Int       @default(0)
+
+  // Floor/area grouping for room setup guide
+  floor       String?   // "Main Floor" | "Upstairs" | "Basement" | "Garage" | etc.
 
   // For bedrooms - structured bed configuration
   // JSON: [{ "type": "King", "count": 1 }, { "type": "Queen", "count": 2 }]
   beds        Json?
+
+  // Room setup guide fields
+  pillowCount Int?      // Number of pillows in this room
+  sheetSet    String?   // "King Set" | "Queen Set" | "Full Set" | "Twin Set" | "Crib Sheet"
+  servesRoom  String?   // For bathrooms: which bedroom this bathroom serves
+  notes       String?   // Free-text setup notes (towel placement, arrangement details, etc.)
 
   // Relations
   instructions        PropertyInstruction[]

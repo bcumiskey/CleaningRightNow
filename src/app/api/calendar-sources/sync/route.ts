@@ -25,6 +25,28 @@ interface ParsedEvent {
   isAllDay: boolean  // Track if this is an all-day event
 }
 
+// Parse event title to extract property name, B2B status, and dog info
+// Event title format: "[Property Name] Cleaning [optional flags]"
+interface ParsedCalendarEvent {
+  propertyName: string
+  isB2B: boolean
+  dogCount: number
+  dogFee: number
+}
+
+function parseEventTitle(summary: string): ParsedCalendarEvent {
+  const cleaningIndex = summary.indexOf(' Cleaning')
+  const propertyName = cleaningIndex > -1
+    ? summary.substring(0, cleaningIndex).trim()
+    : summary.trim()
+
+  const isB2B = summary.includes('⚡B2B')
+  const dogCount = (summary.match(/🐕/g) || []).length
+  const dogFee = dogCount * 50
+
+  return { propertyName, isB2B, dogCount, dogFee }
+}
+
 // Helper to extract renter/guest name from event summary
 function extractRenterName(summary: string): string | null {
   if (!summary) return null
@@ -63,13 +85,13 @@ function extractRenterName(summary: string): string | null {
 function extractPropertyName(summary: string): string | null {
   if (!summary) return null
 
-  // Common patterns in vacation rental calendars:
-  // "Property Name - Check-out"
-  // "Check-out: Property Name"
-  // "Checkout Property Name"
-  // "Property Name (Guest Name)"
-  // Just "Property Name"
+  // First try the cleaning event format: "[Property Name] Cleaning [flags]"
+  const parsed = parseEventTitle(summary)
+  if (parsed.propertyName && summary.includes(' Cleaning')) {
+    return parsed.propertyName
+  }
 
+  // Fallback: Common patterns in vacation rental calendars
   let propertyName = summary
 
   // Remove common prefixes/suffixes
@@ -356,6 +378,9 @@ export async function POST(request: NextRequest) {
             continue
           }
 
+          // Parse event title for property name, B2B, and dog info
+          const parsedEvent = parseEventTitle(event.summary)
+
           // Extract renter name from event
           const renterName = extractRenterName(event.summary)
 
@@ -371,17 +396,20 @@ export async function POST(request: NextRequest) {
           })
 
           if (existingJob) {
-            // UPDATE existing job if date or details changed
+            // UPDATE existing job — only update calendar-sourced fields
+            // NEVER overwrite: crew assignments, pay splits, manual adjustments, publish status
             const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
             const renterChanged = existingJob.renterName !== renterName
+            const b2bChanged = existingJob.isBackToBack !== parsedEvent.isB2B
 
-            if (dateChanged || renterChanged) {
+            if (dateChanged || renterChanged || b2bChanged) {
               await prisma.job.update({
                 where: { id: existingJob.id },
                 data: {
                   date: jobDate,
                   propertyId: matchedProperty.id,
                   renterName,
+                  isBackToBack: parsedEvent.isB2B || existingJob.isBackToBack,
                 },
               })
               result.jobsUpdated++
@@ -390,8 +418,6 @@ export async function POST(request: NextRequest) {
             }
           } else {
             // Secondary dedup: check for existing job with same property + date
-            // This catches cases where a job was manually created and then the
-            // same event comes through calendar sync, or if iCal UIDs change
             const duplicateJob = await prisma.job.findFirst({
               where: {
                 propertyId: matchedProperty.id,
@@ -400,8 +426,6 @@ export async function POST(request: NextRequest) {
             })
 
             if (duplicateJob) {
-              // Link the existing job to this calendar event's UID so future
-              // syncs will match by externalId directly
               const needsUpdate = !duplicateJob.externalId || duplicateJob.renterName !== renterName
               if (needsUpdate) {
                 await prisma.job.update({
@@ -409,6 +433,7 @@ export async function POST(request: NextRequest) {
                   data: {
                     externalId: event.uid,
                     ...(renterName && !duplicateJob.renterName ? { renterName } : {}),
+                    isBackToBack: parsedEvent.isB2B || duplicateJob.isBackToBack,
                   },
                 })
                 result.jobsUpdated++
@@ -426,6 +451,7 @@ export async function POST(request: NextRequest) {
                   source: source.type,
                   externalId: event.uid,
                   renterName,
+                  isBackToBack: parsedEvent.isB2B,
                 },
               })
               result.jobsCreated++

@@ -69,6 +69,27 @@ async function parseICalFeed(url: string): Promise<ParsedEvent[]> {
   return events
 }
 
+// Parse event title to extract property name, B2B status, and dog info
+interface ParsedCalendarEvent {
+  propertyName: string
+  isB2B: boolean
+  dogCount: number
+  dogFee: number
+}
+
+function parseEventTitle(summary: string): ParsedCalendarEvent {
+  const cleaningIndex = summary.indexOf(' Cleaning')
+  const propertyName = cleaningIndex > -1
+    ? summary.substring(0, cleaningIndex).trim()
+    : summary.trim()
+
+  const isB2B = summary.includes('⚡B2B')
+  const dogCount = (summary.match(/🐕/g) || []).length
+  const dogFee = dogCount * 50
+
+  return { propertyName, isB2B, dogCount, dogFee }
+}
+
 // Extract renter name from event summary
 function extractRenterName(summary: string): string | null {
   if (!summary) return null
@@ -96,6 +117,9 @@ async function findMatchingProperty(
   eventSummary: string,
   properties: { id: string; name: string; keywords: string | null }[]
 ): Promise<{ id: string; name: string } | null> {
+  // First try parsing the cleaning event title format
+  const parsed = parseEventTitle(eventSummary)
+  const normalizedParsed = parsed.propertyName.toLowerCase().trim()
   const normalizedSummary = eventSummary.toLowerCase().trim()
 
   // Check keywords first
@@ -103,16 +127,23 @@ async function findMatchingProperty(
     if (prop.keywords) {
       const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
       for (const keyword of keywordList) {
-        if (keyword && normalizedSummary.includes(keyword)) {
+        if (keyword && (normalizedParsed.includes(keyword) || normalizedSummary.includes(keyword))) {
           return prop
         }
       }
     }
   }
 
-  // Check property names
+  // Exact match on parsed property name
+  const exactMatch = properties.find(
+    p => p.name.toLowerCase().trim() === normalizedParsed
+  )
+  if (exactMatch) return exactMatch
+
+  // Contains match — property name in parsed name or full summary
   for (const prop of properties) {
-    if (normalizedSummary.includes(prop.name.toLowerCase().trim())) {
+    const propName = prop.name.toLowerCase().trim()
+    if (normalizedParsed.includes(propName) || normalizedSummary.includes(propName)) {
       return prop
     }
   }
@@ -223,6 +254,7 @@ export async function GET(request: NextRequest) {
           const matchedProperty = await findMatchingProperty(event.summary, properties)
           if (!matchedProperty) continue
 
+          const parsedEvent = parseEventTitle(event.summary)
           const renterName = extractRenterName(event.summary)
           const property = properties.find(p => p.id === matchedProperty.id)
           const rate = property?.baseRate || 0
@@ -239,7 +271,12 @@ export async function GET(request: NextRequest) {
               const oldDate = existingJob.date
               await prisma.job.update({
                 where: { id: existingJob.id },
-                data: { date: jobDate, propertyId: matchedProperty.id, renterName },
+                data: {
+                  date: jobDate,
+                  propertyId: matchedProperty.id,
+                  renterName,
+                  isBackToBack: parsedEvent.isB2B || existingJob.isBackToBack,
+                },
               })
               totalUpdated++
 
@@ -266,6 +303,7 @@ export async function GET(request: NextRequest) {
                 source: source.type,
                 externalId: event.uid,
                 renterName,
+                isBackToBack: parsedEvent.isB2B,
               },
             })
             totalCreated++
