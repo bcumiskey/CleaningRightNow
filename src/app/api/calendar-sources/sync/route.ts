@@ -323,6 +323,11 @@ export async function POST(request: NextRequest) {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
 
+    // Collect ALL seen UIDs across ALL sources — stale cleanup happens once at end
+    const allSeenExternalIds = new Set<string>()
+    // Track all synced property IDs for B2B detection at end
+    const allSyncedPropertyIds = new Set<string>()
+
     for (const source of sources) {
       const result: SyncResult = {
         sourceId: source.id,
@@ -341,36 +346,20 @@ export async function POST(request: NextRequest) {
         const events = await parseICalFeed(source.icalUrl)
         result.eventsFound = events.length
 
-        // Track property IDs that had jobs synced for B2B detection
-        const syncedPropertyIds = new Set<string>()
-        // Track all event UIDs seen in this feed (for stale cleanup)
-        const seenExternalIds = new Set<string>()
-
         // Process each event
         for (const event of events) {
-          // Track every UID from this feed, even past events
-          if (event.uid) seenExternalIds.add(event.uid)
-          // Calculate the cleaning/checkout date from the iCal event
-          // CRITICAL: iCal RFC 5545 specifies that DTEND for all-day events is EXCLUSIVE
-          // This means a guest staying Jan 1-3 has DTEND=20250104 (Jan 4)
-          // We must subtract 1 day to get the actual checkout date (Jan 3)
-          //
-          // THE RULE: Checkout date = cleaning date. No shifting. If guest checks
-          // out Jan 3rd, cleaning happens Jan 3rd.
+          // Track every UID from every feed for stale cleanup
+          if (event.uid) allSeenExternalIds.add(event.uid)
 
           const jobDate = new Date(event.end)
 
           if (event.isAllDay) {
-            // For all-day events: DTEND is exclusive, subtract 1 day
-            // Example: Stay Jan 1-3 → DTSTART=20250101, DTEND=20250104
-            // Actual checkout = Jan 3 (DTEND minus 1 day)
+            // DTEND is exclusive for all-day events, subtract 1 day
             jobDate.setDate(jobDate.getDate() - 1)
           }
-          // For timed events: DTEND is the actual end datetime, just use the date portion
 
-          // Use noon (12:00) to avoid timezone shift issues.
-          // Midnight UTC (00:00) shifts to the previous day in EST/EDT (UTC-5/4).
-          // Noon UTC stays on the correct calendar day in all US timezones.
+          // Use noon to avoid timezone shift issues.
+          // Midnight UTC shifts to previous day in EST/EDT (UTC-5/4).
           jobDate.setHours(12, 0, 0, 0)
 
           // Skip past events
@@ -403,7 +392,6 @@ export async function POST(request: NextRequest) {
 
           if (existingJob) {
             // UPDATE existing job — only update calendar-sourced fields
-            // NEVER overwrite: crew assignments, pay splits, manual adjustments, publish status
             const dateChanged = existingJob.date.getTime() !== jobDate.getTime()
             const renterChanged = existingJob.renterName !== renterName
             const b2bChanged = existingJob.isBackToBack !== parsedEvent.isB2B
@@ -464,41 +452,7 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          syncedPropertyIds.add(matchedProperty.id)
-        }
-
-        // Clean up stale events: delete future calendar-synced jobs whose UIDs
-        // no longer exist in this feed (event was deleted from Google Calendar)
-        if (seenExternalIds.size > 0) {
-          const staleJobs = await prisma.job.findMany({
-            where: {
-              source: source.type,
-              externalId: { not: null },
-              date: { gte: today },
-              // Only delete jobs NOT in the current feed
-              NOT: { externalId: { in: Array.from(seenExternalIds) } },
-            },
-            select: { id: true, externalId: true },
-          })
-
-          if (staleJobs.length > 0) {
-            // Only delete jobs that don't have crew assignments (preserve manual work)
-            for (const staleJob of staleJobs) {
-              const assignmentCount = await prisma.jobAssignment.count({
-                where: { jobId: staleJob.id },
-              })
-              if (assignmentCount === 0) {
-                await prisma.job.delete({ where: { id: staleJob.id } })
-                result.jobsRemoved++
-              }
-            }
-          }
-        }
-
-        // Detect and flag B2B (back-to-back) cleanings
-        // B2B = same property has multiple jobs on same day (checkout and new check-in)
-        if (syncedPropertyIds.size > 0) {
-          await detectAndFlagBackToBack(Array.from(syncedPropertyIds))
+          allSyncedPropertyIds.add(matchedProperty.id)
         }
 
         // Update source sync status
@@ -529,11 +483,41 @@ export async function POST(request: NextRequest) {
       results.push(result)
     }
 
+    // Stale cleanup: AFTER processing ALL sources, delete future calendar-synced
+    // jobs whose UIDs no longer appear in ANY feed (event was deleted from calendar).
+    // Done once at end so source A doesn't accidentally delete source B's jobs.
+    let totalStaleRemoved = 0
+    if (allSeenExternalIds.size > 0) {
+      const staleJobs = await prisma.job.findMany({
+        where: {
+          source: { not: 'manual' },
+          externalId: { not: null },
+          date: { gte: today },
+          NOT: { externalId: { in: Array.from(allSeenExternalIds) } },
+        },
+        select: { id: true },
+      })
+
+      for (const staleJob of staleJobs) {
+        const assignmentCount = await prisma.jobAssignment.count({
+          where: { jobId: staleJob.id },
+        })
+        if (assignmentCount === 0) {
+          await prisma.job.delete({ where: { id: staleJob.id } })
+          totalStaleRemoved++
+        }
+      }
+    }
+
+    // Detect and flag B2B cleanings across all synced properties
+    if (allSyncedPropertyIds.size > 0) {
+      await detectAndFlagBackToBack(Array.from(allSyncedPropertyIds))
+    }
+
     // Summary
     const totalCreated = results.reduce((sum, r) => sum + r.jobsCreated, 0)
     const totalUpdated = results.reduce((sum, r) => sum + r.jobsUpdated, 0)
     const totalUnchanged = results.reduce((sum, r) => sum + r.jobsUnchanged, 0)
-    const totalRemoved = results.reduce((sum, r) => sum + r.jobsRemoved, 0)
     const totalUnmatched = results.reduce((sum, r) => sum + r.unmatchedEvents.length, 0)
 
     return NextResponse.json({
@@ -542,7 +526,7 @@ export async function POST(request: NextRequest) {
         sourcesSynced: sources.length,
         jobsCreated: totalCreated,
         jobsUpdated: totalUpdated,
-        jobsRemoved: totalRemoved,
+        jobsRemoved: totalStaleRemoved,
         jobsUnchanged: totalUnchanged,
         unmatchedEvents: totalUnmatched,
       },

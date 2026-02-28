@@ -112,42 +112,47 @@ function extractRenterName(summary: string): string | null {
   return null
 }
 
-// Find matching property by keywords or name
+// Find matching property by name and keywords
 async function findMatchingProperty(
   eventSummary: string,
   properties: { id: string; name: string; keywords: string | null }[]
 ): Promise<{ id: string; name: string } | null> {
-  // First try parsing the cleaning event title format
+  // ALWAYS use parseEventTitle first — extract property name from "[Property Name] Cleaning [flags]"
   const parsed = parseEventTitle(eventSummary)
-  const normalizedParsed = parsed.propertyName.toLowerCase().trim()
-  const normalizedSummary = eventSummary.toLowerCase().trim()
+  const parsedName = parsed.propertyName.toLowerCase().trim()
 
-  // Check keywords first
+  // 1. Exact name match on parsed property name (highest priority)
+  const exactMatch = properties.find(
+    p => p.name.toLowerCase().trim() === parsedName
+  )
+  if (exactMatch) return exactMatch
+
+  // 2. Keyword matching — keywords must match the PARSED property name only, NOT the full summary
+  // This prevents "Deer Crossing Cleaning 🐕 +$50 dog fee" from matching a "dog" keyword
   for (const prop of properties) {
     if (prop.keywords) {
       const keywordList = prop.keywords.split(',').map(k => k.trim().toLowerCase())
       for (const keyword of keywordList) {
-        if (keyword && (normalizedParsed.includes(keyword) || normalizedSummary.includes(keyword))) {
+        if (keyword && keyword.length >= 3 && parsedName.includes(keyword)) {
           return prop
         }
       }
     }
   }
 
-  // Exact match on parsed property name
-  const exactMatch = properties.find(
-    p => p.name.toLowerCase().trim() === normalizedParsed
+  // 3. Contains match — property name appears within the parsed name
+  const containsMatch = properties.find(
+    p => parsedName.includes(p.name.toLowerCase().trim())
   )
-  if (exactMatch) return exactMatch
+  if (containsMatch) return containsMatch
 
-  // Contains match — property name in parsed name or full summary
-  for (const prop of properties) {
-    const propName = prop.name.toLowerCase().trim()
-    if (normalizedParsed.includes(propName) || normalizedSummary.includes(propName)) {
-      return prop
-    }
-  }
+  // 4. Reverse contains — parsed name appears within property name
+  const reverseMatch = properties.find(
+    p => p.name.toLowerCase().trim().includes(parsedName)
+  )
+  if (reverseMatch) return reverseMatch
 
+  // No fuzzy matching — too error-prone. If we can't match precisely, skip the event.
   return null
 }
 
@@ -235,14 +240,17 @@ export async function GET(request: NextRequest) {
     let totalRemoved = 0
     const syncedPropertyIds = new Set<string>()
     const errors: string[] = []
+    // Collect ALL seen UIDs across ALL sources — stale cleanup happens once at end
+    const allSeenExternalIds = new Set<string>()
 
     for (const source of sources) {
       try {
         const events = await parseICalFeed(source.icalUrl)
-        const seenExternalIds = new Set<string>()
 
         for (const event of events) {
-          if (event.uid) seenExternalIds.add(event.uid)
+          // Track every UID from every feed for stale cleanup
+          if (event.uid) allSeenExternalIds.add(event.uid)
+
           const jobDate = new Date(event.end)
 
           if (event.isAllDay) {
@@ -250,7 +258,10 @@ export async function GET(request: NextRequest) {
             jobDate.setDate(jobDate.getDate() - 1)
           }
 
-          jobDate.setHours(0, 0, 0, 0)
+          // Use noon to avoid timezone shift issues.
+          // Midnight UTC shifts to previous day in EST/EDT (UTC-5/4).
+          // Noon UTC stays on the correct calendar day in all US timezones.
+          jobDate.setHours(12, 0, 0, 0)
 
           if (jobDate < today) continue
 
@@ -329,30 +340,6 @@ export async function GET(request: NextRequest) {
           syncedPropertyIds.add(matchedProperty.id)
         }
 
-        // Clean up stale events: delete future calendar-synced jobs whose UIDs
-        // no longer exist in this feed (event was deleted from calendar)
-        if (seenExternalIds.size > 0) {
-          const staleJobs = await prisma.job.findMany({
-            where: {
-              source: source.type,
-              externalId: { not: null },
-              date: { gte: today },
-              NOT: { externalId: { in: Array.from(seenExternalIds) } },
-            },
-            select: { id: true },
-          })
-
-          for (const staleJob of staleJobs) {
-            const assignmentCount = await prisma.jobAssignment.count({
-              where: { jobId: staleJob.id },
-            })
-            if (assignmentCount === 0) {
-              await prisma.job.delete({ where: { id: staleJob.id } })
-              totalRemoved++
-            }
-          }
-        }
-
         // Update source sync status
         await prisma.calendarSource.update({
           where: { id: source.id },
@@ -374,6 +361,31 @@ export async function GET(request: NextRequest) {
             lastSyncError: errorMsg,
           },
         })
+      }
+    }
+
+    // Stale cleanup: AFTER processing ALL sources, delete future calendar-synced
+    // jobs whose UIDs no longer appear in ANY feed (event was deleted from calendar).
+    // Done once at end so source A doesn't accidentally delete source B's jobs.
+    if (allSeenExternalIds.size > 0) {
+      const staleJobs = await prisma.job.findMany({
+        where: {
+          source: { not: 'manual' },
+          externalId: { not: null },
+          date: { gte: today },
+          NOT: { externalId: { in: Array.from(allSeenExternalIds) } },
+        },
+        select: { id: true },
+      })
+
+      for (const staleJob of staleJobs) {
+        const assignmentCount = await prisma.jobAssignment.count({
+          where: { jobId: staleJob.id },
+        })
+        if (assignmentCount === 0) {
+          await prisma.job.delete({ where: { id: staleJob.id } })
+          totalRemoved++
+        }
       }
     }
 
