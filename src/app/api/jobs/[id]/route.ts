@@ -320,6 +320,21 @@ export async function PATCH(
       }
     }
 
+    // Handle per-person pay adjustments
+    if (data.assignmentAdjustments && Array.isArray(data.assignmentAdjustments)) {
+      for (const adj of data.assignmentAdjustments) {
+        if (adj.assignmentId && adj.payAdjustment !== undefined) {
+          await prisma.jobAssignment.update({
+            where: { id: adj.assignmentId },
+            data: {
+              payAdjustment: adj.payAdjustment !== null && adj.payAdjustment !== '' ? parseFloat(adj.payAdjustment) : null,
+              adjustNote: adj.adjustNote || null,
+            },
+          })
+        }
+      }
+    }
+
     // Handle team assignments if provided
     if (data.teamMemberIds !== undefined) {
       // Remove existing assignments

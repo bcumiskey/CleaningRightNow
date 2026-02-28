@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { FileText, Plus, Clock, CheckCircle, Send } from 'lucide-react'
+import { FileText, Plus, Clock, CheckCircle, Send, XCircle } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -46,15 +46,17 @@ export default function InvoicesPage() {
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, 'warning' | 'info' | 'success'> = {
+    const variants: Record<string, 'warning' | 'info' | 'success' | 'danger'> = {
       draft: 'warning',
       sent: 'info',
       paid: 'success',
+      voided: 'danger',
     }
     const icons: Record<string, typeof Clock> = {
       draft: Clock,
       sent: Send,
       paid: CheckCircle,
+      voided: XCircle,
     }
     const Icon = icons[status] || Clock
     return (

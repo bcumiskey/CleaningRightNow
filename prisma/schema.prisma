@@ -315,6 +315,8 @@ model JobAssignment {
   jobId         String
   teamMemberId  String
   amountEarned  Float?      // Calculated when job completed
+  payAdjustment Float?      // Manual +/- adjustment to this person's pay
+  adjustNote    String?     // "Left early", "Bonus for extra work", etc.
   paidAt        DateTime?   // When this worker was paid
   paymentMethod String?     // "venmo" | "cash" | "zelle" | "other"
 
@@ -377,10 +379,12 @@ model Invoice {
   discount        Float     @default(0)
   total           Float
 
-  status          String    @default("draft") // "draft" | "sent" | "paid"
+  status          String    @default("draft") // "draft" | "sent" | "paid" | "voided"
   sentAt          DateTime?
   paidAt          DateTime?
   paymentMethod   String?   // "venmo" | "cash" | "zelle" | "other"
+  voidedAt        DateTime?
+  voidReason      String?
 
   notes           String?   // Client-visible notes
 
