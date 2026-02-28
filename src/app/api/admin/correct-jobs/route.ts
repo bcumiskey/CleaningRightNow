@@ -87,7 +87,7 @@ export async function POST() {
     }
 
     // 3. Build team member lookup: first name → DB TeamMember
-    // JSON uses: Alex, Ali, Mom, Ashley
+    // JSON uses: Alex, Alexandria Keag, Kim Keag, Ashley
     const teamMemberMap: Record<string, string> = {}
     const unmatchedMembers: string[] = []
     const expectedNames = new Set<string>()
