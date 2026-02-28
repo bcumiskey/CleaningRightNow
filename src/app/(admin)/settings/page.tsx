@@ -232,7 +232,7 @@ export default function SettingsPage() {
   }
 
   const handleResetPayments = async () => {
-    if (!confirm('This will delete all 2026 invoices and reset all payment status. Jobs and earnings amounts will be kept. This cannot be undone.')) return
+    if (!confirm('This will delete all 2026 invoices, reset all payment status, AND mark all jobs as not completed. You will need to re-complete each job to regenerate invoices. This cannot be undone.')) return
     setIsResettingPayments(true)
     setResetPaymentsResult(null)
     try {
