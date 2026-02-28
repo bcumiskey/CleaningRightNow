@@ -3,18 +3,6 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-interface RawPhoto {
-  id: string
-  propertyId: string
-  caption: string | null
-  room: string
-  notes: string | null
-  url: string
-  addedById: string
-  sortOrder: number
-  createdAt: Date
-}
-
 // GET - Fetch all reference photos for a property
 export async function GET(
   request: NextRequest,
@@ -46,10 +34,13 @@ export async function GET(
       const rawPhotos = await prisma.propertyPhoto.findMany({
         where: { propertyId },
         orderBy: { sortOrder: 'asc' },
+        include: {
+          roomRef: { select: { name: true } },
+        },
       })
 
       // Fetch addedBy separately for each photo
-      photos = await Promise.all((rawPhotos as RawPhoto[]).map(async (photo: RawPhoto) => {
+      photos = await Promise.all(rawPhotos.map(async (photo) => {
         let addedBy = null
         try {
           const teamMember = await prisma.teamMember.findUnique({
@@ -61,9 +52,12 @@ export async function GET(
           // Continue without addedBy
         }
 
+        // Use the Room entity name if linked, otherwise fall back to the legacy string
+        const resolvedRoom = photo.roomRef?.name || photo.room || 'General'
+
         return {
           ...photo,
-          room: photo.room || 'General',
+          room: resolvedRoom,
           notes: photo.notes || null,
           addedBy,
         }
@@ -154,10 +148,37 @@ export async function POST(
       // Continue with default sort order
     }
 
+    // If roomId is provided, resolve the room name from the Room entity
+    let roomName = data.room
+    let roomId = data.roomId || null
+    if (roomId) {
+      try {
+        const roomEntity = await prisma.room.findUnique({
+          where: { id: roomId },
+          select: { name: true },
+        })
+        if (roomEntity) roomName = roomEntity.name
+      } catch {
+        // Continue with provided room name
+      }
+    } else if (roomName) {
+      // Try to find Room entity by name and link it
+      try {
+        const roomEntity = await prisma.room.findFirst({
+          where: { propertyId, name: roomName },
+          select: { id: true },
+        })
+        if (roomEntity) roomId = roomEntity.id
+      } catch {
+        // Continue without roomId
+      }
+    }
+
     const photo = await prisma.propertyPhoto.create({
       data: {
         propertyId,
-        room: data.room,
+        room: roomName,
+        roomId,
         caption: data.caption || null,
         notes: data.notes || null,
         url: data.url,

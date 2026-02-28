@@ -455,6 +455,46 @@ export async function POST() {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Clean up deprecated linen items globally
+    // User explicitly wants these removed: pillow protectors, mattress pads, duvets/comforters,
+    // sheet splitting (top/bottom), all per-item inventory
+    const deprecatedCodes = [
+      'Std-PProt', 'K-PProt',                          // Pillow protectors
+      'K-MattPad', 'Q-MattPad', 'F-MattPad', 'T-MattPad',  // Mattress pads
+      'K-Duvet', 'FQ-Duvet', 'T-Duvet',                // Duvet covers
+      'K-Insert', 'FQ-Insert', 'T-Insert',              // Comforter inserts
+      'K-Top', 'K-Bottom', 'Q-Top', 'Q-Bottom',        // Split sheets (top/bottom)
+      'F-Top', 'F-Bottom', 'T-Top', 'T-Bottom',
+    ]
+    const deprecatedItems = await prisma.linenItem.findMany({
+      where: { code: { in: deprecatedCodes } },
+      select: { id: true },
+    })
+    const deprecatedIds = deprecatedItems.map(i => i.id)
+    if (deprecatedIds.length > 0) {
+      // Remove any requirements/inventory referencing deprecated items
+      await prisma.propertyLinenRequirement.deleteMany({
+        where: { linenItemId: { in: deprecatedIds } },
+      })
+      await prisma.propertyLinenInventory.deleteMany({
+        where: { linenItemId: { in: deprecatedIds } },
+      })
+      // Delete the deprecated items themselves
+      await prisma.linenItem.deleteMany({
+        where: { id: { in: deprecatedIds } },
+      })
+    }
+
+    // Also clean up empty categories
+    const categoriesWithItems = await prisma.linenCategory.findMany({
+      include: { _count: { select: { items: true } } },
+    })
+    for (const cat of categoriesWithItems) {
+      if (cat._count.items === 0 && ['Bedding', 'Pillows'].includes(cat.name)) {
+        await prisma.linenCategory.delete({ where: { id: cat.id } })
+      }
+    }
+
     // Find all properties
     const properties = await prisma.property.findMany({
       select: { id: true, name: true },
