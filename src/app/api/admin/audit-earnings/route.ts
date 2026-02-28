@@ -147,6 +147,7 @@ export async function GET() {
       dbByMember[memberId].push({
         date: dateStr,
         property: propertyCode,
+        propertyCode: propertyCode,
         amountEarned: a.amountEarned ?? 0,
       })
     }
