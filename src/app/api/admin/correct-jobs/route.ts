@@ -68,7 +68,7 @@ export async function POST() {
     for (const [jsonCode, aliases] of Object.entries(PROPERTY_ALIAS_MAP)) {
       const match = allProperties.find(p => {
         const dbName = p.name.toLowerCase().trim()
-        return aliases.some(alias => dbName === alias)
+        return aliases.some(alias => dbName === alias.toLowerCase().trim())
       })
       if (match) {
         propertyMap[jsonCode] = match
