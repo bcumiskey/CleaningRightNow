@@ -292,6 +292,13 @@ model Job {
   // Back-to-back flag (checkout and new check-in same day at same property)
   isBackToBack    Boolean   @default(false)
 
+  // Next guest check-in date (so cleaners know timeline)
+  nextCheckIn     DateTime?
+
+  // Pay override — admin can manually adjust total payout instead of auto-calculated
+  payOverride     Float?
+  payAdjustNote   String?   // "Left early", "Docked for no-show", etc.
+
   // Relations
   assignments     JobAssignment[]
   invoiceItems    InvoiceLineItem[]

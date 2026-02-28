@@ -84,6 +84,14 @@ export async function PATCH(
     if (data.rate !== undefined) updateData.rate = parseFloat(data.rate)
     if (data.expensePercent !== undefined) updateData.expensePercent = parseFloat(data.expensePercent)
     if (data.propertyId) updateData.propertyId = data.propertyId
+    if (typeof data.isBackToBack === 'boolean') updateData.isBackToBack = data.isBackToBack
+    if (data.nextCheckIn !== undefined) {
+      updateData.nextCheckIn = data.nextCheckIn ? new Date(data.nextCheckIn) : null
+    }
+    if (data.payOverride !== undefined) {
+      updateData.payOverride = data.payOverride !== null && data.payOverride !== '' ? parseFloat(data.payOverride) : null
+    }
+    if (data.payAdjustNote !== undefined) updateData.payAdjustNote = data.payAdjustNote || null
 
     const job = await prisma.job.update({
       where: { id: params.id },
@@ -107,10 +115,24 @@ export async function PATCH(
 
     // If job is marked completed, calculate amountEarned for all assignments
     if (data.completed && job.assignments.length > 0) {
-      const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+      // Use payOverride if set, otherwise calculate normally
+      const perPerson = job.payOverride != null && job.assignments.length > 0
+        ? job.payOverride / job.assignments.length
+        : calculateJobPayments(job.rate, job.expensePercent, job.assignments.length).perPerson
       await prisma.jobAssignment.updateMany({
         where: { jobId: job.id },
-        data: { amountEarned: payments.perPerson },
+        data: { amountEarned: perPerson },
+      })
+    }
+
+    // If payOverride changed, recalculate amountEarned for existing completed job
+    if (data.payOverride !== undefined && job.completed && job.assignments.length > 0) {
+      const perPerson = job.payOverride != null
+        ? job.payOverride / job.assignments.length
+        : calculateJobPayments(job.rate, job.expensePercent, job.assignments.length).perPerson
+      await prisma.jobAssignment.updateMany({
+        where: { jobId: job.id },
+        data: { amountEarned: perPerson },
       })
     }
 

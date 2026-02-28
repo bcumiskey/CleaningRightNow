@@ -79,6 +79,11 @@ interface Job {
   teamPaid: boolean
   teamPaidAt: string | null
   source: string
+  isBackToBack: boolean
+  nextCheckIn: string | null
+  renterName: string | null
+  payOverride: number | null
+  payAdjustNote: string | null
   property: { id: string; name: string; color: string | null }
   assignments: JobAssignment[]
 }
@@ -406,6 +411,8 @@ function JobsPageContent() {
         rate: parseFloat(data.rate) || 0,
         expensePercent: parseFloat(data.expensePercent) || 12,
         priority: parseInt(data.priority) || 5,
+        payOverride: data.payOverride !== '' ? parseFloat(data.payOverride) : null,
+        nextCheckIn: data.nextCheckIn || null,
       }
 
       const url = editingJob ? `/api/jobs/${editingJob.id}` : '/api/jobs'
@@ -653,7 +660,10 @@ function JobsPageContent() {
                 </h4>
                 <div className="space-y-2">
                   {jobsByDate[dateKey].map(job => {
-                    const payments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+                    const basePayments = calculateJobPayments(job.rate, job.expensePercent, job.assignments.length)
+                    const payments = job.payOverride != null && job.assignments.length > 0
+                      ? { ...basePayments, perPerson: job.payOverride / job.assignments.length, teamTotal: job.payOverride }
+                      : basePayments
                     const isExpanded = expandedJobs.has(job.id)
                     // Get background color style based on property color
                     const getJobStyle = () => {
@@ -728,6 +738,24 @@ function JobsPageContent() {
                                     job.priority <= 2 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
                                   }`}>
                                     P{job.priority}
+                                  </span>
+                                )}
+                                {/* B2B badge */}
+                                {job.isBackToBack && (
+                                  <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-orange-100 text-orange-700">
+                                    B2B
+                                  </span>
+                                )}
+                                {/* Next check-in */}
+                                {job.nextCheckIn && (
+                                  <span className="text-xs text-purple-600 font-medium">
+                                    Next guest: {format(parseISO(job.nextCheckIn), 'MMM d')}
+                                  </span>
+                                )}
+                                {/* Pay override indicator */}
+                                {job.payOverride != null && (
+                                  <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700">
+                                    Pay adj
                                   </span>
                                 )}
                               </div>
@@ -810,7 +838,24 @@ function JobsPageContent() {
                                   Priority {job.priority}
                                 </span>
                                 <span className="capitalize">Source: {job.source}</span>
+                                {job.isBackToBack && (
+                                  <span className="px-2 py-1 rounded text-xs font-bold bg-orange-100 text-orange-700">B2B</span>
+                                )}
+                                {job.renterName && (
+                                  <span className="text-xs">Guest: {job.renterName}</span>
+                                )}
                               </div>
+                              {job.nextCheckIn && (
+                                <div className="text-sm text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg">
+                                  Next guest checks in: <strong>{format(parseISO(job.nextCheckIn), 'EEEE, MMMM d')}</strong>
+                                </div>
+                              )}
+                              {job.payOverride != null && (
+                                <div className="text-sm text-yellow-700 bg-yellow-50 px-3 py-1.5 rounded-lg">
+                                  Pay adjusted to <strong>{formatCurrency(job.payOverride)}</strong> total
+                                  {job.payAdjustNote && <span> — {job.payAdjustNote}</span>}
+                                </div>
+                              )}
 
                               {/* Actions Row */}
                               <div className="flex items-center justify-between pt-2 border-t">
@@ -1043,12 +1088,22 @@ function JobsPageContent() {
               <p className="font-medium text-gray-900">{selectedJobForTeamPayment.property.name}</p>
               <p className="text-sm text-gray-500">{format(parseISO(selectedJobForTeamPayment.date), 'MMMM d, yyyy')}</p>
               <p className="text-lg font-semibold text-blue-600 mt-1">
-                {formatCurrency(calculateJobPayments(
-                  selectedJobForTeamPayment.rate,
-                  selectedJobForTeamPayment.expensePercent,
-                  selectedJobForTeamPayment.assignments.length
-                ).perPerson)} per person
+                {formatCurrency(
+                  selectedJobForTeamPayment.payOverride != null && selectedJobForTeamPayment.assignments.length > 0
+                    ? selectedJobForTeamPayment.payOverride / selectedJobForTeamPayment.assignments.length
+                    : calculateJobPayments(
+                        selectedJobForTeamPayment.rate,
+                        selectedJobForTeamPayment.expensePercent,
+                        selectedJobForTeamPayment.assignments.length
+                      ).perPerson
+                )} per person
               </p>
+              {selectedJobForTeamPayment.payOverride != null && (
+                <p className="text-xs text-yellow-600 mt-1">
+                  Pay adjusted: {formatCurrency(selectedJobForTeamPayment.payOverride)} total
+                  {selectedJobForTeamPayment.payAdjustNote && ` — ${selectedJobForTeamPayment.payAdjustNote}`}
+                </p>
+              )}
             </div>
 
             {selectedJobForTeamPayment.teamPaid ? (
@@ -1154,6 +1209,10 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
     expensePercent: '12',
     teamMemberIds: [] as string[],
     completed: false,
+    isBackToBack: false,
+    nextCheckIn: '',
+    payOverride: '',
+    payAdjustNote: '',
   })
   const [isSaving, setIsSaving] = useState(false)
 
@@ -1168,6 +1227,10 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           expensePercent: editingJob.expensePercent?.toString() || '12',
           teamMemberIds: editingJob.assignments.map(a => a.teamMember.id),
           completed: editingJob.completed,
+          isBackToBack: editingJob.isBackToBack || false,
+          nextCheckIn: editingJob.nextCheckIn ? format(parseISO(editingJob.nextCheckIn), 'yyyy-MM-dd') : '',
+          payOverride: editingJob.payOverride != null ? editingJob.payOverride.toString() : '',
+          payAdjustNote: editingJob.payAdjustNote || '',
         })
       } else {
         setFormData({
@@ -1178,6 +1241,10 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
           expensePercent: '12',
           teamMemberIds: [],
           completed: false,
+          isBackToBack: false,
+          nextCheckIn: '',
+          payOverride: '',
+          payAdjustNote: '',
         })
       }
     }
@@ -1281,6 +1348,47 @@ function JobModal({ isOpen, onClose, onSave, properties, teamMembers, editingJob
             {teamMembers.length === 0 && (
               <p className="text-sm text-gray-500">No team members yet</p>
             )}
+          </div>
+        </div>
+
+        {/* B2B Toggle + Next Check-in */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label className="flex items-center gap-2 cursor-pointer pt-6">
+            <input
+              type="checkbox"
+              checked={formData.isBackToBack}
+              onChange={(e) => setFormData({ ...formData, isBackToBack: e.target.checked })}
+              className="w-4 h-4 text-orange-600 rounded"
+            />
+            <span className="text-sm font-medium text-gray-700">B2B (Back-to-Back)</span>
+          </label>
+          <Input
+            label="Next Check-in Date"
+            type="date"
+            value={formData.nextCheckIn}
+            onChange={(e) => setFormData({ ...formData, nextCheckIn: e.target.value })}
+          />
+        </div>
+
+        {/* Pay Override */}
+        <div className="border-t pt-4">
+          <p className="text-sm font-medium text-gray-700 mb-2">Pay Adjustment (optional)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="Override Total Team Pay"
+              type="number"
+              step="0.01"
+              placeholder="Leave blank for normal calc"
+              value={formData.payOverride}
+              onChange={(e) => setFormData({ ...formData, payOverride: e.target.value })}
+            />
+            <Input
+              label="Reason"
+              type="text"
+              placeholder="e.g. Left early, slacked, bonus"
+              value={formData.payAdjustNote}
+              onChange={(e) => setFormData({ ...formData, payAdjustNote: e.target.value })}
+            />
           </div>
         </div>
 

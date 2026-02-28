@@ -117,6 +117,10 @@ export async function POST(request: NextRequest) {
         rate: jobRate,
         expensePercent: jobExpensePercent,
         source: 'manual',
+        isBackToBack: data.isBackToBack || false,
+        nextCheckIn: data.nextCheckIn ? new Date(data.nextCheckIn) : null,
+        payOverride: data.payOverride != null ? parseFloat(data.payOverride) : null,
+        payAdjustNote: data.payAdjustNote || null,
         assignments: teamMemberIds.length > 0
           ? {
               create: teamMemberIds.map((id: string) => ({
