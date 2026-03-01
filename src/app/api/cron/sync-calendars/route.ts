@@ -78,6 +78,7 @@ interface ParsedCalendarEvent {
 }
 
 function parseEventTitle(summary: string): ParsedCalendarEvent {
+  summary = summary.replace(/^🧹\s*(Clean\s*)?/i, '').replace(/^Clean\s+/i, '').trim()
   const cleaningIndex = summary.indexOf(' Cleaning')
   const propertyName = cleaningIndex > -1
     ? summary.substring(0, cleaningIndex).trim()

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck, Search, Trash2 } from 'lucide-react'
+import { Building, DollarSign, Calendar, Save, Image, FileText, ExternalLink, Upload, Wrench, AlertTriangle, CheckCircle, Home, BedDouble, Layers, ClipboardCheck, Search, Trash2, Type } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent, CardHeader } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -50,6 +50,8 @@ export default function SettingsPage() {
   const [auditResult, setAuditResult] = useState<string | null>(null)
   const [isResettingPayments, setIsResettingPayments] = useState(false)
   const [resetPaymentsResult, setResetPaymentsResult] = useState<string | null>(null)
+  const [isFixingNames, setIsFixingNames] = useState(false)
+  const [fixNamesResult, setFixNamesResult] = useState<string | null>(null)
 
   useEffect(() => {
     loadSettings()
@@ -250,6 +252,33 @@ export default function SettingsPage() {
       setResetPaymentsResult('Error: Network request failed')
     } finally {
       setIsResettingPayments(false)
+    }
+  }
+
+  const handleFixPropertyNames = async () => {
+    setIsFixingNames(true)
+    setFixNamesResult(null)
+    try {
+      const res = await fetch('/api/admin/fix-property-names', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to fix property names')
+        setFixNamesResult(`Error: ${data.error}`)
+        return
+      }
+      if (data.count === 0) {
+        toast.success('No property names needed fixing')
+        setFixNamesResult('No changes needed — all names are clean.')
+      } else {
+        const details = data.renamed.map((r: { oldName: string; newName: string }) => `"${r.oldName}" → "${r.newName}"`).join(', ')
+        toast.success(`Fixed ${data.count} property name(s)`)
+        setFixNamesResult(`Done: ${details}`)
+      }
+    } catch (error) {
+      toast.error('Failed to fix property names')
+      setFixNamesResult('Error: Network request failed')
+    } finally {
+      setIsFixingNames(false)
     }
   }
 
@@ -617,6 +646,37 @@ export default function SettingsPage() {
                 </pre>
               )}
             </div>
+            {/* Fix Property Names */}
+            <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Type size={20} className="text-teal-500 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <h4 className="font-medium text-gray-900">Fix Property Names</h4>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Strips emoji and &quot;Clean&quot; prefixes from property names (e.g. &quot;🧹 Clean Gambrel&quot; → &quot;Gambrel&quot;).
+                    Safe to run multiple times.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={handleFixPropertyNames}
+                  isLoading={isFixingNames}
+                  variant="outline"
+                  size="sm"
+                >
+                  <Type size={14} />
+                  {isFixingNames ? 'Fixing...' : 'Fix Property Names'}
+                </Button>
+                {fixNamesResult && (
+                  <span className={`text-sm ${fixNamesResult.startsWith('Error') ? 'text-red-600' : 'text-green-600'} flex items-center gap-1`}>
+                    {fixNamesResult.startsWith('Error') ? <AlertTriangle size={14} /> : <CheckCircle size={14} />}
+                    {fixNamesResult}
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* Reset All Payments */}
             <div className="border border-red-200 rounded-lg p-4 space-y-3">
               <div className="flex items-start gap-3">
