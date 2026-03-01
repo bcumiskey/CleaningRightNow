@@ -4,7 +4,9 @@ import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
 // POST /api/admin/fix-property-names
-// Strips 🧹, "Clean", and extra whitespace from property names.
+// Strips all emojis, "Clean" prefix, and extra whitespace from property names.
+
+const EMOJI_REGEX = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA00}-\u{1FA9F}\u{200D}]/gu
 
 export async function POST() {
   try {
@@ -18,21 +20,19 @@ export async function POST() {
     }
 
     const properties = await prisma.property.findMany({
-      where: {
-        OR: [
-          { name: { contains: '🧹' } },
-          { name: { startsWith: 'Clean' } },
-        ],
-      },
       select: { id: true, name: true },
     })
 
     const renamed: { oldName: string; newName: string }[] = []
 
     for (const prop of properties) {
+      if (!EMOJI_REGEX.test(prop.name)) continue
+      // Reset lastIndex since the regex has the global flag
+      EMOJI_REGEX.lastIndex = 0
+
       const cleaned = prop.name
-        .replace(/🧹/g, '')
-        .replace(/^Clean\s*/i, '')
+        .replace(EMOJI_REGEX, '')
+        .replace(/^Clean\s+/i, '')
         .replace(/\s+/g, ' ')
         .trim()
 
