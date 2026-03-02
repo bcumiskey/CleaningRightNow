@@ -12,9 +12,20 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const includeInactive = searchParams.get('includeInactive') === 'true'
+    const activeOnly = searchParams.get('activeOnly') === 'true'
+
+    let whereClause = {}
+    if (activeOnly) {
+      // Only ACTIVE workers (exclude LAME_DUCK and INACTIVE) — for assignment dropdowns
+      whereClause = { status: 'ACTIVE', isActive: true }
+    } else if (!includeInactive) {
+      // Default view: show ACTIVE and LAME_DUCK, hide INACTIVE
+      whereClause = { status: { in: ['ACTIVE', 'LAME_DUCK'] } }
+    }
+    // includeInactive=true shows everything (no filter)
 
     const teamMembers = await prisma.teamMember.findMany({
-      where: includeInactive ? {} : { isActive: true },
+      where: whereClause,
       orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
     })
 
@@ -32,6 +43,9 @@ export async function GET(request: NextRequest) {
       avgRating?: number | null
       totalRatings?: number
       reliabilityScore?: number | null
+      status?: string
+      lameDuckAt?: Date | null
+      finalPayAt?: Date | null
     }
 
     const membersWithPasswordStatus = teamMembers.map((member: TeamMemberFromDb) => ({
@@ -49,6 +63,10 @@ export async function GET(request: NextRequest) {
       avgRating: member.avgRating ?? null,
       totalRatings: member.totalRatings ?? 0,
       reliabilityScore: member.reliabilityScore ?? null,
+      // Lame Duck fields
+      status: member.status ?? 'ACTIVE',
+      lameDuckAt: member.lameDuckAt ?? null,
+      finalPayAt: member.finalPayAt ?? null,
     }))
 
     return NextResponse.json(membersWithPasswordStatus)

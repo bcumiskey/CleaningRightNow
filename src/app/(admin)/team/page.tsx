@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff, Shield, Star, TrendingUp } from 'lucide-react'
+import { Users, Plus, Phone, Mail, User, Key, Check, DollarSign, Trash2, Pencil, RefreshCw, Eye, EyeOff, Shield, Star, TrendingUp, AlertTriangle, Archive } from 'lucide-react'
 import AdminHeader from '@/components/layout/AdminHeader'
 import { Card, CardContent } from '@/components/ui/Card'
 import Button from '@/components/ui/Button'
@@ -27,6 +27,10 @@ interface TeamMember {
   avgRating?: number | null
   totalRatings?: number
   reliabilityScore?: number | null
+  // Lame Duck fields
+  status?: 'ACTIVE' | 'LAME_DUCK' | 'INACTIVE'
+  lameDuckAt?: string | null
+  finalPayAt?: string | null
 }
 
 export default function TeamPage() {
@@ -34,6 +38,9 @@ export default function TeamPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showLameDuckModal, setShowLameDuckModal] = useState(false)
+  const [lameDuckMember, setLameDuckMember] = useState<TeamMember | null>(null)
+  const [lameDuckJobCount, setLameDuckJobCount] = useState<number | null>(null)
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
   const [passwordMember, setPasswordMember] = useState<TeamMember | null>(null)
   const [showInactive, setShowInactive] = useState(false)
@@ -163,6 +170,82 @@ export default function TeamPage() {
     }
   }
 
+  const handleMarkLameDuck = async (member: TeamMember, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setLameDuckMember(member)
+    setLameDuckJobCount(null)
+    setShowLameDuckModal(true)
+  }
+
+  const confirmLameDuck = async () => {
+    if (!lameDuckMember) return
+
+    try {
+      const response = await fetch(`/api/team/${lameDuckMember.id}/lame-duck`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        toast.success(data.message)
+        setShowLameDuckModal(false)
+        setLameDuckMember(null)
+        fetchTeamMembers()
+      } else {
+        const error = await response.json()
+        toast.error(error.error || 'Failed to mark as lame duck')
+      }
+    } catch (error) {
+      toast.error('Failed to mark as lame duck')
+    }
+  }
+
+  const handleMarkPaidOut = async (member: TeamMember, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!confirm(`Mark ${member.name} as fully paid out and archive? This will move them to inactive.`)) return
+
+    try {
+      const response = await fetch(`/api/team/${member.id}/paid-out`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        toast.success(data.message)
+        fetchTeamMembers()
+      } else {
+        const error = await response.json()
+        if (error.outstandingBalance) {
+          if (confirm(`${error.error}\n\nDo you want to override and mark paid out anyway?`)) {
+            // Retry with force override
+            const retryResponse = await fetch(`/api/team/${member.id}/paid-out`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ forceOverride: true }),
+            })
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json()
+              toast.success(retryData.message)
+              fetchTeamMembers()
+            } else {
+              toast.error('Failed to mark as paid out')
+            }
+          }
+        } else {
+          toast.error(error.error || 'Failed to mark as paid out')
+        }
+      }
+    } catch (error) {
+      toast.error('Failed to mark as paid out')
+    }
+  }
+
+  const isLameDuck = (member: TeamMember) => member.status === 'LAME_DUCK'
+  const isInactive = (member: TeamMember) => member.status === 'INACTIVE'
+  const isActive = (member: TeamMember) => member.status === 'ACTIVE' || (!member.status && member.isActive)
+
   return (
     <div className="min-h-screen">
       <AdminHeader title="Team" />
@@ -171,7 +254,12 @@ export default function TeamPage() {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-4">
             <h3 className="text-lg font-semibold text-gray-900">
-              {teamMembers.filter(m => m.isActive).length} Active Team Member{teamMembers.filter(m => m.isActive).length !== 1 && 's'}
+              {teamMembers.filter(m => isActive(m)).length} Active Team Member{teamMembers.filter(m => isActive(m)).length !== 1 && 's'}
+              {teamMembers.filter(m => isLameDuck(m)).length > 0 && (
+                <span className="text-sm font-normal text-amber-600 ml-2">
+                  ({teamMembers.filter(m => isLameDuck(m)).length} lame duck)
+                </span>
+              )}
             </h3>
             <button
               onClick={() => setShowInactive(!showInactive)}
@@ -182,7 +270,7 @@ export default function TeamPage() {
               }`}
             >
               {showInactive ? <EyeOff size={14} /> : <Eye size={14} />}
-              {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+              {showInactive ? 'Hide Archived' : 'Show Archived'}
             </button>
           </div>
           <Button onClick={handleAdd}>
@@ -211,24 +299,37 @@ export default function TeamPage() {
               <Card
                 key={member.id}
                 className={`hover:shadow-md transition-shadow cursor-pointer ${
-                  !member.isActive ? 'opacity-60 bg-gray-50' : ''
-                }`}
+                  isInactive(member) ? 'opacity-60 bg-gray-50' : ''
+                } ${isLameDuck(member) ? 'border-amber-300 bg-amber-50/30' : ''}`}
                 onClick={() => handleEdit(member)}
               >
                 <CardContent>
                   <div className="flex items-start gap-4">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      member.isActive ? 'bg-blue-100' : 'bg-gray-200'
+                      isLameDuck(member) ? 'bg-amber-100' :
+                      isActive(member) ? 'bg-blue-100' : 'bg-gray-200'
                     }`}>
-                      <User className={member.isActive ? 'text-blue-600' : 'text-gray-400'} size={24} />
+                      <User className={
+                        isLameDuck(member) ? 'text-amber-600' :
+                        isActive(member) ? 'text-blue-600' : 'text-gray-400'
+                      } size={24} />
                     </div>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h4 className={`font-semibold ${member.isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className={`font-semibold ${
+                          isLameDuck(member) ? 'text-amber-800' :
+                          isActive(member) ? 'text-gray-900' : 'text-gray-500'
+                        }`}>
                           {member.name}
                         </h4>
-                        {!member.isActive && (
-                          <Badge variant="default">Inactive</Badge>
+                        {isLameDuck(member) && (
+                          <Badge variant="warning" className="gap-1">
+                            <span role="img" aria-label="duck">🦆</span>
+                            Lame Duck
+                          </Badge>
+                        )}
+                        {isInactive(member) && (
+                          <Badge variant="default">Archived</Badge>
                         )}
                         <Badge variant={member.role === 'admin' ? 'purple' : 'info'}>
                           {member.role}
@@ -242,7 +343,7 @@ export default function TeamPage() {
                       </div>
 
                       {/* Rank and Performance Stats */}
-                      {member.isActive && (
+                      {isActive(member) && (
                         <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
                           <div className="flex items-center gap-1" title="Team Rank (1-100)">
                             <TrendingUp size={12} />
@@ -263,6 +364,13 @@ export default function TeamPage() {
                         </div>
                       )}
 
+                      {/* Lame Duck status info */}
+                      {isLameDuck(member) && member.lameDuckAt && (
+                        <p className="mt-2 text-xs text-amber-600">
+                          Lame duck since {new Date(member.lameDuckAt).toLocaleDateString()}
+                        </p>
+                      )}
+
                       {member.phone && (
                         <div className="flex items-center gap-2 text-sm text-gray-500 mt-2">
                           <Phone size={14} />
@@ -277,7 +385,7 @@ export default function TeamPage() {
                       )}
 
                       {/* Login Status - only for active members */}
-                      {member.isActive && member.email && (
+                      {isActive(member) && member.email && (
                         <div className="mt-3 pt-3 border-t">
                           {member.hasPassword ? (
                             <div className="flex items-center justify-between">
@@ -307,14 +415,14 @@ export default function TeamPage() {
                           )}
                         </div>
                       )}
-                      {member.isActive && !member.email && (
+                      {isActive(member) && !member.email && (
                         <p className="mt-3 pt-3 border-t text-xs text-gray-400">
                           Add email to enable login
                         </p>
                       )}
 
-                      {/* View Pay Button for Workers - only for active */}
-                      {member.isActive && member.role === 'worker' && (
+                      {/* View Pay Button for Workers */}
+                      {(isActive(member) || isLameDuck(member)) && member.role === 'worker' && (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -330,7 +438,7 @@ export default function TeamPage() {
                       )}
 
                       {/* Action Buttons */}
-                      <div className="mt-3 pt-3 border-t flex gap-2">
+                      <div className="mt-3 pt-3 border-t flex gap-2 flex-wrap">
                         <Button
                           size="sm"
                           variant="outline"
@@ -343,16 +451,40 @@ export default function TeamPage() {
                           <Pencil size={14} />
                           Edit
                         </Button>
-                        {member.isActive ? (
+                        {isActive(member) && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-amber-600 hover:bg-amber-50"
+                              onClick={(e) => handleMarkLameDuck(member, e)}
+                              title="Mark as Lame Duck"
+                            >
+                              <AlertTriangle size={14} />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={(e) => handleDelete(member, e)}
+                            >
+                              <Trash2 size={14} />
+                            </Button>
+                          </>
+                        )}
+                        {isLameDuck(member) && (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-red-600 hover:bg-red-50"
-                            onClick={(e) => handleDelete(member, e)}
+                            className="text-green-600 hover:bg-green-50"
+                            onClick={(e) => handleMarkPaidOut(member, e)}
+                            title="Mark as Paid Out"
                           >
-                            <Trash2 size={14} />
+                            <Archive size={14} />
+                            Paid Out
                           </Button>
-                        ) : (
+                        )}
+                        {isInactive(member) && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -388,9 +520,91 @@ export default function TeamPage() {
         onSave={handleSavePassword}
         memberName={passwordMember?.name || ''}
       />
+
+      <LameDuckConfirmModal
+        isOpen={showLameDuckModal}
+        onClose={() => {
+          setShowLameDuckModal(false)
+          setLameDuckMember(null)
+        }}
+        onConfirm={confirmLameDuck}
+        member={lameDuckMember}
+      />
     </div>
   )
 }
+
+// ─────────────────────────────────────────────────────────
+// Lame Duck Confirmation Modal
+// ─────────────────────────────────────────────────────────
+
+interface LameDuckConfirmModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  member: TeamMember | null
+}
+
+function LameDuckConfirmModal({ isOpen, onClose, onConfirm, member }: LameDuckConfirmModalProps) {
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleConfirm = async () => {
+    setIsLoading(true)
+    try {
+      await onConfirm()
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  if (!member) return null
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Mark as Lame Duck">
+      <div className="space-y-4">
+        <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
+          <AlertTriangle className="text-amber-500 mt-0.5 flex-shrink-0" size={20} />
+          <div>
+            <p className="text-sm text-amber-800 font-medium">
+              This will remove {member.name} from all upcoming jobs.
+            </p>
+            <p className="text-sm text-amber-700 mt-1">
+              Their pay history will be preserved until marked paid out.
+            </p>
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-600 space-y-2">
+          <p>When a worker is marked Lame Duck:</p>
+          <ul className="list-disc ml-5 space-y-1">
+            <li>They are removed from all future/uncompleted job assignments</li>
+            <li>They will not appear in scheduling or assignment dropdowns</li>
+            <li>Past/completed jobs and pay history are preserved</li>
+            <li>Once fully paid out, they can be archived to inactive</li>
+          </ul>
+        </div>
+
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            isLoading={isLoading}
+            className="bg-amber-600 hover:bg-amber-700 text-white"
+          >
+            <AlertTriangle size={16} />
+            Confirm Lame Duck
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ─────────────────────────────────────────────────────────
+// Team Member Modal
+// ─────────────────────────────────────────────────────────
 
 interface TeamMemberModalProps {
   isOpen: boolean
@@ -535,6 +749,10 @@ function TeamMemberModal({ isOpen, onClose, onSave, member }: TeamMemberModalPro
     </Modal>
   )
 }
+
+// ─────────────────────────────────────────────────────────
+// Set Password Modal
+// ─────────────────────────────────────────────────────────
 
 interface SetPasswordModalProps {
   isOpen: boolean

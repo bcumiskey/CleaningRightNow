@@ -282,7 +282,7 @@ function JobsPageContent() {
   }
 
   const fetchTeamMembers = async () => {
-    const response = await fetch('/api/team')
+    const response = await fetch('/api/team?activeOnly=true')
     if (response.ok) {
       setTeamMembers(await response.json())
     }
