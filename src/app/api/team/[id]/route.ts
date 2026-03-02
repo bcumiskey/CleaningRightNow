@@ -30,6 +30,9 @@ export async function GET(
       avgRating?: number | null
       totalRatings?: number
       reliabilityScore?: number | null
+      status?: string
+      lameDuckAt?: Date | null
+      finalPayAt?: Date | null
     }
 
     return NextResponse.json({
@@ -47,6 +50,10 @@ export async function GET(
       avgRating: member.avgRating ?? null,
       totalRatings: member.totalRatings ?? 0,
       reliabilityScore: member.reliabilityScore ?? null,
+      // Lame Duck fields
+      status: member.status ?? 'ACTIVE',
+      lameDuckAt: member.lameDuckAt ?? null,
+      finalPayAt: member.finalPayAt ?? null,
     })
   } catch (error) {
     console.error('Team member GET error:', error)
@@ -115,6 +122,9 @@ export async function PUT(
       avgRating?: number | null
       totalRatings?: number
       reliabilityScore?: number | null
+      status?: string
+      lameDuckAt?: Date | null
+      finalPayAt?: Date | null
     }
 
     return NextResponse.json({
@@ -130,6 +140,10 @@ export async function PUT(
       avgRating: member.avgRating ?? null,
       totalRatings: member.totalRatings ?? 0,
       reliabilityScore: member.reliabilityScore ?? null,
+      // Lame Duck fields
+      status: member.status ?? 'ACTIVE',
+      lameDuckAt: member.lameDuckAt ?? null,
+      finalPayAt: member.finalPayAt ?? null,
     })
   } catch (error) {
     console.error('Team member PUT error:', error)

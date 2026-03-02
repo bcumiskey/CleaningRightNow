@@ -225,6 +225,12 @@ model PropertyPhoto {
 // TEAM MEMBERS
 // ============================================================
 
+enum WorkerStatus {
+  ACTIVE
+  LAME_DUCK
+  INACTIVE
+}
+
 model TeamMember {
   id          String    @id @default(cuid())
   name        String
@@ -233,6 +239,11 @@ model TeamMember {
   password    String?   // Hashed password for worker login
   role        String    @default("worker") // "admin" | "worker"
   isActive    Boolean   @default(true)
+
+  // Lame Duck / Inactive status tracking
+  status      WorkerStatus @default(ACTIVE)
+  lameDuckAt  DateTime?
+  finalPayAt  DateTime?
 
   // Hierarchy & Supervision
   rank        Int       @default(50)  // 1-100, higher = more senior. Admin owner should be 100
