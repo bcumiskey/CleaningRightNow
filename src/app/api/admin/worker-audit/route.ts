@@ -182,10 +182,22 @@ export async function GET(request: NextRequest) {
         : 'all time',
       jobCount: lines.length,
       totals,
-      // Gaps between the four totals above, so the size of each cause is explicit.
+      // Each contribution is measured directly rather than by differencing the
+      // headline totals. Rows with no stored credit count as 0 in storedTotal,
+      // so subtracting totals would misattribute missing credits to adjustments.
       variances: {
-        adjustmentsApplied: Math.round((totals.finalTotal - totals.storedTotal) * 100) / 100,
-        storedVsComputed: Math.round((totals.storedTotal - totals.computedTotal) * 100) / 100,
+        adjustmentsApplied: sum((l) => l.payAdjustment),
+        // Stored credits deliberately differing from a fresh calculation —
+        // corrections and imported sheet figures, plus any genuine drift.
+        storedVsComputed:
+          Math.round(
+            lines
+              .filter((l) => l.storedAmountEarned != null)
+              .reduce((acc, l) => acc + ((l.storedAmountEarned as number) - l.computedBase), 0) * 100
+          ) / 100,
+        // Portion of the total resting on a fallback calculation because no
+        // credit was ever written for those assignments.
+        fallbackCalculated: sum((l) => (l.storedAmountEarned == null ? l.computedBase : 0)),
         legacyReportsOverstatement:
           Math.round((totals.legacyReportsTotal - totals.finalTotal) * 100) / 100,
       },
