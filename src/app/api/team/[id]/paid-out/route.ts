@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { calculateWorkerShare } from '@/lib/earnings'
 
 // POST /api/team/[id]/paid-out — Mark a lame duck worker as fully paid out (INACTIVE)
 export async function POST(
@@ -33,17 +34,31 @@ export async function POST(
       )
     }
 
-    // Check outstanding balance: unpaid assignments where amountEarned > 0
+    // Check outstanding balance across every unpaid assignment on a completed job.
+    // This previously required amountEarned > 0, which silently skipped assignments
+    // whose credit was never written (amountEarned null) — those workers could be
+    // archived while still owed money.
     const unpaidAssignments = await prisma.jobAssignment.findMany({
       where: {
         teamMemberId: id,
         paidAt: null,
-        amountEarned: { gt: 0 },
+        job: { completed: true },
+      },
+      include: {
+        job: {
+          select: {
+            rate: true,
+            expensePercent: true,
+            dogFee: true,
+            payOverride: true,
+            assignments: { select: { id: true } },
+          },
+        },
       },
     })
 
     const outstandingBalance = unpaidAssignments.reduce(
-      (sum, a) => sum + (a.amountEarned || 0) + (a.payAdjustment || 0),
+      (sum, a) => sum + calculateWorkerShare(a, a.job, a.job.assignments.length),
       0
     )
 

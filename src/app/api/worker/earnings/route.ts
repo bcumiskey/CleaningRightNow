@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { calculateWorkerShare } from '@/lib/earnings'
 import { startOfMonth, endOfMonth, parseISO } from 'date-fns'
 
 export async function GET(request: NextRequest) {
@@ -91,12 +92,16 @@ export async function GET(request: NextRequest) {
     interface Assignment {
       id: string
       amountEarned: number | null
+      payAdjustment: number | null
+      adjustNote: string | null
       paidAt: Date | null
       job: {
         id: string
         date: Date
         rate: number
         expensePercent: number
+        dogFee: number | null
+        payOverride: number | null
         property: { name: string }
         assignments: { id: string }[]
       }
@@ -105,11 +110,9 @@ export async function GET(request: NextRequest) {
       const job = assignment.job
       const workerCount = job.assignments.length
 
-      // Use stored amountEarned when available (set by correction endpoint),
-      // fall back to calculation only when null
-      const workerShare = assignment.amountEarned != null
-        ? assignment.amountEarned
-        : Math.round((job.rate * (1 - job.expensePercent / 100) / workerCount) * 100) / 100
+      // Shared calculation — see src/lib/earnings.ts. Stored amountEarned wins,
+      // payOverride and dogFee feed the fallback, payAdjustment always applies.
+      const workerShare = calculateWorkerShare(assignment, job, workerCount)
 
       return {
         id: assignment.id,
@@ -120,6 +123,8 @@ export async function GET(request: NextRequest) {
         expensePercent: job.expensePercent,
         workerCount,
         workerShare,
+        payAdjustment: assignment.payAdjustment ?? 0,
+        adjustNote: assignment.adjustNote,
         status: assignment.paidAt ? 'paid' : 'pending',
         paidAt: assignment.paidAt,
       }

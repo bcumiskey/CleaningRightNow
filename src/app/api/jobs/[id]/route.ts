@@ -337,6 +337,22 @@ export async function PATCH(
 
     // Handle team assignments if provided
     if (data.teamMemberIds !== undefined) {
+      // Carry payment history across the rebuild. Deleting and recreating blindly
+      // wiped paidAt, paymentMethod, payAdjustment and adjustNote for everyone on
+      // the job, so simply adding a cleaner made already-paid crew look unpaid and
+      // silently discarded their bonuses and deductions.
+      const existingAssignments = await prisma.jobAssignment.findMany({
+        where: { jobId: params.id },
+        select: {
+          teamMemberId: true,
+          paidAt: true,
+          paymentMethod: true,
+          payAdjustment: true,
+          adjustNote: true,
+        },
+      })
+      const priorByMember = new Map(existingAssignments.map(a => [a.teamMemberId, a]))
+
       // Remove existing assignments
       await prisma.jobAssignment.deleteMany({
         where: { jobId: params.id },
@@ -347,15 +363,24 @@ export async function PATCH(
         const currentJob = await prisma.job.findUnique({ where: { id: params.id } })
         const currentTotalRevenue = currentJob ? currentJob.rate + (currentJob.dogFee || 0) : 0
         const amountEarned = currentJob?.completed && currentJob.rate > 0
-          ? calculateJobPayments(currentTotalRevenue, currentJob.expensePercent, data.teamMemberIds.length).perPerson
+          ? currentJob.payOverride != null
+            ? Math.round((currentJob.payOverride / data.teamMemberIds.length) * 100) / 100
+            : calculateJobPayments(currentTotalRevenue, currentJob.expensePercent, data.teamMemberIds.length).perPerson
           : null
 
         await prisma.jobAssignment.createMany({
-          data: data.teamMemberIds.map((teamMemberId: string) => ({
-            jobId: params.id,
-            teamMemberId,
-            amountEarned,
-          })),
+          data: data.teamMemberIds.map((teamMemberId: string) => {
+            const prior = priorByMember.get(teamMemberId)
+            return {
+              jobId: params.id,
+              teamMemberId,
+              amountEarned,
+              paidAt: prior?.paidAt ?? null,
+              paymentMethod: prior?.paymentMethod ?? null,
+              payAdjustment: prior?.payAdjustment ?? null,
+              adjustNote: prior?.adjustNote ?? null,
+            }
+          }),
         })
       }
 

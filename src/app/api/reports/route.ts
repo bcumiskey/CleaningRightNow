@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import prisma from '@/lib/prisma'
+import { calculateWorkerShare, calculateJobTeamTotal } from '@/lib/earnings'
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, format, subDays, eachMonthOfInterval, subYears } from 'date-fns'
 
 interface DateRange {
@@ -14,10 +15,16 @@ interface Job {
   date: Date
   rate: number
   expensePercent: number
+  dogFee: number | null
+  payOverride: number | null
   completed: boolean
   clientPaid: boolean
   property: { id: string; name: string; ownerId: string | null }
-  assignments: Array<{ teamMember: { id: string; name: string } }>
+  assignments: Array<{
+    amountEarned: number | null
+    payAdjustment: number | null
+    teamMember: { id: string; name: string }
+  }>
 }
 
 interface Invoice {
@@ -107,11 +114,10 @@ export async function GET(request: NextRequest) {
     const pendingRevenue = pendingJobs.reduce((sum: number, job: Job) => sum + job.rate, 0)
     const avgJobValue = completedJobs.length > 0 ? totalRevenue / completedJobs.length : 0
 
-    // Team payments (after expense deduction)
+    // Team payments (after expense deduction, including dog fees and pay overrides)
     let teamPayments = 0
     completedJobs.forEach((job: Job) => {
-      const teamTotal = job.rate * (1 - job.expensePercent / 100)
-      teamPayments += teamTotal
+      teamPayments += calculateJobTeamTotal(job)
     })
 
     // Expense deductions (business keeps this)
@@ -183,12 +189,15 @@ export async function GET(request: NextRequest) {
       .slice(0, 10)
 
     // === TEAM PERFORMANCE ===
+    // Uses the same shared calculation as the pay statements (src/lib/earnings.ts).
+    // This previously recomputed from job.rate alone, which ignored stored
+    // amountEarned, payOverride, dogFee and payAdjustment — so this panel could
+    // report a materially different total than the worker's own pay statements.
     const teamPerformance: Record<string, { name: string; jobs: number; earnings: number }> = {}
     completedJobs.forEach((job: Job) => {
-      const teamShare = job.rate * (1 - job.expensePercent / 100)
-      const perWorker = job.assignments.length > 0 ? teamShare / job.assignments.length : 0
+      const workerCount = job.assignments.length
 
-      job.assignments.forEach((assignment: { teamMember: { id: string; name: string } }) => {
+      job.assignments.forEach((assignment) => {
         const memberId = assignment.teamMember.id
         if (!teamPerformance[memberId]) {
           teamPerformance[memberId] = {
@@ -198,7 +207,7 @@ export async function GET(request: NextRequest) {
           }
         }
         teamPerformance[memberId].jobs += 1
-        teamPerformance[memberId].earnings += perWorker
+        teamPerformance[memberId].earnings += calculateWorkerShare(assignment, job, workerCount)
       })
     })
 
